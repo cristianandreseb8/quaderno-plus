@@ -1,0 +1,24 @@
+.Q {
+  --paper: #FAF7F0;
+  --ink: #221C18;
+  --muted: #6E645C;
+  --rule: #E6DECF;
+  --navy: #1F3A4D;
+  --amber: #BC6C2C;
+  --warm: #FBEFE1;
+  --green: #2D6A4F;
+  --ai: #5B3A8C;
+  --red: #9b2c2c;
+  --teal: #1A6B6B;
+  --id: #1A5276;
+  --serif: Georgia, "Iowan Old Style", serif;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Menlo", monospace;
+  font-family: var(--sans);
+  color: var(--ink);
+  background: var(--paper);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.Q * { box-sizing: border-box; }

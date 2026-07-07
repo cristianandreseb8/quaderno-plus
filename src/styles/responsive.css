@@ -1,0 +1,16 @@
+.Q-back-btn { display: none; }
+@media (max-width: 700px) {
+  .Q-body { grid-template-columns: 1fr; }
+  .Q-side { display: flex; }
+  .Q-main { display: none; }
+  .Q[data-open="1"] .Q-side { display: none; }
+  .Q[data-open="1"] .Q-main { display: block; }
+  .Q-back-btn { display: inline-flex; }
+  .Q-pane { padding: 16px 14px 80px; }
+  .Q-toolbar .right { margin-left: 0; }
+  .Q-app-ai-panel, .Q-compare-panel { width: 100vw; }
+  .ID-param-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .Q-view, .Q-chat-typing span, .Q-recording-pill { animation: none; }
+}
