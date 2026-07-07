@@ -337,7 +337,7 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
       </div>
       {tab === 'recipe' && recipeContent}
       {tab === 'notes' && <NotesPanel recipe={recipe} onSave={handleSaveNotes} onSaveMedia={handleSaveMedia} onAddNote={addNoteRef} />}
-      {tab === 'id' && <IDPanel recipe={recipe} onSave={handleSaveIdData} />}
+      {tab === 'id' && <IDPanel recipe={recipe} onSave={handleSaveIdData} allRecipes={allRecipes} />}
       {tab === 'ai' && <AIAssistant recipe={viewR} onAction={handleAssistantAction} onRequestSaveNote={handleRequestSaveNote} />}
       {lightboxSrc && <div className="Q-lightbox" onClick={() => setLightboxSrc(null)}><img src={lightboxSrc} alt="" /></div>}
     </div>

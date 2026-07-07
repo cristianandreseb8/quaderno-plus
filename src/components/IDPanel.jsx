@@ -7,7 +7,7 @@ import { parseIdData, serializeIdData } from '../lib/idData.js'
 import { SENSORY_ATTRS, SENSORY_LABELS } from '../lib/constants.js'
 import IngredientLibraryModal from './IngredientLibraryModal.jsx'
 
-export default function IDPanel({ recipe, onSave }) {
+export default function IDPanel({ recipe, onSave, allRecipes = [] }) {
   const [data, setData] = useState(() => parseIdData(recipe.id_data))
   const [customAttrs, setCustomAttrs] = useState(() => data.customSensoryAttrs || [])
   const [newAttrName, setNewAttrName] = useState('')
@@ -231,7 +231,7 @@ export default function IDPanel({ recipe, onSave }) {
               <button onClick={() => setAddingParam(true)} style={{ marginTop: 10, padding: '5px 12px', borderRadius: 6, border: '1px dashed var(--muted)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: 12 }}>&#x271A; Add parameter</button>
             )}
 
-            {showLibPanel && <IngredientLibraryModal onClose={() => setShowLibPanel(false)} />}
+            {showLibPanel && <IngredientLibraryModal onClose={() => setShowLibPanel(false)} recipes={allRecipes} />}
           </div>
         )}
       </div>

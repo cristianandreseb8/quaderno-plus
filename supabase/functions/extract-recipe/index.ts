@@ -8,20 +8,26 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
-async function claudeText(messages: object[], system?: string, maxTokens = 1500): Promise<string> {
+const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search", max_uses: 3 }
+
+async function claudeText(messages: object[], system?: string, maxTokens = 1500, webSearch = false): Promise<string> {
   const body: Record<string, unknown> = { model: MODEL, max_tokens: maxTokens, messages }
   if (system) body.system = system
+  if (webSearch) body.tools = [WEB_SEARCH_TOOL]
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": KEY, "anthropic-version": "2023-06-01" },
+    headers: {
+      "Content-Type": "application/json", "x-api-key": KEY, "anthropic-version": "2023-06-01",
+      ...(webSearch ? { "anthropic-beta": "web-search-2025-03-05" } : {}),
+    },
     body: JSON.stringify(body),
   })
   const data = await res.json()
   return (data.content || []).filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join("\n")
 }
 
-async function claudeJson(messages: object[], system?: string, maxTokens = 2000) {
-  const text = await claudeText(messages, system, maxTokens)
+async function claudeJson(messages: object[], system?: string, maxTokens = 2000, webSearch = false) {
+  const text = await claudeText(messages, system, maxTokens, webSearch)
   let t = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim()
   const a = t.indexOf("{"), b = t.lastIndexOf("}")
   if (a >= 0 && b > a) t = t.slice(a, b + 1)
@@ -102,6 +108,9 @@ Deno.serve(async (req) => {
     } else if (body.type === "analyze_macros") {
       const ings = (body.ingredients || []).map((i: { name: string; qty: number; unit: string }) => `${i.qty} ${i.unit} ${i.name}`).join('\n')
       const systemPrompt = `You are a professional baker and food scientist. Analyze each ingredient and return precise nutritional and baking-relevant data.
+
+If an ingredient name refers to a specific commercial/branded product (e.g. "Caputo 00", "Valrhona Guanaja 70%", "King Arthur Bread Flour"), use web search to find its real published technical specifications (protein %, fat %, ash content, etc.) instead of guessing generic category averages. For generic ingredients (e.g. "flour", "butter", "sugar") use standard reference values, no search needed.
+
 For each ingredient return:
 - fat_pct: fat content as % of ingredient weight
 - water_pct: total water content as % of ingredient weight
@@ -112,10 +121,10 @@ For each ingredient return:
 - cal_per100: calories per 100g
 - flour_equivalent_pct: equivalent flour content as % (flour=100, sourdough 50/50 starter=50, biga=60, poolish=50, etc, others=0)
 - ingredient_type: one of: flour, butter, egg, egg_yolk, sugar, milk, cream, salt, yeast, sourdough, honey, oil, water, chocolate, fruit, nut, spice, other
-- notes: brief technical note (max 15 words)
+- notes: brief technical note (max 15 words) — mention the source if a specific product spec was found via search
 
-Return ONLY valid JSON: {"cache": {"<ingredient_name>": {fat_pct, water_pct, free_water_pct, sugar_pct, protein_pct, carbs_pct, cal_per100, flour_equivalent_pct, ingredient_type, notes}, ...}}`
-      result = await claudeJson([{ role: "user", content: `Recipe: ${body.recipe_title || ''}\nIngredients:\n${ings}` }], systemPrompt, 2000)
+Return ONLY valid JSON, no markdown, no commentary before or after: {"cache": {"<ingredient_name>": {fat_pct, water_pct, free_water_pct, sugar_pct, protein_pct, carbs_pct, cal_per100, flour_equivalent_pct, ingredient_type, notes}, ...}}`
+      result = await claudeJson([{ role: "user", content: `Recipe: ${body.recipe_title || ''}\nIngredients:\n${ings}` }], systemPrompt, 3000, true)
     } else if (body.type === "analyze_custom_param") {
       const ings = (body.ingredients || []).map((i: { name: string; qty: number; unit: string }) => `${i.qty} ${i.unit} ${i.name}`).join('\n')
       const existingM = body.existing_macros || {}

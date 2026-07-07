@@ -260,7 +260,7 @@ export default function App() {
       )}
       {showLibrary && (
         <Suspense fallback={null}>
-          <IngredientLibraryModal onClose={() => setShowLibrary(false)} />
+          <IngredientLibraryModal onClose={() => setShowLibrary(false)} recipes={recipes} />
         </Suspense>
       )}
     </div>
