@@ -11,12 +11,13 @@ export function isSectionHeader(line) {
 
 export function parseIng(text) {
   const t = String(text || '').trim()
-  const m = t.match(/^([\d.,]+(?:\/[\d.,]+)?)\s*([a-zA-Z%]*)\s{1,}(.+)$/)
+  const m = t.match(/^(\d+\s+)?([\d.,]+(?:\/[\d.,]+)?)\s*([a-zA-Z%]*)\s{1,}(.+)$/)
   if (!m) return { qty: null, unit: '', name: t }
-  const qty = m[1].includes('/')
-    ? m[1].split('/').reduce((a, b) => parseFloat(a) / parseFloat(b))
-    : parseFloat(m[1].replace(',', '.'))
-  return { qty, unit: m[2].toLowerCase(), name: m[3].trim() }
+  const whole = m[1] ? parseFloat(m[1]) : 0
+  const frac = m[2].includes('/')
+    ? m[2].split('/').reduce((a, b) => parseFloat(a) / parseFloat(b))
+    : parseFloat(m[2].replace(',', '.'))
+  return { qty: whole + frac, unit: m[3].toLowerCase(), name: m[4].trim() }
 }
 
 export function toGrams(qty, unit) {

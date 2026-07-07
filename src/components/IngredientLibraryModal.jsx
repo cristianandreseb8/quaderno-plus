@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  collectAllIngredientNames, findRecipesForIngredient, libDelete, libFindMatch, libLoad, libUpsert,
+  INGREDIENT_TYPES, collectAllIngredientNames, findRecipesForIngredient, libDelete, libFindMatch, libLoad, libUpsert,
 } from '../lib/ingredientLibrary.js'
 import { analyzeMacros } from '../lib/ai.js'
 
-const TYPES = ['flour', 'butter', 'egg', 'egg_yolk', 'sugar', 'milk', 'cream', 'salt', 'yeast', 'sourdough', 'honey', 'oil', 'water', 'chocolate', 'other']
 const STD_PARAMS = ['fat_pct', 'water_pct', 'free_water_pct', 'sugar_pct', 'protein_pct', 'carbs_pct', 'cal_per100', 'flour_equivalent_pct']
 const STD_LABELS = { fat_pct: 'Fat %', water_pct: 'Water %', free_water_pct: 'Free water %', sugar_pct: 'Sugar %', protein_pct: 'Protein %', carbs_pct: 'Carbs %', cal_per100: 'Cal/100g', flour_equivalent_pct: 'Flour equiv %' }
-const BLANK_ITEM = { name: '', canonical_name: '', ingredient_type: 'other', aliases: [], params: {}, ai_notes: '' }
+const BLANK_ITEM = { name: '', canonical_name: '', ingredient_type: 'other', aliases: [], params: {}, ai_notes: '', is_favorite: false }
 const BATCH_SIZE = 25
 
 function applyAiResult(item, vals) {
@@ -58,7 +57,7 @@ function IngredientForm({ item, setItem, onSave, onCancel, saveLabel }) {
         <div>
           <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>Type</label>
           <select value={item.ingredient_type} onChange={(e) => setItem((p) => ({ ...p, ingredient_type: e.target.value }))} style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 13 }}>
-            {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            {INGREDIENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
@@ -105,6 +104,44 @@ function IngredientForm({ item, setItem, onSave, onCancel, saveLabel }) {
   )
 }
 
+function IngredientRow({ item, usage, expanded, onToggleExpand, onEdit, onDelete, onToggleFavorite }) {
+  return (
+    <div style={{ border: '1px solid var(--rule)', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
+      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={onEdit}>
+        <button onClick={(e) => { e.stopPropagation(); onToggleFavorite(item) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: '0 2px', flexShrink: 0, lineHeight: 1 }} title={item.is_favorite ? 'Remove favorite' : 'Mark favorite'}>
+          {item.is_favorite ? '⭐' : '☆'}
+        </button>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 14 }}>{item.name}</span>
+          {item.canonical_name !== item.name && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>({item.canonical_name})</span>}
+          <span style={{ fontSize: 10, background: '#f5f0e8', color: 'var(--muted)', borderRadius: 4, padding: '1px 6px', marginLeft: 8 }}>{item.ingredient_type}</span>
+          {(item.aliases || []).length > 0 && <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 6 }}>+{item.aliases.length} aliases</span>}
+        </div>
+        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)' }}>
+          {item.params.fat_pct != null && <span>Fat:{item.params.fat_pct}%</span>}
+          {item.params.flour_equivalent_pct != null && <span>FlEq:{item.params.flour_equivalent_pct}%</span>}
+          {item.params.free_water_pct != null && <span>FrW:{item.params.free_water_pct}%</span>}
+        </div>
+        <button onClick={(e) => { e.stopPropagation(); onDelete(item.id) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 14, opacity: 0.5 }}>&#x1F5D1;</button>
+      </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggleExpand(item.id) }}
+        style={{ width: '100%', textAlign: 'left', padding: '5px 14px 7px', background: 'none', border: 'none', borderTop: '1px dotted var(--rule)', cursor: usage.length ? 'pointer' : 'default', fontSize: 10.5, color: 'var(--muted)', fontFamily: 'var(--mono)' }}
+        disabled={!usage.length}
+      >
+        {usage.length ? `${expanded ? '▲' : '▼'} used in ${usage.length} recipe${usage.length !== 1 ? 's' : ''}` : 'not used in any recipe'}
+      </button>
+      {expanded && usage.length > 0 && (
+        <div style={{ padding: '2px 14px 10px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {usage.map((r) => (
+            <span key={r.id} style={{ fontSize: 11, background: '#F8FBFF', border: '1px solid #C8DFF0', borderRadius: 20, padding: '2px 9px', color: 'var(--id)' }}>{r.title}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function IngredientLibraryModal({ onClose, recipes = [] }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -114,6 +151,8 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
   const [creating, setCreating] = useState(false)
   const [newItem, setNewItem] = useState(BLANK_ITEM)
   const [typeFilter, setTypeFilter] = useState('')
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const [viewMode, setViewMode] = useState('list') // 'list' | 'category'
   const [expandedId, setExpandedId] = useState(null)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkProgress, setBulkProgress] = useState(null)
@@ -123,17 +162,37 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
 
   useEffect(() => { libLoad().then((d) => { setItems(d); setLoading(false) }) }, [])
 
-  const filtered = items.filter((it) => {
-    const nm = (it.name || '').toLowerCase()
+  const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    return (!q || nm.includes(q)) && (!typeFilter || it.ingredient_type === typeFilter)
-  })
+    return items
+      .filter((it) => {
+        const nm = (it.name || '').toLowerCase()
+        return (!q || nm.includes(q)) && (!typeFilter || it.ingredient_type === typeFilter) && (!favoritesOnly || it.is_favorite)
+      })
+      .sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0) || a.name.localeCompare(b.name))
+  }, [items, search, typeFilter, favoritesOnly])
+
+  const groupedByType = useMemo(() => {
+    const groups = new Map()
+    for (const item of filtered) {
+      const key = item.ingredient_type || 'other'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(item)
+    }
+    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [filtered])
 
   const usageMap = useMemo(() => {
     const map = new Map()
     for (const item of items) map.set(item.id, findRecipesForIngredient(item, recipes))
     return map
   }, [items, recipes])
+
+  const typeCounts = useMemo(() => {
+    const counts = new Map()
+    for (const it of items) counts.set(it.ingredient_type, (counts.get(it.ingredient_type) || 0) + 1)
+    return counts
+  }, [items])
 
   const scopedRecipes = useMemo(
     () => (scope === 'selected' ? recipes.filter((r) => selectedRecipeIds.has(r.id)) : recipes),
@@ -164,6 +223,12 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
   async function deleteItem(id) {
     if (!window.confirm('Delete this ingredient?')) return
     await libDelete(id); setItems(items.filter((i) => i.id !== id))
+  }
+
+  async function toggleFavorite(item) {
+    const updated = { ...item, is_favorite: !item.is_favorite }
+    setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)))
+    await libUpsert(updated)
   }
 
   function toggleSelectedRecipe(id) {
@@ -210,6 +275,8 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
     setBulkProgress(null)
   }
 
+  const rowProps = { expandedId, onToggleExpand: (id) => setExpandedId((p) => (p === id ? null : id)), onEdit: startEdit, onDelete: deleteItem, onToggleFavorite: toggleFavorite }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ background: 'var(--paper)', borderRadius: 12, width: 'min(900px,96vw)', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid var(--rule)' }}>
@@ -223,8 +290,15 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ingredients..." style={{ flex: 1, minWidth: 160, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 13 }} />
           <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 13 }}>
             <option value="">All types</option>
-            {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            {INGREDIENT_TYPES.map((t) => <option key={t} value={t}>{t}{typeCounts.get(t) ? ` (${typeCounts.get(t)})` : ''}</option>)}
           </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, cursor: 'pointer', color: 'var(--ink)' }}>
+            <input type="checkbox" checked={favoritesOnly} onChange={(e) => setFavoritesOnly(e.target.checked)} /> ⭐ Favorites only
+          </label>
+          <div style={{ display: 'flex', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
+            <button onClick={() => setViewMode('list')} style={{ padding: '5px 10px', fontSize: 12, border: 'none', cursor: 'pointer', background: viewMode === 'list' ? 'var(--id)' : '#fff', color: viewMode === 'list' ? '#fff' : 'var(--muted)' }}>List</button>
+            <button onClick={() => setViewMode('category')} style={{ padding: '5px 10px', fontSize: 12, border: 'none', cursor: 'pointer', background: viewMode === 'category' ? 'var(--id)' : '#fff', color: viewMode === 'category' ? '#fff' : 'var(--muted)' }}>By category</button>
+          </div>
           <button onClick={startCreate} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--id)', background: 'none', color: 'var(--id)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Add ingredient</button>
         </div>
 
@@ -280,47 +354,33 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
           )}
           {loading && <div style={{ color: 'var(--muted)', textAlign: 'center', padding: 32 }}>Loading...</div>}
           {!loading && filtered.length === 0 && !creating && <div style={{ color: 'var(--muted)', textAlign: 'center', padding: 32 }}>No ingredients found.</div>}
-          {filtered.map((item) => {
-            const usage = usageMap.get(item.id) || []
-            return (
+
+          {viewMode === 'list' && filtered.map((item) => (
+            editId === item.id ? (
               <div key={item.id} style={{ border: '1px solid var(--rule)', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-                {editId === item.id ? (
-                  <IngredientForm item={editItem} setItem={setEditItem} onSave={saveEdit} onCancel={cancelEdit} saveLabel="Save" />
-                ) : (
-                  <>
-                    <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => startEdit(item)}>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 14 }}>{item.name}</span>
-                        {item.canonical_name !== item.name && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>({item.canonical_name})</span>}
-                        <span style={{ fontSize: 10, background: '#f5f0e8', color: 'var(--muted)', borderRadius: 4, padding: '1px 6px', marginLeft: 8 }}>{item.ingredient_type}</span>
-                        {(item.aliases || []).length > 0 && <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 6 }}>+{item.aliases.length} aliases</span>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)' }}>
-                        {item.params.fat_pct != null && <span>Fat:{item.params.fat_pct}%</span>}
-                        {item.params.flour_equivalent_pct != null && <span>FlEq:{item.params.flour_equivalent_pct}%</span>}
-                        {item.params.free_water_pct != null && <span>FrW:{item.params.free_water_pct}%</span>}
-                      </div>
-                      <button onClick={(e) => { e.stopPropagation(); deleteItem(item.id) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 14, opacity: 0.5 }}>&#x1F5D1;</button>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setExpandedId((p) => (p === item.id ? null : item.id)) }}
-                      style={{ width: '100%', textAlign: 'left', padding: '5px 14px 7px', background: 'none', border: 'none', borderTop: '1px dotted var(--rule)', cursor: usage.length ? 'pointer' : 'default', fontSize: 10.5, color: 'var(--muted)', fontFamily: 'var(--mono)' }}
-                      disabled={!usage.length}
-                    >
-                      {usage.length ? `${expandedId === item.id ? '▲' : '▼'} used in ${usage.length} recipe${usage.length !== 1 ? 's' : ''}` : 'not used in any recipe'}
-                    </button>
-                    {expandedId === item.id && usage.length > 0 && (
-                      <div style={{ padding: '2px 14px 10px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {usage.map((r) => (
-                          <span key={r.id} style={{ fontSize: 11, background: '#F8FBFF', border: '1px solid #C8DFF0', borderRadius: 20, padding: '2px 9px', color: 'var(--id)' }}>{r.title}</span>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
+                <IngredientForm item={editItem} setItem={setEditItem} onSave={saveEdit} onCancel={cancelEdit} saveLabel="Save" />
               </div>
+            ) : (
+              <IngredientRow key={item.id} item={item} usage={usageMap.get(item.id) || []} expanded={expandedId === item.id} {...rowProps} />
             )
-          })}
+          ))}
+
+          {viewMode === 'category' && groupedByType.map(([type, groupItems]) => (
+            <div key={type} style={{ marginBottom: 16 }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.14em', color: 'var(--id)', marginBottom: 7, paddingBottom: 4, borderBottom: '1px solid var(--rule)' }}>
+                {type} <span style={{ color: 'var(--muted)' }}>({groupItems.length})</span>
+              </div>
+              {groupItems.map((item) => (
+                editId === item.id ? (
+                  <div key={item.id} style={{ border: '1px solid var(--rule)', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
+                    <IngredientForm item={editItem} setItem={setEditItem} onSave={saveEdit} onCancel={cancelEdit} saveLabel="Save" />
+                  </div>
+                ) : (
+                  <IngredientRow key={item.id} item={item} usage={usageMap.get(item.id) || []} expanded={expandedId === item.id} {...rowProps} />
+                )
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     </div>
