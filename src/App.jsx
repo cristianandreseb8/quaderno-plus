@@ -23,10 +23,19 @@ export default function App() {
   const [categorizingAI, setCategorizingAI] = useState(false)
 
   useEffect(() => {
-    dbLoad().then((data) => { setRecipes(data); if (data[0]) setSelId(data[0].id) })
+    dbLoad().then((data) => {
+      setRecipes(data)
+      const lastId = localStorage.getItem('qdplus_last_recipe')
+      const restored = lastId && data.some((r) => r.id === lastId) ? lastId : data[0]?.id || null
+      setSelId(restored)
+    })
       .catch((e) => setSaveErr('Load failed: ' + e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (mode === 'view' && selId) localStorage.setItem('qdplus_last_recipe', selId)
+  }, [selId, mode])
 
   async function saveRecipe(rec) {
     try {
@@ -71,6 +80,20 @@ export default function App() {
       setSelId(saved.id); setMode('view')
     } catch (e) {
       setSaveErr('Copy failed: ' + e.message)
+    }
+  }
+  async function saveVariant(variantRecipe, label) {
+    try {
+      const rec = {
+        ...variantRecipe, id: undefined,
+        title: variantRecipe.title + (label ? ` (${label})` : '  (Copy)'),
+        notes_pad: '', media_library: '', id_data: '', fixed_lang: null, copied_from: variantRecipe.id,
+      }
+      const saved = await dbInsert(rec)
+      setRecipes((p) => [saved, ...p])
+      setSelId(saved.id); setMode('view')
+    } catch (e) {
+      setSaveErr('Save copy failed: ' + e.message)
     }
   }
   async function handleAppAIAction(action) {
@@ -207,7 +230,7 @@ export default function App() {
             <Suspense fallback={<div className="Q-msg">Loading…</div>}>
               {mode === 'new' && <RecipeEditor onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(recipes[0]?.id || null) }} />}
               {mode === 'edit' && sel && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
-              {mode === 'view' && sel && <RecipeView key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)} onUpdate={updateRecipe} allRecipes={recipes} onCopy={copyRecipe} />}
+              {mode === 'view' && sel && <RecipeView key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)} onUpdate={updateRecipe} allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant} />}
             </Suspense>
             {mode === 'view' && !sel && !loading && (
               <div className="Q-hero">

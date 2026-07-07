@@ -9,7 +9,7 @@ import NotesPanel from './NotesPanel.jsx'
 import IDPanel from './IDPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
 
-export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy }) {
+export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant }) {
   const [tab, setTab] = useState('recipe')
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const [checked, setChecked] = useState(new Set())
@@ -105,6 +105,11 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
 
   async function handleCopyWithLang(lang) { setShowCopyLangMenu(false); onCopy(recipe, lang || null) }
 
+  function saveCurrentAsNew() {
+    const label = appliedScale?.label || (translated ? targetLang : null)
+    onSaveVariant(viewR, label)
+  }
+
   async function handleAssistantAction(action) {
     switch (action.type) {
       case 'scale': setAppliedScale({ factor: action.factor, label: `AI ×${action.factor}` }); break
@@ -176,6 +181,11 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
       </div>
       <div className="Q-export-opts">
         <label><input type="checkbox" checked={exportNotes} onChange={(e) => setExportNotes(e.target.checked)} /> Include notes in PDF/Image</label>
+        {(appliedScale || translated) && (
+          <button className="btn green xs" onClick={saveCurrentAsNew} title="Save the current scaled/translated numbers as a new recipe">
+            💾 Save as new recipe
+          </button>
+        )}
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
           <button className="btn teal xs" onClick={() => setShowCopyLangMenu((p) => !p)}>📋 Copy recipe</button>
           {showCopyLangMenu && (
