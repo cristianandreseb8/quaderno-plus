@@ -180,6 +180,7 @@ const KNOWN_UNITS = new Set([
   'pieza', 'piezas', 'hoja', 'hojas', 'rama', 'ramas', 'diente', 'dientes',
   'bund', 'bunch', 'bunches', 'handvoll', 'handful', 'sprig', 'sprigs', 'leaf', 'leaves',
   'packet', 'pinch', 'dash', 'splash', 'knob', 'pat',
+  'cc', 'tz', 'sobre', 'sobres', 'càc', 'cac', 'càs', 'cas',
 ])
 
 // Collapses a raw recipe ingredient line down to a bare, general ingredient name suitable for the
@@ -195,6 +196,9 @@ export function normalizeIngredientName(rawLine) {
   line = withoutQty !== line ? withoutQty : line
   const unitMatch = line.match(/^([a-zA-Zà-öø-ÿÀ-ÖØ-ß%]+)\s+(.+)$/)
   if (unitMatch && KNOWN_UNITS.has(unitMatch[1].toLowerCase())) line = unitMatch[2]
+  // A bare connector word left dangling once a unit like "pinch"/"gousse" is stripped
+  // ("1 pinch of sea salt" → "of sea salt", "1 gousse de vanille" → "de vanille").
+  line = line.replace(/^(?:of|de|di|von)\s+/i, '')
   // Drop a leftover alternate-unit clause from "425 g / 15 oz potatoes" dual-unit lines — this
   // only surfaces after the first unit ("g") has already been stripped above.
   line = line.replace(new RegExp(`^/\\s*${NUM}\\s*[a-zA-Z]*\\s+`), '')

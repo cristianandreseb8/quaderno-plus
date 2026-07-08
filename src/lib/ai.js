@@ -29,3 +29,7 @@ export const analyzeMacros = (recipeTitle, ingredients) => invoke({ type: 'analy
 export const analyzeCustomParam = (recipeTitle, ingredients, existingMacros, paramLabel) =>
   invoke({ type: 'analyze_custom_param', recipe_title: recipeTitle, ingredients, existing_macros: existingMacros, param_label: paramLabel })
 export const autoCategorize = (recipes) => invoke({ type: 'auto_categorize', recipes })
+export const categorizeIngredients = (ingredients, knownCategories) =>
+  invoke({ type: 'categorize_ingredients', ingredients, known_categories: knownCategories })
+export const describeIngredient = (name, ingredientType) =>
+  invoke({ type: 'describe_ingredient', name, ingredient_type: ingredientType })

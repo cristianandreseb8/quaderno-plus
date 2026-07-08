@@ -132,6 +132,21 @@ Return ONLY valid JSON, no markdown, no commentary before or after: {"cache": {"
 Return ONLY valid JSON: {"value": <number or string>, "unit": "<unit or empty string>", "explanation": "<1 sentence max 20 words explaining what this value means for this recipe>"}`
       const userMsg = `Recipe: ${body.recipe_title || ''}\nIngredients:\n${ings}\n\nExisting macros: total_batch=${existingM.total || 0}g, fat=${existingM.fat || 0}g, water=${existingM.water || 0}g, flour_equiv=${existingM.flourEqG || 0}g, free_water=${existingM.freeWaterG || 0}g\n\nCalculate: ${body.param_label}`
       result = await claudeJson([{ role: "user", content: userMsg }], systemPrompt2, 400)
+    } else if (body.type === "categorize_ingredients") {
+      const list = (body.ingredients || []).map((i: { name: string; ingredient_type?: string }) => `${i.name}${i.ingredient_type ? ` (nutrition type: ${i.ingredient_type})` : ''}`).join('\n')
+      const known = (body.known_categories || []).join(', ')
+      const sys = `You are a culinary taxonomist. For each ingredient, assign 1-4 broad browsing categories describing what it fundamentally is (e.g. dairy, cheese, fermented, grain, sweetener, fat, spice, herb, fruit, vegetable, nut, seed, protein, liquid, chocolate, egg, alcohol, preservative, seasoning, leavening, baking aid).
+
+An ingredient can and often should have MULTIPLE categories — e.g. a fermented cheese like Reblochon → dairy, cheese, fermented. Sourdough starter → grain, leavening, fermented.
+
+Categories already in use in this library (reuse one of these when it fits instead of inventing a near-duplicate): ${known || 'none yet'}. Only invent a new lowercase one-or-two-word category when nothing existing fits.
+
+Return ONLY valid JSON, no markdown: {"categories": {"<ingredient name exactly as given>": ["cat1","cat2"], ...}}`
+      result = await claudeJson([{ role: "user", content: `Ingredients:\n${list}` }], sys, 3000)
+    } else if (body.type === "describe_ingredient") {
+      const sys = `You are a professional baker and food writer. Write one short, precise descriptor (max 25 words, one sentence, no markdown) for the given ingredient: what it is, its character/flavor, and its typical culinary role. No fluff, no marketing language.`
+      const text = await claudeText([{ role: "user", content: `Ingredient: ${body.name}${body.ingredient_type ? ` (nutrition type: ${body.ingredient_type})` : ''}` }], sys, 150)
+      result = { text: text.trim() }
     } else if (body.type === "auto_categorize") {
       const list = (body.recipes || []).map((r: { id: string; title: string; ingredients: string[] }) => `id:${r.id} title:"${r.title}" ingredients:${(r.ingredients || []).slice(0, 8).join(', ')}`).join('\n')
       const systemPrompt3 = `You are a professional baker. Assign a short, consistent category (2-4 words, e.g. "Grandi Lievitati", "Pan Bread", "Pastry", "Viennoiserie") to each recipe based on its title and ingredients.
