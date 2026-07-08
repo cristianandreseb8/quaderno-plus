@@ -159,10 +159,11 @@ export function normalizeIngredientName(rawLine) {
   }
   const withoutQty = line.replace(LEADING_QTY_RE, '')
   line = withoutQty !== line ? withoutQty : line
-  // Drop a leftover alternate-unit clause from "425 g / 15 oz potatoes" style dual-unit lines.
-  line = line.replace(/^\/\s*[\d.,½¼¾⅓⅔]+\s*[a-zA-Z]*\s+/, '')
   const unitMatch = line.match(/^([a-zA-Zà-öø-ÿÀ-ÖØ-ß%]+)\s+(.+)$/)
   if (unitMatch && KNOWN_UNITS.has(unitMatch[1].toLowerCase())) line = unitMatch[2]
+  // Drop a leftover alternate-unit clause from "425 g / 15 oz potatoes" dual-unit lines — this
+  // only surfaces after the first unit ("g") has already been stripped above.
+  line = line.replace(new RegExp(`^/\\s*${NUM}\\s*[a-zA-Z]*\\s+`), '')
   // Drop "or substitute" alternatives and parentheticals: "brown sugar, or piloncillo" / "X — or Y" / "(optional)".
   const name = line.replace(/\([^)]*\)/g, '').split(',')[0].split(/\s[—–]\s/)[0].trim().replace(/\s{2,}/g, ' ')
   return name || line.trim() || rawLine.trim()
