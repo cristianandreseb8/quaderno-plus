@@ -1,10 +1,57 @@
 import { supabase } from './supabase.js'
-import { isSectionHeader, parseIng } from './recipeCalc.js'
+import { isSectionHeader } from './recipeCalc.js'
+
+const UNICODE_FRACTION_CHARS = '½¼¾⅓⅔⅛⅜⅝⅞'
 
 export const INGREDIENT_TYPES = [
   'flour', 'butter', 'egg', 'egg_yolk', 'sugar', 'milk', 'cream', 'salt', 'yeast', 'sourdough',
   'honey', 'oil', 'water', 'chocolate', 'fruit', 'nut', 'spice', 'other',
 ]
+
+// Cross-language groups for the ~40 ingredients recipes reach for most often (EN/ES/DE/FR/IT),
+// so searching "pimienta" also surfaces "pfeffer"/"pepper" and "cinnamon" surfaces "canela"/"zimt".
+const SYNONYM_GROUPS = [
+  ['salt', 'sal', 'sale', 'sel', 'salz'],
+  ['pepper', 'pimienta', 'pepe', 'poivre', 'pfeffer'],
+  ['cinnamon', 'canela', 'cannella', 'cannelle', 'zimt'],
+  ['sugar', 'azucar', 'azúcar', 'zucchero', 'sucre', 'zucker'],
+  ['flour', 'harina', 'farina', 'farine', 'mehl'],
+  ['butter', 'mantequilla', 'burro', 'beurre', 'butter'],
+  ['egg', 'huevo', 'uovo', 'oeuf', 'œuf', 'ei', 'eier'],
+  ['milk', 'leche', 'latte', 'lait', 'milch'],
+  ['water', 'agua', 'acqua', 'eau', 'wasser'],
+  ['honey', 'miel', 'miele', 'honig'],
+  ['yeast', 'levadura', 'lievito', 'levure', 'hefe'],
+  ['vanilla', 'vainilla', 'vaniglia', 'vanille'],
+  ['chocolate', 'cioccolato', 'chocolat', 'schokolade'],
+  ['cream', 'crema', 'nata', 'panna', 'creme', 'crème', 'sahne'],
+  ['oil', 'aceite', 'olio', 'huile', 'öl', 'ol'],
+  ['lemon', 'limon', 'limón', 'limone', 'citron', 'zitrone'],
+  ['orange', 'naranja', 'arancia', 'orange'],
+  ['almond', 'almendra', 'mandorla', 'amande', 'mandel'],
+  ['walnut', 'nuez', 'noce', 'noix', 'walnuss'],
+  ['hazelnut', 'avellana', 'nocciola', 'noisette', 'haselnuss'],
+  ['baking powder', 'polvo de hornear', 'levito', 'levure chimique', 'backpulver'],
+  ['baking soda', 'bicarbonato', 'bicarbonate', 'natron'],
+  ['starch', 'fecula', 'fécula', 'amido', 'fecule', 'stärke', 'maisstärke'],
+  ['raisin', 'pasa', 'uvetta', 'raisin sec', 'rosine'],
+  ['ginger', 'jengibre', 'zenzero', 'gingembre', 'ingwer'],
+  ['nutmeg', 'nuez moscada', 'noce moscata', 'muscade', 'muskat'],
+  ['clove', 'clavo', 'chiodo di garofano', 'clou de girofle', 'nelke'],
+  ['apple', 'manzana', 'mela', 'pomme', 'apfel'],
+  ['potato', 'patata', 'papa', 'patate', 'kartoffel'],
+  ['onion', 'cebolla', 'cipolla', 'oignon', 'zwiebel'],
+  ['garlic', 'ajo', 'aglio', 'ail', 'knoblauch'],
+]
+
+// Expands a query into its whole synonym group (if it matches one), so filtering can search
+// across languages instead of only the literal typed term.
+export function expandSearchQuery(q) {
+  const query = q.toLowerCase().trim()
+  if (!query) return []
+  const group = SYNONYM_GROUPS.find((g) => g.some((term) => term.includes(query) || query.includes(term)))
+  return group ? [query, ...group] : [query]
+}
 
 export async function libLoad() {
   try {
@@ -72,20 +119,53 @@ const QUALIFIER_PREFIXES = [
   /^un\s+pizzico\s+di\s+/i, /^un\s+po[''’]?\s+di\s+/i,
 ]
 
+// A leading number, optionally a mixed-number fraction ("1 1/2"), and/or a range
+// ("2-3", "4–5", "500 à 560" French-style) — stripped unconditionally since it's never part
+// of the ingredient's name.
+const NUM = `[\\d.,${UNICODE_FRACTION_CHARS}]+(?:/[\\d.,]+)?`
+const LEADING_QTY_RE = new RegExp(
+  `^${NUM}(?:\\s+${NUM})?` +
+  `(?:\\s*(?:-|–|à|to)\\s*${NUM})?` +
+  `\\s+`,
+)
+
+// Unit words across EN/ES/DE/FR/IT — only these get dropped as a "unit" after the quantity;
+// anything else (e.g. "marraquetas" in "2 marraquetas") is treated as the start of the name,
+// since a plain qty+word regex can't otherwise tell a unit apart from a count noun.
+const KNOWN_UNITS = new Set([
+  'g', 'gr', 'gramo', 'gramos', 'gram', 'grams', 'kg', 'kilo', 'kilos', 'kilogram', 'kilograms', 'mg',
+  'ml', 'l', 'lt', 'litro', 'litros', 'liter', 'liters', 'litre', 'litres', 'cl', 'dl',
+  'oz', 'ounce', 'ounces', 'lb', 'lbs', 'pound', 'pounds', 'pint', 'pints', 'quart', 'quarts',
+  'cup', 'cups', 'taza', 'tazas', 'tasse', 'tassen',
+  'tsp', 'tbsp', 'teaspoon', 'teaspoons', 'tablespoon', 'tablespoons',
+  'cda', 'cdas', 'cdta', 'cdtas', 'cucharada', 'cucharadas', 'cucharadita', 'cucharaditas',
+  'el', 'tl', 'essl', 'teel',
+  'unidad', 'unidades', 'ud', 'uds', 'stück', 'stk', 'pizca', 'prise',
+  'gousse', 'gousses', 'tranche', 'tranches', 'feuille', 'feuilles',
+  'clove', 'cloves', 'slice', 'slices', 'can', 'cans', 'stick', 'sticks',
+  'pieza', 'piezas', 'hoja', 'hojas', 'rama', 'ramas', 'diente', 'dientes',
+  'bund', 'bunch', 'bunches', 'handvoll', 'handful', 'sprig', 'sprigs', 'leaf', 'leaves',
+  'packet', 'pinch', 'dash', 'splash', 'knob', 'pat',
+])
+
 // Collapses a raw recipe ingredient line down to a bare, general ingredient name suitable for the
-// library: "1/2 tsp cinnamon" → "cinnamon", "a pinch of salt" → "salt", "butter, softened" → "butter".
+// library: "1/2 tsp cinnamon" → "cinnamon", "a pinch of salt" → "salt", "2 marraquetas (o hallullas
+// grandes)" → "marraquetas", "500 à 560 g jaunes d'œufs" → "jaunes d'œufs".
 export function normalizeIngredientName(rawLine) {
   let line = String(rawLine || '').trim()
   for (const rx of QUALIFIER_PREFIXES) {
     const m = line.match(rx)
     if (m) { line = line.slice(m[0].length); break }
   }
-  let name = parseIng(line).name || line
+  const withoutQty = line.replace(LEADING_QTY_RE, '')
+  line = withoutQty !== line ? withoutQty : line
   // Drop a leftover alternate-unit clause from "425 g / 15 oz potatoes" style dual-unit lines.
-  name = name.replace(/^\/\s*[\d.,½¼¾⅓⅔]+\s*[a-zA-Z]*\s+/, '')
-  // Drop "or substitute" alternatives after a comma or dash: "brown sugar, or piloncillo" / "X — or Y".
-  name = name.replace(/\([^)]*\)/g, '').split(',')[0].split(/\s[—–]\s/)[0].trim().replace(/\s{2,}/g, ' ')
-  return name || line.trim()
+  line = line.replace(/^\/\s*[\d.,½¼¾⅓⅔]+\s*[a-zA-Z]*\s+/, '')
+  const unitMatch = line.match(/^([a-zA-Zà-öø-ÿÀ-ÖØ-ß%]+)\s+(.+)$/)
+  if (unitMatch && KNOWN_UNITS.has(unitMatch[1].toLowerCase())) line = unitMatch[2]
+  // Drop "or substitute" alternatives and parentheticals: "brown sugar, or piloncillo" / "X — or Y" / "(optional)".
+  const name = line.replace(/\([^)]*\)/g, '').split(',')[0].split(/\s[—–]\s/)[0].trim().replace(/\s{2,}/g, ' ')
+  return name || line.trim() || rawLine.trim()
 }
 
 // Every distinct ingredient name used across all recipes, normalized and deduplicated case-insensitively.

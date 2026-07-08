@@ -9,14 +9,17 @@ export function isSectionHeader(line) {
   return /^##?\s+/.test(line)
 }
 
+const UNICODE_FRACTIONS = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875 }
+const UNICODE_FRACTION_CHARS = Object.keys(UNICODE_FRACTIONS).join('')
+
 export function parseIng(text) {
   const t = String(text || '').trim()
-  const m = t.match(/^(\d+\s+)?([\d.,]+(?:\/[\d.,]+)?)\s*([a-zA-Z%]*)\s{1,}(.+)$/)
+  const m = t.match(new RegExp(`^(\\d+)?\\s*([\\d.,]+(?:/[\\d.,]+)?|[${UNICODE_FRACTION_CHARS}])\\s*([a-zA-Z%]*)\\s{1,}(.+)$`))
   if (!m) return { qty: null, unit: '', name: t }
   const whole = m[1] ? parseFloat(m[1]) : 0
-  const frac = m[2].includes('/')
-    ? m[2].split('/').reduce((a, b) => parseFloat(a) / parseFloat(b))
-    : parseFloat(m[2].replace(',', '.'))
+  const frac = UNICODE_FRACTIONS[m[2]] !== undefined
+    ? UNICODE_FRACTIONS[m[2]]
+    : (m[2].includes('/') ? m[2].split('/').reduce((a, b) => parseFloat(a) / parseFloat(b)) : parseFloat(m[2].replace(',', '.')))
   return { qty: whole + frac, unit: m[3].toLowerCase(), name: m[4].trim() }
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  INGREDIENT_TYPES, collectAllIngredientNames, findRecipesForIngredient, libDelete, libFindMatch, libLoad, libUpsert,
+  INGREDIENT_TYPES, collectAllIngredientNames, expandSearchQuery, findRecipesForIngredient, libDelete, libFindMatch, libLoad, libUpsert,
 } from '../lib/ingredientLibrary.js'
 import { analyzeMacros } from '../lib/ai.js'
 
@@ -107,7 +107,7 @@ function IngredientForm({ item, setItem, onSave, onCancel, saveLabel }) {
 function IngredientRow({ item, usage, expanded, onToggleExpand, onEdit, onDelete, onToggleFavorite }) {
   return (
     <div style={{ border: '1px solid var(--rule)', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={onEdit}>
+      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => onEdit(item)}>
         <button onClick={(e) => { e.stopPropagation(); onToggleFavorite(item) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: '0 2px', flexShrink: 0, lineHeight: 1 }} title={item.is_favorite ? 'Remove favorite' : 'Mark favorite'}>
           {item.is_favorite ? '⭐' : '☆'}
         </button>
@@ -163,11 +163,14 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
   useEffect(() => { libLoad().then((d) => { setItems(d); setLoading(false) }) }, [])
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase()
+    const terms = expandSearchQuery(search)
     return items
       .filter((it) => {
         const nm = (it.name || '').toLowerCase()
-        return (!q || nm.includes(q)) && (!typeFilter || it.ingredient_type === typeFilter) && (!favoritesOnly || it.is_favorite)
+        const cn = (it.canonical_name || '').toLowerCase()
+        const aliasText = (it.aliases || []).join(' ').toLowerCase()
+        const matchesSearch = !terms.length || terms.some((t) => nm.includes(t) || cn.includes(t) || aliasText.includes(t))
+        return matchesSearch && (!typeFilter || it.ingredient_type === typeFilter) && (!favoritesOnly || it.is_favorite)
       })
       .sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0) || a.name.localeCompare(b.name))
   }, [items, search, typeFilter, favoritesOnly])
