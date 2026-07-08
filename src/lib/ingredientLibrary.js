@@ -3,10 +3,44 @@ import { isSectionHeader } from './recipeCalc.js'
 
 const UNICODE_FRACTION_CHARS = '½¼¾⅓⅔⅛⅜⅝⅞'
 
+// Internal nutrition-calc classifier — single value, matched against NUTRIENT_DB in macros.js.
+// Not the user-facing browsing taxonomy; see `categories` below for that.
 export const INGREDIENT_TYPES = [
   'flour', 'butter', 'egg', 'egg_yolk', 'sugar', 'milk', 'cream', 'salt', 'yeast', 'sourdough',
   'honey', 'oil', 'water', 'chocolate', 'fruit', 'nut', 'spice', 'other',
 ]
+
+// User-facing browsing categories: broader and freely extensible — an ingredient can belong to
+// several at once (e.g. Reblochon → dairy, cheese, fermented). This list just seeds the picker;
+// typing a new one in the UI creates it on the spot, no schema change needed (stored as text[]).
+export const DEFAULT_CATEGORIES = [
+  'dairy', 'cheese', 'fermented', 'grain', 'sweetener', 'fat', 'leavening', 'spice', 'herb',
+  'fruit', 'vegetable', 'nut', 'seed', 'protein', 'liquid', 'chocolate', 'egg', 'alcohol',
+  'preservative', 'seasoning', 'baking aid', 'other',
+]
+
+// A starting category when an ingredient is first AI-analyzed, derived from its nutrition type —
+// the user can add more (or remove this) freely afterwards.
+const TYPE_TO_DEFAULT_CATEGORY = {
+  flour: 'grain', butter: 'dairy', egg: 'egg', egg_yolk: 'egg', sugar: 'sweetener',
+  milk: 'dairy', cream: 'dairy', salt: 'seasoning', yeast: 'leavening', sourdough: 'leavening',
+  honey: 'sweetener', oil: 'fat', water: 'liquid', chocolate: 'chocolate',
+  fruit: 'fruit', nut: 'nut', spice: 'spice', other: null,
+}
+
+export function defaultCategoryForType(type) {
+  return TYPE_TO_DEFAULT_CATEGORY[type] || null
+}
+
+// Union of the seed list and whatever custom categories the library already uses, so the picker
+// always offers everything that's actually in play.
+export function getAllCategories(items) {
+  const set = new Set(DEFAULT_CATEGORIES)
+  for (const it of items || []) {
+    for (const c of it.categories || []) set.add(c.toLowerCase())
+  }
+  return [...set].sort()
+}
 
 // Cross-language groups for the ~40 ingredients recipes reach for most often (EN/ES/DE/FR/IT),
 // so searching "pimienta" also surfaces "pfeffer"/"pepper" and "cinnamon" surfaces "canela"/"zimt".

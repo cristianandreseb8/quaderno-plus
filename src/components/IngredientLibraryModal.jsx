@@ -1,18 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  INGREDIENT_TYPES, collectAllIngredientNames, expandSearchQuery, findRecipesForIngredient, libDelete, libFindMatch, libLoad, libUpsert,
+  INGREDIENT_TYPES, collectAllIngredientNames, defaultCategoryForType, expandSearchQuery,
+  findRecipesForIngredient, getAllCategories, libDelete, libFindMatch, libLoad, libUpsert,
 } from '../lib/ingredientLibrary.js'
 import { analyzeMacros } from '../lib/ai.js'
 
 const STD_PARAMS = ['fat_pct', 'water_pct', 'free_water_pct', 'sugar_pct', 'protein_pct', 'carbs_pct', 'cal_per100', 'flour_equivalent_pct']
 const STD_LABELS = { fat_pct: 'Fat %', water_pct: 'Water %', free_water_pct: 'Free water %', sugar_pct: 'Sugar %', protein_pct: 'Protein %', carbs_pct: 'Carbs %', cal_per100: 'Cal/100g', flour_equivalent_pct: 'Flour equiv %' }
-const BLANK_ITEM = { name: '', canonical_name: '', ingredient_type: 'other', aliases: [], params: {}, ai_notes: '', is_favorite: false }
+const BLANK_ITEM = { name: '', canonical_name: '', ingredient_type: 'other', categories: [], aliases: [], params: {}, ai_notes: '', is_favorite: false }
 const BATCH_SIZE = 25
 
 function applyAiResult(item, vals) {
+  const type = vals.ingredient_type || item.ingredient_type
+  const seeded = defaultCategoryForType(type)
+  const categories = (item.categories || []).length
+    ? item.categories
+    : (seeded ? [seeded] : [])
   return {
     ...item,
-    ingredient_type: vals.ingredient_type || item.ingredient_type,
+    ingredient_type: type,
+    categories,
     params: {
       fat_pct: vals.fat_pct || 0, water_pct: vals.water_pct || 0, free_water_pct: vals.free_water_pct || 0,
       sugar_pct: vals.sugar_pct || 0, protein_pct: vals.protein_pct || 0, carbs_pct: vals.carbs_pct || 0,
@@ -22,7 +29,51 @@ function applyAiResult(item, vals) {
   }
 }
 
-function IngredientForm({ item, setItem, onSave, onCancel, saveLabel }) {
+function CategoryEditor({ categories, setCategories, allCategories }) {
+  const [input, setInput] = useState('')
+  function addCategory(raw) {
+    const c = raw.trim().toLowerCase()
+    if (!c) return
+    setCategories((prev) => (prev.includes(c) ? prev : [...prev, c]))
+    setInput('')
+  }
+  function removeCategory(c) {
+    setCategories((prev) => prev.filter((x) => x !== c))
+  }
+  const suggestions = allCategories.filter((c) => !categories.includes(c) && (!input || c.includes(input.toLowerCase()))).slice(0, 8)
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Categories (an ingredient can belong to several)</label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+        {categories.map((c) => (
+          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, padding: '3px 4px 3px 10px', borderRadius: 14, background: '#EEF1F5', color: 'var(--id)', border: '1px solid #C8DFF0' }}>
+            {c}
+            <button onClick={() => removeCategory(c)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--id)', fontSize: 12, padding: '0 3px', lineHeight: 1 }}>×</button>
+          </span>
+        ))}
+        {categories.length === 0 && <span style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic' }}>none yet</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          value={input} onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCategory(input) } }}
+          placeholder="Type to add or create a category…"
+          style={{ flex: 1, padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12.5 }}
+        />
+        <button onClick={() => addCategory(input)} disabled={!input.trim()} style={{ padding: '5px 12px', borderRadius: 5, border: '1px dashed var(--id)', background: 'none', color: 'var(--id)', cursor: input.trim() ? 'pointer' : 'default', fontSize: 12, opacity: input.trim() ? 1 : 0.5 }}>+ Add</button>
+      </div>
+      {suggestions.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+          {suggestions.map((c) => (
+            <button key={c} onClick={() => addCategory(c)} style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 12, border: '1px solid var(--rule)', background: '#fff', color: 'var(--muted)', cursor: 'pointer' }}>+ {c}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function IngredientForm({ item, setItem, onSave, onCancel, saveLabel, allCategories }) {
   const [newParamKey, setNewParamKey] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   function addCustomParam() {
@@ -55,7 +106,7 @@ function IngredientForm({ item, setItem, onSave, onCancel, saveLabel }) {
           <input autoFocus value={item.name} onChange={(e) => setItem((p) => ({ ...p, name: e.target.value }))} style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 13, boxSizing: 'border-box' }} />
         </div>
         <div>
-          <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>Type</label>
+          <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>Nutrition type <span style={{ opacity: 0.7 }}>(used for macro estimates)</span></label>
           <select value={item.ingredient_type} onChange={(e) => setItem((p) => ({ ...p, ingredient_type: e.target.value }))} style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 13 }}>
             {INGREDIENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -65,6 +116,7 @@ function IngredientForm({ item, setItem, onSave, onCancel, saveLabel }) {
           <button onClick={onCancel} style={{ padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'none', color: 'var(--ink)', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
         </div>
       </div>
+      <CategoryEditor categories={item.categories || []} setCategories={(updater) => setItem((p) => ({ ...p, categories: updater(p.categories || []) }))} allCategories={allCategories} />
       <div style={{ marginBottom: 10 }}>
         <button onClick={aiFillThis} disabled={aiBusy} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: 'linear-gradient(135deg,#4f8ef7,#7c3aed)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: aiBusy ? 'default' : 'pointer', opacity: aiBusy ? 0.6 : 1 }}>
           {aiBusy ? '🤖 Analyzing…' : '🤖 AI auto-fill this ingredient'}
@@ -114,7 +166,9 @@ function IngredientRow({ item, usage, expanded, onToggleExpand, onEdit, onDelete
         <div style={{ flex: 1 }}>
           <span style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 14 }}>{item.name}</span>
           {item.canonical_name !== item.name && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>({item.canonical_name})</span>}
-          <span style={{ fontSize: 10, background: '#f5f0e8', color: 'var(--muted)', borderRadius: 4, padding: '1px 6px', marginLeft: 8 }}>{item.ingredient_type}</span>
+          {(item.categories || []).length > 0
+            ? item.categories.map((c) => <span key={c} style={{ fontSize: 10, background: '#EEF1F5', color: 'var(--id)', borderRadius: 4, padding: '1px 6px', marginLeft: 6 }}>{c}</span>)
+            : <span style={{ fontSize: 10, background: '#f5f0e8', color: 'var(--muted)', borderRadius: 4, padding: '1px 6px', marginLeft: 8 }}>{item.ingredient_type}</span>}
           {(item.aliases || []).length > 0 && <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 6 }}>+{item.aliases.length} aliases</span>}
         </div>
         <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)' }}>
@@ -150,7 +204,7 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
   const [editItem, setEditItem] = useState(null)
   const [creating, setCreating] = useState(false)
   const [newItem, setNewItem] = useState(BLANK_ITEM)
-  const [typeFilter, setTypeFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [viewMode, setViewMode] = useState('list') // 'list' | 'category'
   const [expandedId, setExpandedId] = useState(null)
@@ -162,6 +216,8 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
 
   useEffect(() => { libLoad().then((d) => { setItems(d); setLoading(false) }) }, [])
 
+  const allCategories = useMemo(() => getAllCategories(items), [items])
+
   const filtered = useMemo(() => {
     const terms = expandSearchQuery(search)
     return items
@@ -170,17 +226,21 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
         const cn = (it.canonical_name || '').toLowerCase()
         const aliasText = (it.aliases || []).join(' ').toLowerCase()
         const matchesSearch = !terms.length || terms.some((t) => nm.includes(t) || cn.includes(t) || aliasText.includes(t))
-        return matchesSearch && (!typeFilter || it.ingredient_type === typeFilter) && (!favoritesOnly || it.is_favorite)
+        const matchesCategory = !categoryFilter || (it.categories || []).includes(categoryFilter)
+        return matchesSearch && matchesCategory && (!favoritesOnly || it.is_favorite)
       })
       .sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0) || a.name.localeCompare(b.name))
-  }, [items, search, typeFilter, favoritesOnly])
+  }, [items, search, categoryFilter, favoritesOnly])
 
-  const groupedByType = useMemo(() => {
+  // An item with multiple categories appears once under each of them (Reblochon → dairy AND cheese AND fermented).
+  const groupedByCategory = useMemo(() => {
     const groups = new Map()
     for (const item of filtered) {
-      const key = item.ingredient_type || 'other'
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key).push(item)
+      const cats = (item.categories && item.categories.length) ? item.categories : ['uncategorized']
+      for (const c of cats) {
+        if (!groups.has(c)) groups.set(c, [])
+        groups.get(c).push(item)
+      }
     }
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   }, [filtered])
@@ -191,9 +251,9 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
     return map
   }, [items, recipes])
 
-  const typeCounts = useMemo(() => {
+  const categoryCounts = useMemo(() => {
     const counts = new Map()
-    for (const it of items) counts.set(it.ingredient_type, (counts.get(it.ingredient_type) || 0) + 1)
+    for (const it of items) for (const c of it.categories || []) counts.set(c, (counts.get(c) || 0) + 1)
     return counts
   }, [items])
 
@@ -207,7 +267,7 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
     return names.filter((n) => !libFindMatch(n, items))
   }, [scopedRecipes, items])
 
-  function startEdit(item) { setCreating(false); setEditId(item.id); setEditItem({ ...item, params: { ...item.params }, aliases: [...(item.aliases || [])] }) }
+  function startEdit(item) { setCreating(false); setEditId(item.id); setEditItem({ ...item, categories: [...(item.categories || [])], params: { ...item.params }, aliases: [...(item.aliases || [])] }) }
   function cancelEdit() { setEditId(null); setEditItem(null) }
   async function saveEdit() {
     await libUpsert(editItem)
@@ -248,7 +308,7 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
     if (!window.confirm(`Add ${scopedMissingNames.length} ingredient${scopedMissingNames.length !== 1 ? 's' : ''} to the library?`)) return
     setBulkBusy(true)
     for (const name of scopedMissingNames) {
-      await libUpsert({ name, canonical_name: name, ingredient_type: 'other', aliases: [], params: {}, ai_notes: '', source: 'manual' })
+      await libUpsert({ name, canonical_name: name, ingredient_type: 'other', categories: [], aliases: [], params: {}, ai_notes: '', source: 'manual' })
     }
     const fresh = await libLoad()
     setItems(fresh)
@@ -265,7 +325,7 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
       try {
         const json = await analyzeMacros('Ingredient Library — bulk analysis', batch)
         for (const [ingName, vals] of Object.entries(json.cache || {})) {
-          await libUpsert({ ...applyAiResult({ name: ingName, canonical_name: ingName, ingredient_type: 'other', aliases: [] }, vals), source: 'AI' })
+          await libUpsert({ ...applyAiResult({ name: ingName, canonical_name: ingName, ingredient_type: 'other', categories: [], aliases: [] }, vals), source: 'AI' })
         }
       } catch (e) {
         console.error('Bulk ingredient analysis batch failed:', e)
@@ -291,9 +351,9 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
         </div>
         <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ingredients..." style={{ flex: 1, minWidth: 160, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 13 }} />
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 13 }}>
-            <option value="">All types</option>
-            {INGREDIENT_TYPES.map((t) => <option key={t} value={t}>{t}{typeCounts.get(t) ? ` (${typeCounts.get(t)})` : ''}</option>)}
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 13 }}>
+            <option value="">All categories</option>
+            {allCategories.map((c) => <option key={c} value={c}>{c}{categoryCounts.get(c) ? ` (${categoryCounts.get(c)})` : ''}</option>)}
           </select>
           <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, cursor: 'pointer', color: 'var(--ink)' }}>
             <input type="checkbox" checked={favoritesOnly} onChange={(e) => setFavoritesOnly(e.target.checked)} /> ⭐ Favorites only
@@ -352,7 +412,7 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
         <div style={{ flex: 1, overflow: 'auto', padding: '12px 20px' }}>
           {creating && (
             <div style={{ border: '1px solid var(--id)', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-              <IngredientForm item={newItem} setItem={setNewItem} onSave={saveCreate} onCancel={() => setCreating(false)} saveLabel="Create" />
+              <IngredientForm item={newItem} setItem={setNewItem} onSave={saveCreate} onCancel={() => setCreating(false)} saveLabel="Create" allCategories={allCategories} />
             </div>
           )}
           {loading && <div style={{ color: 'var(--muted)', textAlign: 'center', padding: 32 }}>Loading...</div>}
@@ -361,22 +421,22 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
           {viewMode === 'list' && filtered.map((item) => (
             editId === item.id ? (
               <div key={item.id} style={{ border: '1px solid var(--rule)', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-                <IngredientForm item={editItem} setItem={setEditItem} onSave={saveEdit} onCancel={cancelEdit} saveLabel="Save" />
+                <IngredientForm item={editItem} setItem={setEditItem} onSave={saveEdit} onCancel={cancelEdit} saveLabel="Save" allCategories={allCategories} />
               </div>
             ) : (
               <IngredientRow key={item.id} item={item} usage={usageMap.get(item.id) || []} expanded={expandedId === item.id} {...rowProps} />
             )
           ))}
 
-          {viewMode === 'category' && groupedByType.map(([type, groupItems]) => (
-            <div key={type} style={{ marginBottom: 16 }}>
+          {viewMode === 'category' && groupedByCategory.map(([cat, groupItems]) => (
+            <div key={cat} style={{ marginBottom: 16 }}>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.14em', color: 'var(--id)', marginBottom: 7, paddingBottom: 4, borderBottom: '1px solid var(--rule)' }}>
-                {type} <span style={{ color: 'var(--muted)' }}>({groupItems.length})</span>
+                {cat} <span style={{ color: 'var(--muted)' }}>({groupItems.length})</span>
               </div>
               {groupItems.map((item) => (
                 editId === item.id ? (
                   <div key={item.id} style={{ border: '1px solid var(--rule)', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-                    <IngredientForm item={editItem} setItem={setEditItem} onSave={saveEdit} onCancel={cancelEdit} saveLabel="Save" />
+                    <IngredientForm item={editItem} setItem={setEditItem} onSave={saveEdit} onCancel={cancelEdit} saveLabel="Save" allCategories={allCategories} />
                   </div>
                 ) : (
                   <IngredientRow key={item.id} item={item} usage={usageMap.get(item.id) || []} expanded={expandedId === item.id} {...rowProps} />
