@@ -14,7 +14,7 @@ const UNICODE_FRACTION_CHARS = Object.keys(UNICODE_FRACTIONS).join('')
 
 export function parseIng(text) {
   const t = String(text || '').trim()
-  const m = t.match(new RegExp(`^(\\d+)?\\s*([\\d.,]+(?:/[\\d.,]+)?|[${UNICODE_FRACTION_CHARS}])\\s*([a-zA-Z%]*)\\s{1,}(.+)$`))
+  const m = t.match(new RegExp(`^(?:(\\d+)\\s+)?([\\d.,]+(?:/[\\d.,]+)?|[${UNICODE_FRACTION_CHARS}])\\s*([a-zA-Z%]*)\\s{1,}(.+)$`))
   if (!m) return { qty: null, unit: '', name: t }
   const whole = m[1] ? parseFloat(m[1]) : 0
   const frac = UNICODE_FRACTIONS[m[2]] !== undefined
