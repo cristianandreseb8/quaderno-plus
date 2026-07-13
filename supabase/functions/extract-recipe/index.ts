@@ -97,7 +97,9 @@ Deno.serve(async (req) => {
     } else if (body.type === "app_assistant") {
       const sys = APP_ASSISTANT_SYSTEM(body.recipes || [])
       const msgs = (body.messages || []).map((m: { role: string; content: string }) => ({ role: m.role, content: m.content }))
-      const text = await claudeText(msgs, sys, 2000)
+      // Generous budget: a complete recipe (or small batch) inside <APP_ACTION> tags can easily
+      // exceed 2000 tokens, and a truncated tag means the action silently never runs.
+      const text = await claudeText(msgs, sys, 8000)
       result = { text }
     } else if (body.type === "format_note") {
       const text = await claudeText([{ role: "user", content: `Clean up this voice transcription into readable text. Fix punctuation and capitalization only. Do NOT rephrase, interpret, add information, or change the meaning. Keep it exactly what was said:\n\n"${body.transcript}"` }], undefined, 300)

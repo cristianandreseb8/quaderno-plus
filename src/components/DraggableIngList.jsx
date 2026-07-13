@@ -1,9 +1,45 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { isSectionHeader } from '../lib/recipeCalc.js'
+
+function findScroller(fromEl) {
+  let el = fromEl
+  while (el && el !== document.body) {
+    const s = getComputedStyle(el)
+    if (/(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight) return el
+    el = el.parentElement
+  }
+  return null
+}
 
 export default function DraggableIngList({ lines, onChange }) {
   const [dragIdx, setDragIdx] = useState(null)
   const [overIdx, setOverIdx] = useState(null)
+  const listRef = useRef(null)
+
+  // While dragging near the top/bottom edge, scroll the list's scrollable ancestor (or the page)
+  // so long lists can be reordered beyond the visible viewport — critical on small phone screens.
+  // Listens on document because per-item dragover stops firing once the pointer leaves the list.
+  useEffect(() => {
+    if (dragIdx === null) return
+    const MARGIN = 90
+    const STEP = 14
+    const onDragOver = (e) => {
+      const y = e.clientY
+      if (y === 0) return
+      const scroller = findScroller(listRef.current)
+      if (scroller) {
+        const r = scroller.getBoundingClientRect()
+        if (y < Math.max(r.top, 0) + MARGIN) scroller.scrollTop -= STEP
+        else if (y > Math.min(r.bottom, window.innerHeight) - MARGIN) scroller.scrollTop += STEP
+      } else if (y < MARGIN) {
+        window.scrollBy(0, -STEP)
+      } else if (y > window.innerHeight - MARGIN) {
+        window.scrollBy(0, STEP)
+      }
+    }
+    document.addEventListener('dragover', onDragOver)
+    return () => document.removeEventListener('dragover', onDragOver)
+  }, [dragIdx])
 
   function move(from, to) {
     if (from === to) return
@@ -16,7 +52,7 @@ export default function DraggableIngList({ lines, onChange }) {
   }
 
   return (
-    <div className="Q-drag-list">
+    <div className="Q-drag-list" ref={listRef}>
       {lines.map((line, idx) => (
         <div
           key={idx}

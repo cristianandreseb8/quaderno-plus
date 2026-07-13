@@ -2,11 +2,29 @@ import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { dbDelete, dbInsert, dbUpdate, dbLoad } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 
-const RecipeView = lazy(() => import('./components/RecipeView.jsx'))
-const RecipeEditor = lazy(() => import('./components/RecipeEditor.jsx'))
-const ComparePanel = lazy(() => import('./components/ComparePanel.jsx'))
-const IngredientLibraryModal = lazy(() => import('./components/IngredientLibraryModal.jsx'))
-const AppAIChat = lazy(() => import('./components/AppAIChat.jsx'))
+// After a redeploy, chunk filenames change and a client that loaded the old index.html
+// gets a 404 when it lazy-loads a panel — which used to unmount the app to a blank screen.
+// Retry via a one-shot full reload so the client picks up the fresh index.html.
+const RELOAD_FLAG = 'qdplus_chunk_reload'
+function lazyRetry(importer) {
+  return lazy(() =>
+    importer().then((mod) => { sessionStorage.removeItem(RELOAD_FLAG); return mod })
+      .catch((err) => {
+        if (!sessionStorage.getItem(RELOAD_FLAG)) {
+          sessionStorage.setItem(RELOAD_FLAG, '1')
+          window.location.reload()
+          return new Promise(() => {}) // page is reloading — never settle
+        }
+        throw err // second failure: let the ErrorBoundary show its recovery screen
+      }),
+  )
+}
+
+const RecipeView = lazyRetry(() => import('./components/RecipeView.jsx'))
+const RecipeEditor = lazyRetry(() => import('./components/RecipeEditor.jsx'))
+const ComparePanel = lazyRetry(() => import('./components/ComparePanel.jsx'))
+const IngredientLibraryModal = lazyRetry(() => import('./components/IngredientLibraryModal.jsx'))
+const AppAIChat = lazyRetry(() => import('./components/AppAIChat.jsx'))
 
 export default function App() {
   const [recipes, setRecipes] = useState([])
@@ -96,18 +114,31 @@ export default function App() {
       setSaveErr('Save copy failed: ' + e.message)
     }
   }
+  // The model is told to emit ingredients/steps as plain strings, but coerce anyway —
+  // an object slipped into recipe.ingredients would crash React when rendered as a child.
+  function sanitizeAIRecipe(r) {
+    const toLine = (x) => (typeof x === 'string' ? x : [x?.qty, x?.unit, ' ' + (x?.name || '')].filter(Boolean).join(' ').trim() || JSON.stringify(x))
+    return {
+      ...r,
+      title: String(r?.title || 'Untitled'),
+      ingredients: (r?.ingredients || []).map(toLine),
+      steps: (r?.steps || []).map(toLine),
+    }
+  }
   async function handleAppAIAction(action) {
     switch (action.type) {
       case 'create_recipe':
         try {
-          const saved = await dbInsert({ ...action.recipe, notes_pad: '', thumbnail: '', source_photos: [], id_data: '', media_library: '', fixed_lang: null, copied_from: null })
+          const saved = await dbInsert({ ...sanitizeAIRecipe(action.recipe), notes_pad: '', thumbnail: '', source_photos: [], id_data: '', media_library: '', fixed_lang: null, copied_from: null })
           setRecipes((p) => [saved, ...p])
+          setSelId(saved.id); setMode('view')
         } catch (e) { setSaveErr('Create failed: ' + e.message) }
         break
       case 'batch_create':
         try {
-          const created = await Promise.all((action.recipes || []).map((r) => dbInsert({ ...r, notes_pad: '', thumbnail: '', source_photos: [], id_data: '', media_library: '', fixed_lang: null, copied_from: null })))
+          const created = await Promise.all((action.recipes || []).map((r) => dbInsert({ ...sanitizeAIRecipe(r), notes_pad: '', thumbnail: '', source_photos: [], id_data: '', media_library: '', fixed_lang: null, copied_from: null })))
           setRecipes((p) => [...created, ...p])
+          if (created[0]) { setSelId(created[0].id); setMode('view') }
         } catch (e) { setSaveErr('Batch create failed: ' + e.message) }
         break
       case 'delete_recipe':
