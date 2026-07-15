@@ -150,7 +150,11 @@ export default function App() {
           } catch (e) { setSaveErr('Delete failed: ' + e.message) }
         }
         break
-      case 'select_recipe': setSelId(action.id); setMode('view'); setShowAppAI(false); break
+      case 'select_recipe':
+        // The model may fabricate an id (e.g. right after create_recipe it can't know the real
+        // DB-assigned id) — selecting a nonexistent id would blank the view pane, so ignore those.
+        if (recipes.some((r) => r.id === action.id)) { setSelId(action.id); setMode('view'); setShowAppAI(false) }
+        break
       case 'search': setQ(action.query || ''); setShowAppAI(false); break
     }
   }
