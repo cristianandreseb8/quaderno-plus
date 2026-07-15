@@ -247,6 +247,7 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
   const [selectedIngredientIds, setSelectedIngredientIds] = useState(new Set())
   const [collapsedCats, setCollapsedCats] = useState(new Set())
   const [bulkCatInput, setBulkCatInput] = useState('')
+  const [showCatSuggest, setShowCatSuggest] = useState(false)
   const [catBulkBusy, setCatBulkBusy] = useState(false)
 
   useEffect(() => { libLoad().then((d) => { setItems(d); setLoading(false) }) }, [])
@@ -291,6 +292,11 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
     for (const it of items) for (const c of it.categories || []) counts.set(c, (counts.get(c) || 0) + 1)
     return counts
   }, [items])
+
+  const bulkCatSuggestions = useMemo(() => {
+    const q = bulkCatInput.trim().toLowerCase()
+    return allCategories.filter((c) => !q || c.includes(q)).slice(0, 30)
+  }, [allCategories, bulkCatInput])
 
   const scopedRecipes = useMemo(
     () => (scope === 'selected' ? recipes.filter((r) => selectedRecipeIds.has(r.id)) : recipes),
@@ -522,15 +528,36 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
           {selectedIngredientIds.size > 0 && (
             <button onClick={clearIngredientSelection} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 12, border: '1px solid var(--rule)', background: '#fff', color: 'var(--muted)', cursor: 'pointer' }}>Clear selection</button>
           )}
-          <input
-            value={bulkCatInput} onChange={(e) => setBulkCatInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && bulkCatInput.trim()) applyCategoryToTargets(bulkCatInput) }}
-            list="bulk-category-options" placeholder="category to apply…"
-            style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 12, width: 160 }}
-          />
-          <datalist id="bulk-category-options">
-            {allCategories.map((c) => <option key={c} value={c} />)}
-          </datalist>
+          {/* Own dropdown instead of <datalist>: the native popup is positioned by the browser
+              and escapes the modal, rendering against the far edge of the window. */}
+          <div style={{ position: 'relative' }}>
+            <input
+              value={bulkCatInput}
+              onChange={(e) => { setBulkCatInput(e.target.value); setShowCatSuggest(true) }}
+              onFocus={() => setShowCatSuggest(true)}
+              onBlur={() => setTimeout(() => setShowCatSuggest(false), 120)} // let a click on a suggestion land first
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && bulkCatInput.trim()) { setShowCatSuggest(false); applyCategoryToTargets(bulkCatInput) }
+                if (e.key === 'Escape') setShowCatSuggest(false)
+              }}
+              placeholder="category to apply…"
+              style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 12, width: 160, boxSizing: 'border-box' }}
+            />
+            {showCatSuggest && bulkCatSuggestions.length > 0 && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 3, width: 160, maxHeight: 190, overflowY: 'auto', background: '#fff', border: '1px solid var(--rule)', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.13)', zIndex: 20 }}>
+                {bulkCatSuggestions.map((c) => (
+                  <button
+                    key={c}
+                    onMouseDown={(e) => e.preventDefault()} // keep focus so onBlur doesn't beat the click
+                    onClick={() => { setBulkCatInput(c); setShowCatSuggest(false) }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 9px', background: 'none', border: 'none', borderBottom: '1px solid #f0ece4', cursor: 'pointer', fontSize: 12, color: 'var(--ink)' }}
+                  >
+                    {c}{categoryCounts.get(c) ? <span style={{ color: 'var(--muted)', fontSize: 10.5 }}> ({categoryCounts.get(c)})</span> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button onClick={() => applyCategoryToTargets(bulkCatInput)} disabled={catBulkBusy || !bulkCatInput.trim() || !categorizeTargets.length}
             style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 12, fontWeight: 600, cursor: catBulkBusy || !bulkCatInput.trim() ? 'default' : 'pointer', opacity: catBulkBusy || !bulkCatInput.trim() ? 0.5 : 1 }}>
             + Apply to {categorizeTargets.length}
