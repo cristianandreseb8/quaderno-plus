@@ -6,9 +6,19 @@ const CHIPS = ['Add 3 French pastry recipes', 'Search for brioche', 'Delete the 
 
 function parseAppActions(text) {
   const rx = /<APP_ACTION>([\s\S]*?)<\/APP_ACTION>/g
-  let m; const acts = []
-  while ((m = rx.exec(text)) !== null) { try { acts.push(JSON.parse(m[1])) } catch (_) { /* malformed action tag */ } }
-  return { clean: text.replace(/<APP_ACTION>[\s\S]*?<\/APP_ACTION>/g, '').trim(), actions: acts }
+  let m
+  const actions = []
+  let failed = 0
+  while ((m = rx.exec(text)) !== null) {
+    try { actions.push(JSON.parse(m[1])) } catch (_) { failed++ }
+  }
+  // An opening tag with no closing tag means the reply was cut off mid-action.
+  const truncated = /<APP_ACTION>(?![\s\S]*?<\/APP_ACTION>)/.test(text)
+  const clean = text
+    .replace(/<APP_ACTION>[\s\S]*?<\/APP_ACTION>/g, '')
+    .replace(/<APP_ACTION>[\s\S]*$/, '') // strip a dangling, unterminated tag too
+    .trim()
+  return { clean, actions, failed, truncated }
 }
 
 export default function AppAIChat({ recipes, onAction, onClose }) {
@@ -28,9 +38,19 @@ export default function AppAIChat({ recipes, onAction, onClose }) {
     const hist = [...messages, msg]; setMessages(hist); setInput(''); setLoading(true)
     try {
       const r = await askAppAssistant(hist, recipes)
-      const { clean, actions } = parseAppActions(r?.text || '')
+      const { clean, actions, failed, truncated } = parseAppActions(r?.text || '')
       setMessages((p) => [...p, { role: 'assistant', content: r?.text || '', clean, hasActions: actions.length > 0 }])
       for (const act of actions) await onAction(act)
+      // Never let a broken action fail silently: the reply still reads "here's your recipe",
+      // so without this the user is told it worked while nothing was actually created.
+      if (failed || truncated) {
+        const why = truncated ? 'the reply was cut off' : 'the recipe data came back malformed'
+        setMessages((p) => [...p, {
+          role: 'assistant',
+          clean: `⚠️ I couldn't save that — ${why}, so nothing was added. Please ask again (a shorter or more specific request usually works).`,
+          hasActions: false,
+        }])
+      }
     } catch (e) {
       setMessages((p) => [...p, { role: 'assistant', content: 'Error: ' + e.message, clean: 'Error: ' + e.message, hasActions: false }])
     } finally {

@@ -125,22 +125,32 @@ export default function App() {
       steps: (r?.steps || []).map(toLine),
     }
   }
+  // A create action can arrive with no usable payload (missing/!object `recipe`). Inserting it
+  // anyway is what produced the empty "Untitled" ghost recipes, so reject it loudly instead.
+  function isUsableAIRecipe(r) {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return false
+    return Boolean((r.ingredients || []).length || (r.steps || []).length)
+  }
   async function handleAppAIAction(action) {
     switch (action.type) {
       case 'create_recipe':
+        if (!isUsableAIRecipe(action.recipe)) { setSaveErr('AI sent an empty recipe — nothing was created.'); break }
         try {
           const saved = await dbInsert({ ...sanitizeAIRecipe(action.recipe), notes_pad: '', thumbnail: '', source_photos: [], id_data: '', media_library: '', fixed_lang: null, copied_from: null })
           setRecipes((p) => [saved, ...p])
           setSelId(saved.id); setMode('view')
         } catch (e) { setSaveErr('Create failed: ' + e.message) }
         break
-      case 'batch_create':
+      case 'batch_create': {
+        const usable = (action.recipes || []).filter(isUsableAIRecipe)
+        if (!usable.length) { setSaveErr('AI sent no usable recipes — nothing was created.'); break }
         try {
-          const created = await Promise.all((action.recipes || []).map((r) => dbInsert({ ...sanitizeAIRecipe(r), notes_pad: '', thumbnail: '', source_photos: [], id_data: '', media_library: '', fixed_lang: null, copied_from: null })))
+          const created = await Promise.all(usable.map((r) => dbInsert({ ...sanitizeAIRecipe(r), notes_pad: '', thumbnail: '', source_photos: [], id_data: '', media_library: '', fixed_lang: null, copied_from: null })))
           setRecipes((p) => [...created, ...p])
           if (created[0]) { setSelId(created[0].id); setMode('view') }
         } catch (e) { setSaveErr('Batch create failed: ' + e.message) }
         break
+      }
       case 'delete_recipe':
         if (window.confirm(`Delete "${action.title || action.id}"?`)) {
           try {
