@@ -18,7 +18,9 @@ export default function AppAIChat({ recipes, onAction, onClose }) {
   const endRef = useRef(null)
   const voice = useVoiceInput((t) => setInput((p) => p + (p ? ' ' : '') + t), true)
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages])
+  // Block body (no implicit return): some in-app browsers return a non-undefined value from
+  // scrollIntoView, which a concise-body effect would hand back to React as a bogus cleanup fn.
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   async function send() {
     if (!input.trim() || loading) return
