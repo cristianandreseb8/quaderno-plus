@@ -156,61 +156,77 @@ export default function HomePage({
   }
 
   // --- macOS-style rubber-band selection ---------------------------------------------
-  // Press on empty space and drag: everything the rectangle touches gets selected, then
-  // dragging any selected card moves the whole selection. Mouse only — on a touch screen
+  // The band can be started from anywhere in the main pane — all the whitespace around and
+  // below the cards counts, not just the gaps between them. Mouse only: on a touch screen
   // the same gesture is a scroll, so there the checkboxes are the way in.
   //
-  // Coordinates are kept relative to the surface's content box rather than the viewport,
-  // so the rectangle stays anchored correctly if the pane scrolls mid-drag.
-  function surfacePoint(e) {
-    const r = surfaceRef.current.getBoundingClientRect()
-    return { x: e.clientX - r.left, y: e.clientY - r.top }
-  }
+  // The anchor is kept in the pane's *content* coordinates rather than viewport ones, so if
+  // the pane scrolls mid-drag the rectangle stays pinned to the cards it started from.
+  useEffect(() => {
+    const main = document.querySelector('.Q-main')
+    if (!main) return
 
-  function onSurfacePointerDown(e) {
-    if (e.pointerType !== 'mouse' || e.button !== 0) return
-    // Only start on empty space: cards and controls keep their own behaviour.
-    if (e.target.closest('.H-folder, .H-card, button, input, textarea, a, .H-cover, .H-selbar')) return
-    const start = surfacePoint(e)
-    const additive = e.shiftKey || e.metaKey || e.ctrlKey
-    marqueeState.current = { start, additive, base: additive ? new Set(sel) : new Set(), moved: false }
-    setMarquee({ x: start.x, y: start.y, w: 0, h: 0 })
-
-    const onMove = (ev) => {
-      const st = marqueeState.current
-      if (!st) return
-      const p = surfacePoint(ev)
-      const box = {
-        x: Math.min(st.start.x, p.x), y: Math.min(st.start.y, p.y),
-        w: Math.abs(p.x - st.start.x), h: Math.abs(p.y - st.start.y),
+    const toContent = (clientX, clientY) => {
+      const r = main.getBoundingClientRect()
+      return { x: clientX - r.left + main.scrollLeft, y: clientY - r.top + main.scrollTop }
+    }
+    const toViewport = (box) => {
+      const r = main.getBoundingClientRect()
+      return {
+        left: box.x - main.scrollLeft + r.left, top: box.y - main.scrollTop + r.top,
+        width: box.w, height: box.h,
       }
-      if (box.w > 3 || box.h > 3) st.moved = true
-      setMarquee(box)
-
-      // Anything the rectangle overlaps is selected.
-      const sr = surfaceRef.current.getBoundingClientRect()
-      const next = new Set(st.base)
-      for (const el of surfaceRef.current.querySelectorAll('[data-selkey]')) {
-        const r = el.getBoundingClientRect()
-        const a = { x: r.left - sr.left, y: r.top - sr.top, w: r.width, h: r.height }
-        const hit = a.x < box.x + box.w && a.x + a.w > box.x && a.y < box.y + box.h && a.y + a.h > box.y
-        if (hit) next.add(el.getAttribute('data-selkey'))
-      }
-      setSel(next)
     }
 
-    const onUp = () => {
-      const st = marqueeState.current
-      // A plain click on empty space clears the selection, as in Finder.
-      if (st && !st.moved && !st.additive) setSel(new Set())
-      marqueeState.current = null
-      setMarquee(null)
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
+    function onDown(e) {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return
+      if (!e.target.closest('.Q-main')) return                       // sidebar and header keep their own behaviour
+      if (e.target.closest('button, input, textarea, select, a, iframe, video, [data-selkey]')) return
+
+      const anchor = toContent(e.clientX, e.clientY)
+      const additive = e.shiftKey || e.metaKey || e.ctrlKey
+      const st = { anchor, additive, base: additive ? new Set(sel) : new Set(), moved: false }
+      marqueeState.current = st
+
+      const onMove = (ev) => {
+        const p = toContent(ev.clientX, ev.clientY)
+        const box = {
+          x: Math.min(st.anchor.x, p.x), y: Math.min(st.anchor.y, p.y),
+          w: Math.abs(p.x - st.anchor.x), h: Math.abs(p.y - st.anchor.y),
+        }
+        if (box.w > 3 || box.h > 3) st.moved = true
+        setMarquee(toViewport(box))
+
+        const r = main.getBoundingClientRect()
+        const next = new Set(st.base)
+        for (const el of document.querySelectorAll('[data-selkey]')) {
+          const cr = el.getBoundingClientRect()
+          const a = {
+            x: cr.left - r.left + main.scrollLeft, y: cr.top - r.top + main.scrollTop,
+            w: cr.width, h: cr.height,
+          }
+          if (a.x < box.x + box.w && a.x + a.w > box.x && a.y < box.y + box.h && a.y + a.h > box.y) {
+            next.add(el.getAttribute('data-selkey'))
+          }
+        }
+        setSel(next)
+      }
+
+      const onUp = () => {
+        // A plain click on empty space clears the selection, as in Finder.
+        if (!st.moved && !st.additive) setSel(new Set())
+        marqueeState.current = null
+        setMarquee(null)
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
+      }
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onUp)
     }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-  }
+
+    main.addEventListener('pointerdown', onDown)
+    return () => main.removeEventListener('pointerdown', onDown)
+  })
 
   // Select-all / clear, matching the platform shortcuts.
   useEffect(() => {
@@ -263,8 +279,8 @@ export default function HomePage({
         ))}
       </div>
 
-      <div className="H-surface" ref={surfaceRef} onPointerDown={onSurfacePointerDown}>
-      {marquee && <div className="H-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />}
+      <div className="H-surface" ref={surfaceRef}>
+      {marquee && <div className="H-marquee" style={marquee} />}
 
       {sel.size > 0 && (
         <div className="H-selbar">
