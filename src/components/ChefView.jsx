@@ -37,7 +37,18 @@ function displayParts(raw) {
  * weighable ingredient is 100% and everything else is expressed against it, which is what
  * lets you re-scale a component from any single ingredient you happen to have.
  */
-export default function ChefView({ recipe, checked, onToggle, onClearChecks, highlightedSteps, resolveLink, onOpenRecipe, onCreateFromLink }) {
+export default function ChefView({
+  recipe, checked, onToggle, onClearChecks, highlightedSteps, resolveLink, onOpenRecipe, onCreateFromLink,
+  acks = [], chefName = '', onAcknowledge, onToggleCritical,
+}) {
+  const criticalSteps = Array.isArray(recipe.critical_steps) ? recipe.critical_steps : []
+  // A step counts as read for *this* chef only once they've signed it off themselves.
+  const ackedSteps = useMemo(
+    () => new Set(acks.filter((a) => a.who === chefName).map((a) => a.step_index)),
+    [acks, chefName],
+  )
+  const ackNames = (i) => [...new Set(acks.filter((a) => a.step_index === i).map((a) => a.who || 'someone'))]
+
   const components = useMemo(() => {
     const secs = parseSections(recipe.ingredients || [])
     return secs.map((sec) => {
@@ -145,11 +156,34 @@ export default function ChefView({ recipe, checked, onToggle, onClearChecks, hig
         <>
           <h2 className="CF-h">Preparation</h2>
           <ol className="CF-steps">
-            {recipe.steps.map((s, i) => (
-              <li key={i} className={highlightedSteps.has(i) ? 'highlighted' : ''}>
-                <LinkedText text={s} resolve={resolveLink} onOpen={onOpenRecipe} onCreate={onCreateFromLink} />
-              </li>
-            ))}
+            {recipe.steps.map((s, i) => {
+              const isCritical = criticalSteps.includes(i)
+              const acked = ackedSteps.has(i)
+              return (
+                <li key={i} className={[
+                  highlightedSteps.has(i) ? 'highlighted' : '',
+                  isCritical ? 'critical' : '',
+                  isCritical && !acked ? 'unacked' : '',
+                ].filter(Boolean).join(' ')}>
+                  {isCritical && <span className="CF-crit-flag">Critical — must be read</span>}
+                  <LinkedText text={s} resolve={resolveLink} onOpen={onOpenRecipe} onCreate={onCreateFromLink} />
+                  {isCritical && (
+                    <div className="CF-crit-actions">
+                      {acked
+                        ? <span className="CF-acked">✓ Acknowledged by {ackNames(i).join(', ')}</span>
+                        : <button className="CF-ack-btn" onClick={() => onAcknowledge(i)}>I have read this</button>}
+                    </div>
+                  )}
+                  {onToggleCritical && (
+                    <button
+                      className={`CF-crit-toggle${isCritical ? ' on' : ''}`}
+                      title={isCritical ? 'Unmark as critical' : 'Mark as a critical step'}
+                      onClick={() => onToggleCritical(i)}
+                    >⚠</button>
+                  )}
+                </li>
+              )
+            })}
           </ol>
         </>
       )}

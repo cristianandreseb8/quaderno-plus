@@ -126,3 +126,104 @@
 .CF-batch { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); }
 .CF-batch strong { color: var(--ink); font-size: 12px; letter-spacing: 0; }
 .CF-clear { background: none; border: none; cursor: pointer; font-family: var(--mono); font-size: 9.5px; color: var(--amber); text-decoration: underline; padding: 0; }
+
+/* ---------- Problem banner ---------- */
+.ST-banner {
+  display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; padding: 11px 13px;
+  border: 1px solid #F3C9C9; border-left: 3px solid var(--red); border-radius: 9px; background: #FDECEC;
+}
+.ST-banner-icon { font-size: 16px; line-height: 1.2; }
+.ST-banner-body { flex: 1; min-width: 0; }
+.ST-banner-title {
+  font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: .14em; color: var(--red);
+}
+.ST-banner-note { font-size: 13px; line-height: 1.55; margin-top: 3px; cursor: pointer; white-space: pre-wrap; }
+.ST-banner-empty { color: #B07575; font-style: italic; }
+.ST-banner-edit textarea {
+  width: 100%; margin-top: 5px; border: 1px solid #E2A9A9; border-radius: 6px; padding: 7px 9px;
+  font-size: 13px; font-family: var(--sans); resize: vertical; background: #fff; color: var(--ink);
+}
+.ST-banner-edit textarea:focus { outline: none; border-color: var(--red); }
+
+/* ---------- Critical steps ---------- */
+.CF-steps li { position: relative; }
+.CF-steps li.critical {
+  background: #FFFBF0; border-left: 3px solid var(--amber);
+  border-radius: 0 6px 6px 0; padding-left: 40px; padding-top: 8px; padding-right: 10px; margin-bottom: 8px;
+}
+.CF-steps li.critical::before { left: 10px; top: 9px; }
+.CF-steps li.unacked { background: #FFF4E0; border-left-color: var(--red); }
+.CF-crit-flag {
+  display: block; font-family: var(--mono); font-size: 8.5px; text-transform: uppercase;
+  letter-spacing: .14em; color: var(--red); margin-bottom: 4px;
+}
+.CF-crit-actions { margin-top: 7px; }
+.CF-ack-btn {
+  border: 1px solid var(--red); background: var(--red); color: #fff; border-radius: 6px;
+  padding: 5px 12px; font-size: 11.5px; font-weight: 700; cursor: pointer; font-family: var(--sans);
+}
+.CF-ack-btn:hover { background: #7f2323; }
+.CF-acked { font-family: var(--mono); font-size: 10px; color: var(--green); }
+.CF-crit-toggle {
+  position: absolute; top: 0; right: 0; width: 22px; height: 22px; border-radius: 5px;
+  border: 1px solid transparent; background: none; cursor: pointer; font-size: 11px;
+  color: var(--muted); opacity: 0; transition: opacity .12s;
+}
+.CF-steps li:hover .CF-crit-toggle, .CF-crit-toggle.on { opacity: 1; }
+.CF-crit-toggle.on { color: var(--amber); }
+.CF-crit-toggle:hover { border-color: var(--rule); background: #fff; }
+@media (hover: none) { .CF-crit-toggle { opacity: .55; } }
+
+/* ---------- Footer: info box, related, next ---------- */
+.RF { border-top: 1px solid var(--rule); margin-top: 30px; padding-top: 18px; }
+.RF-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.RF-note, .RF-block { border: 1px solid var(--rule); border-radius: 9px; padding: 10px 12px; background: #FAFAF9; }
+.RF-block { margin-top: 12px; }
+.RF-note-h {
+  display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 9px;
+  text-transform: uppercase; letter-spacing: .14em; color: var(--muted); margin-bottom: 5px;
+}
+.RF-edit { margin-left: auto; background: none; border: none; cursor: pointer; font-size: 9px; color: var(--amber); text-decoration: underline; font-family: var(--mono); }
+.RF-note-body { font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+.RF-note-empty { font-size: 12px; color: var(--muted); font-style: italic; line-height: 1.5; }
+.RF-note-edit textarea {
+  width: 100%; border: 1px solid var(--rule); border-radius: 6px; padding: 7px 9px;
+  font-size: 13px; font-family: var(--sans); resize: vertical; background: #fff; color: var(--ink);
+}
+.RF-note-edit textarea:focus { outline: none; border-color: var(--navy); }
+.RF-note-actions { display: flex; gap: 6px; margin-top: 6px; }
+
+.RF-related { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.RF-related li { display: flex; align-items: center; gap: 6px; }
+.RF-link { background: none; border: none; cursor: pointer; color: var(--id); font-size: 13px; padding: 2px 0; text-align: left; }
+.RF-link:hover { text-decoration: underline; }
+.RF-technique { font-size: 13px; color: var(--ink); }
+.RF-remove { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1; padding: 0 4px; }
+.RF-remove:hover { color: var(--red); }
+
+.RF-picker { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.RF-picker input {
+  border: 1px solid var(--navy); border-radius: 6px; padding: 7px 9px; font-size: 13px;
+  font-family: var(--sans); background: #fff; color: var(--ink);
+}
+.RF-picker input:focus { outline: none; }
+.RF-picker-list { display: flex; flex-direction: column; max-height: 190px; overflow: auto; border: 1px solid var(--rule); border-radius: 6px; background: #fff; }
+.RF-picker-list button { text-align: left; background: none; border: none; cursor: pointer; padding: 7px 9px; font-size: 12.5px; color: var(--ink); }
+.RF-picker-list button:hover { background: #F1F5F9; }
+.RF-freetext { color: var(--amber) !important; border-top: 1px solid var(--rule) !important; }
+.RF-picker-empty { padding: 10px; font-size: 12px; color: var(--muted); }
+
+.RF-next-row { display: flex; align-items: center; gap: 6px; }
+.RF-next {
+  flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; cursor: pointer;
+  border: 1px solid var(--rule); border-left: 3px solid var(--green); border-radius: 8px;
+  padding: 9px 12px; background: #fff; text-align: left;
+}
+.RF-next:hover { background: #EAF5EF; }
+.RF-next-label { font-family: var(--mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: .14em; color: var(--green); }
+.RF-next-title { font-family: var(--serif); font-size: 15px; font-weight: 600; color: var(--ink); }
+
+.RF-status { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.RF-status-label { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); }
+
+@media (max-width: 700px) { .RF-grid { grid-template-columns: 1fr; } }

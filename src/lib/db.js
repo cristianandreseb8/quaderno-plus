@@ -22,6 +22,12 @@ function toDb(r) {
     tags: r.tags || [],
     folder: r.folder || '',
     status: r.status || '',
+    status_note: r.status_note || '',
+    storage_note: r.storage_note || '',
+    watch_out: r.watch_out || '',
+    critical_steps: r.critical_steps || [],
+    related: r.related || [],
+    next_recipe_id: r.next_recipe_id || null,
   }
 }
 
@@ -40,6 +46,12 @@ function fromDb(r) {
     tags: r.tags || [],
     folder: r.folder || '',
     status: r.status || '',
+    status_note: r.status_note || '',
+    storage_note: r.storage_note || '',
+    watch_out: r.watch_out || '',
+    critical_steps: r.critical_steps || [],
+    related: r.related || [],
+    next_recipe_id: r.next_recipe_id || null,
   }
 }
 

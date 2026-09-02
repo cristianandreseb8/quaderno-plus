@@ -10,7 +10,9 @@ import IDPanel from './IDPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
 import { BacklinksPanel, LinkedText, RecipeProperties } from './VaultPanels.jsx'
 import ChefView from './ChefView.jsx'
-import { StatusPicker } from './StatusBadge.jsx'
+import { StatusBanner, StatusPicker } from './StatusBadge.jsx'
+import RecipeFooter from './RecipeFooter.jsx'
+import { addAck, getChefName, loadAcks, setChefName } from '../lib/acks.js'
 import { normalizeKey } from '../lib/vault.js'
 
 export default function RecipeView({
@@ -45,6 +47,27 @@ export default function RecipeView({
   const [exportNotes, setExportNotes] = useState(false)
   const [showCopyLangMenu, setShowCopyLangMenu] = useState(false)
   const addNoteRef = useRef(null)
+  const [acks, setAcks] = useState([])
+  const [chef, setChef] = useState(() => getChefName())
+
+  useEffect(() => { loadAcks(recipe.id).then(setAcks) }, [recipe.id])
+
+  // Signing off a critical step needs a name to attribute it to; ask once per device.
+  async function acknowledgeStep(i) {
+    let who = chef
+    if (!who) {
+      who = (window.prompt('Your name — recorded against this sign-off:') || '').trim()
+      if (!who) return
+      setChefName(who); setChef(who)
+    }
+    if (await addAck(recipe.id, i, who)) setAcks(await loadAcks(recipe.id))
+  }
+
+  function toggleCritical(i) {
+    const cur = Array.isArray(recipe.critical_steps) ? recipe.critical_steps : []
+    const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort((a, b) => a - b)
+    onUpdate({ ...recipe, critical_steps: next })
+  }
 
   useEffect(() => { localStorage.setItem('qdplus_layout', layout) }, [layout])
 
@@ -186,6 +209,7 @@ export default function RecipeView({
       <div className="Q-toolbar">
         {!appliedScale && <button className={`btn xs ${showScale ? 'amber' : 'ghost'}`} onClick={() => setShowScale(!showScale)}>⚖ Scale</button>}
         <button className={`btn xs ${showPct ? 'amber' : 'ghost'}`} onClick={() => setShowPct(!showPct)}>% Baker's</button>
+        <button className="btn xs ghost" onClick={() => window.print()} title="Print as recipe cards">🖨 Print</button>
         <span className="CF-modes" title="Recipe layout">
           <button className={layout === 'chef' ? 'active' : ''} onClick={() => setLayout('chef')}>Chef</button>
           <button className={layout === 'classic' ? 'active' : ''} onClick={() => setLayout('classic')}>Classic</button>
@@ -302,6 +326,7 @@ export default function RecipeView({
           highlightedSteps={highlightedSteps} resolveLink={resolveLink}
           onOpenRecipe={onOpenRecipe} onCreateFromLink={onCreateFromLink}
           onClearChecks={() => { setChecked(new Set()); setHighlightedSteps(new Set()) }}
+          acks={acks} chefName={chef} onAcknowledge={acknowledgeStep} onToggleCritical={toggleCritical}
         />
       ) : (<>
       {sections.map((sec, si) => {
@@ -352,6 +377,9 @@ export default function RecipeView({
         </div>
       )}
       {vault && onOpenRecipe && (
+        <RecipeFooter recipe={recipe} recipes={allRecipes} onUpdate={onUpdate} onOpenRecipe={onOpenRecipe} />
+      )}
+      {vault && onOpenRecipe && (
         <BacklinksPanel recipe={recipe} recipes={allRecipes} index={vault} onOpen={onOpenRecipe} onLinkBack={onLinkBack} />
       )}
       <div className="Q-view-foot"><button className="btn" onClick={onEdit}>Edit</button><button className="btn danger" onClick={onDelete}>Delete</button></div>
@@ -376,6 +404,7 @@ export default function RecipeView({
       </dl>
       {vault && (
         <>
+          <StatusBanner recipe={recipe} onChange={onUpdate} />
           <div className="ST-row"><StatusPicker recipe={recipe} onChange={onUpdate} /></div>
           <RecipeProperties recipe={recipe} allFolders={allFolders} allTags={allTags} onChange={onUpdate} />
         </>

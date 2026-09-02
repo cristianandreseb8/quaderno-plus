@@ -1,0 +1,65 @@
+/* Print / "save as PDF" turns the open recipe into a clean card: everything that is
+   chrome, navigation or an editing affordance is dropped, and the remaining content is
+   re-typeset for paper. */
+@media print {
+  @page { size: A5 portrait; margin: 12mm 11mm; }
+
+  html, body, .Q { background: #fff !important; }
+  .Q { display: block !important; min-height: 0 !important; }
+  .Q-body { display: block !important; }
+  .Q-main { overflow: visible !important; }
+  .Q-pane { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+
+  /* chrome and controls */
+  .Q-top, .Q-side, .Q-tabs, .Q-toolbar, .Q-export-opts, .Q-back-btn, .Q-view-foot,
+  .Q-scale-panel, .Q-pct-bar, .V-backlinks, .V-props, .ST-row, .H-menu-wrap,
+  .RF-edit, .RF-remove, .RF-picker, .CF-crit-toggle, .CF-clear, .CF-ack-btn,
+  .Q-app-ai-overlay, .V-palette-overlay, .V-graph-overlay, .MP-overlay,
+  .Q-banner button, .ST-banner .RF-edit { display: none !important; }
+
+  a[href]::after { content: none !important; }
+  * { box-shadow: none !important; }
+
+  .Q-view-header { display: flex; align-items: flex-start; gap: 10mm; border-bottom: 1.5pt solid #000; padding-bottom: 3mm; }
+  .Q-view-header h1 { font-size: 20pt; line-height: 1.15; margin: 0; }
+  .Q-recipe-thumb { width: 28mm; height: 28mm; object-fit: cover; border-radius: 2mm; }
+
+  .Q-meta { display: flex; flex-wrap: wrap; gap: 6mm; margin: 3mm 0 4mm; }
+  .Q-meta dt { font-size: 6.5pt; letter-spacing: .12em; }
+  .Q-meta dd { font-size: 10pt; }
+
+  /* the problem banner must survive printing — it is a safety notice */
+  .ST-banner { border: 1pt solid #000 !important; background: #fff !important; padding: 2.5mm 3mm; }
+  .ST-banner-title { color: #000 !important; }
+
+  .CF-h { font-size: 7.5pt; color: #000; border-bottom: .5pt solid #999; margin: 5mm 0 2mm; }
+  .CF-sub { font-size: 9.5pt; }
+  .CF-table, .CF-ing { font-size: 9pt; page-break-inside: auto; }
+  .CF-table th, .CF-ing th { font-size: 6.5pt; }
+  .CF-table td, .CF-ing td { padding: 1.4mm 0; border-bottom: .25pt solid #ddd; }
+  .CF-comp { page-break-inside: avoid; margin-top: 4mm; }
+  .CF-comp-head h3 { font-size: 11pt; color: #000; }
+  .CF-ing tbody tr.checked .CF-ing-name,
+  .CF-ing tbody tr.checked .CF-ing-qty { text-decoration: none; color: #000; }
+
+  .CF-steps li { font-size: 9.5pt; line-height: 1.45; padding-bottom: 2.5mm; page-break-inside: avoid; }
+  .CF-steps li::before { color: #000; }
+  .CF-steps li.critical, .CF-steps li.unacked {
+    background: #fff !important; border-left: 1.5pt solid #000 !important; padding-left: 9mm;
+  }
+  .CF-crit-flag { color: #000 !important; }
+  .CF-acked { color: #000 !important; }
+
+  /* classic layout in print */
+  .Q-ings { font-size: 9.5pt; }
+  .Q-steps li { font-size: 9.5pt; page-break-inside: avoid; }
+
+  /* footer info box: keep storage / watch-out, they belong on the card */
+  .RF { border-top: 1pt solid #000; margin-top: 5mm; padding-top: 3mm; page-break-inside: avoid; }
+  .RF-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .RF-note, .RF-block { border: .5pt solid #bbb; background: #fff; padding: 2mm 2.5mm; border-radius: 1mm; }
+  .RF-note-h { font-size: 6.5pt; }
+  .RF-note-body { font-size: 8.5pt; }
+  .RF-note-empty, .RF-status { display: none !important; }
+  .RF-next { border: .5pt solid #bbb; background: #fff; }
+}
