@@ -89,6 +89,9 @@ export default function HomePage({
   const [sel, setSel] = useState(() => new Set())  // "folder:<path>" / "recipe:<id>"
   const [drag, setDrag] = useState(null)           // {kind:'folder'|'recipe', id}
   const [dropTarget, setDropTarget] = useState(null)
+  const surfaceRef = useRef(null)
+  const [marquee, setMarquee] = useState(null)   // rubber-band rect, in surface coordinates
+  const marqueeState = useRef(null)
 
   const childFolders = useMemo(() => {
     const out = []
@@ -152,6 +155,76 @@ export default function HomePage({
     setRenaming(null); setRenameVal('')
   }
 
+  // --- macOS-style rubber-band selection ---------------------------------------------
+  // Press on empty space and drag: everything the rectangle touches gets selected, then
+  // dragging any selected card moves the whole selection. Mouse only — on a touch screen
+  // the same gesture is a scroll, so there the checkboxes are the way in.
+  //
+  // Coordinates are kept relative to the surface's content box rather than the viewport,
+  // so the rectangle stays anchored correctly if the pane scrolls mid-drag.
+  function surfacePoint(e) {
+    const r = surfaceRef.current.getBoundingClientRect()
+    return { x: e.clientX - r.left, y: e.clientY - r.top }
+  }
+
+  function onSurfacePointerDown(e) {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return
+    // Only start on empty space: cards and controls keep their own behaviour.
+    if (e.target.closest('.H-folder, .H-card, button, input, textarea, a, .H-cover, .H-selbar')) return
+    const start = surfacePoint(e)
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey
+    marqueeState.current = { start, additive, base: additive ? new Set(sel) : new Set(), moved: false }
+    setMarquee({ x: start.x, y: start.y, w: 0, h: 0 })
+
+    const onMove = (ev) => {
+      const st = marqueeState.current
+      if (!st) return
+      const p = surfacePoint(ev)
+      const box = {
+        x: Math.min(st.start.x, p.x), y: Math.min(st.start.y, p.y),
+        w: Math.abs(p.x - st.start.x), h: Math.abs(p.y - st.start.y),
+      }
+      if (box.w > 3 || box.h > 3) st.moved = true
+      setMarquee(box)
+
+      // Anything the rectangle overlaps is selected.
+      const sr = surfaceRef.current.getBoundingClientRect()
+      const next = new Set(st.base)
+      for (const el of surfaceRef.current.querySelectorAll('[data-selkey]')) {
+        const r = el.getBoundingClientRect()
+        const a = { x: r.left - sr.left, y: r.top - sr.top, w: r.width, h: r.height }
+        const hit = a.x < box.x + box.w && a.x + a.w > box.x && a.y < box.y + box.h && a.y + a.h > box.y
+        if (hit) next.add(el.getAttribute('data-selkey'))
+      }
+      setSel(next)
+    }
+
+    const onUp = () => {
+      const st = marqueeState.current
+      // A plain click on empty space clears the selection, as in Finder.
+      if (st && !st.moved && !st.additive) setSel(new Set())
+      marqueeState.current = null
+      setMarquee(null)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
+  // Select-all / clear, matching the platform shortcuts.
+  useEffect(() => {
+    function onKey(e) {
+      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyA') {
+        const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')
+        if (inField) return
+        e.preventDefault(); selectAllHere()
+      } else if (e.key === 'Escape' && sel.size) setSel(new Set())
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   // --- drag & drop (desktop; the ⋯ → Move picker covers touch) ---
   function dropOn(destPath) {
     if (!drag) return
@@ -189,6 +262,9 @@ export default function HomePage({
           </span>
         ))}
       </div>
+
+      <div className="H-surface" ref={surfaceRef} onPointerDown={onSurfacePointerDown}>
+      {marquee && <div className="H-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />}
 
       {sel.size > 0 && (
         <div className="H-selbar">
@@ -234,12 +310,20 @@ export default function HomePage({
               </div>
             ) : (
               <div
-                key={f.path} className={`H-folder${isSel('folder', f.path) ? ' selected' : ''}`} role="button" tabIndex={0}
+                key={f.path} data-selkey={`folder:${f.path}`}
+                className={`H-folder${isSel('folder', f.path) ? ' selected' : ''}`} role="button" tabIndex={0}
                 draggable
-                onDragStart={(e) => { setDrag({ kind: 'folder', id: f.path }); e.dataTransfer.effectAllowed = 'move' }}
+                onDragStart={(e) => {
+                  if (!isSel('folder', f.path) && sel.size) setSel(new Set())
+                  setDrag({ kind: 'folder', id: f.path }); e.dataTransfer.effectAllowed = 'move'
+                }}
                 onDragEnd={() => { setDrag(null); setDropTarget(null) }}
                 {...dropProps(f.path)}
-                onClick={() => setPath(f.path)}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey) { toggleSel('folder', f.path); return }
+                  if (sel.size) { setSel(new Set()); return }
+                  setPath(f.path)
+                }}
                 onKeyDown={(e) => { if (e.key === 'Enter') setPath(f.path) }}
               >
                 <input
@@ -272,11 +356,19 @@ export default function HomePage({
           <div className="H-grid recipes">
             {ownRecipes.map((r) => (
               <div
-                key={r.id} className={`H-card${isSel('recipe', r.id) ? ' selected' : ''}`} role="button" tabIndex={0}
+                key={r.id} data-selkey={`recipe:${r.id}`}
+                className={`H-card${isSel('recipe', r.id) ? ' selected' : ''}`} role="button" tabIndex={0}
                 draggable
-                onDragStart={(e) => { setDrag({ kind: 'recipe', id: r.id }); e.dataTransfer.effectAllowed = 'move' }}
+                onDragStart={(e) => {
+                  if (!isSel('recipe', r.id) && sel.size) setSel(new Set())
+                  setDrag({ kind: 'recipe', id: r.id }); e.dataTransfer.effectAllowed = 'move'
+                }}
                 onDragEnd={() => { setDrag(null); setDropTarget(null) }}
-                onClick={() => onOpenRecipe(r.id)}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey) { toggleSel('recipe', r.id); return }
+                  if (sel.size) { setSel(new Set()); return }
+                  onOpenRecipe(r.id)
+                }}
                 onKeyDown={(e) => { if (e.key === 'Enter') onOpenRecipe(r.id) }}
               >
                 {r.thumbnail
@@ -306,7 +398,9 @@ export default function HomePage({
         </div>
       )}
 
-      {drag && <div className="H-drag-hint">Drop on a folder to move it there — or on a breadcrumb to move it up.</div>}
+      </div>
+
+      {drag && <div className="H-drag-hint">{sel.size > 1 && isSel(drag.kind, drag.id) ? `Moving ${sel.size} items — ` : ''}Drop on a folder to move it there, or on a breadcrumb to move it up.</div>}
     </div>
   )
 }

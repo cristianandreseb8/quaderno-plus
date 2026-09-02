@@ -350,3 +350,12 @@
 .DL-stepval.final { font-weight: 700; box-shadow: inset 0 0 0 1px currentColor; }
 
 @media (max-width: 700px) { .DL { height: 94vh; } .DL-form-row { flex-wrap: wrap; } }
+
+/* ---------- Rubber-band selection ---------- */
+.H-surface { position: relative; min-height: 220px; }
+.H-marquee {
+  position: absolute; z-index: 5; pointer-events: none;
+  border: 1px solid var(--navy); background: rgba(31,58,77,.10); border-radius: 2px;
+}
+/* While rubber-banding, don't let the drag highlight text across the cards. */
+.H-surface:has(.H-marquee) { user-select: none; }
