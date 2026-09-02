@@ -31,7 +31,7 @@ function RecipeRow({ r, selected, onOpen, indent = 0, dnd }) {
 }
 
 // One collapsible folder node; children render recursively so nesting has no depth limit.
-function FolderNode({ node, depth, recipesByFolder, collapsed, toggle, selId, onOpen, activeFolder, setActiveFolder, dnd }) {
+function FolderNode({ node, depth, recipesByFolder, collapsed, toggle, selId, onOpen, activeFolder, setActiveFolder, dnd, tr = (x) => x }) {
   const isCollapsed = collapsed.has(node.path)
   const own = recipesByFolder.get(node.path) || []
   const isActive = activeFolder === node.path
@@ -47,7 +47,7 @@ function FolderNode({ node, depth, recipesByFolder, collapsed, toggle, selId, on
         onClick={() => { toggle(node.path); setActiveFolder(isActive ? '' : node.path) }}
       >
         <span className="V-caret">{node.children.length || own.length ? (isCollapsed ? '▸' : '▾') : '·'}</span>
-        <span className="V-tree-name">{node.name}</span>
+        <span className="V-tree-name">{tr(node.name)}</span>
         <span className="V-count">{node.count}</span>
       </div>
       {!isCollapsed && (
@@ -55,7 +55,7 @@ function FolderNode({ node, depth, recipesByFolder, collapsed, toggle, selId, on
           {node.children.map((c) => (
             <FolderNode key={c.path} node={c} depth={depth + 1} recipesByFolder={recipesByFolder}
               collapsed={collapsed} toggle={toggle} selId={selId} onOpen={onOpen}
-              activeFolder={activeFolder} setActiveFolder={setActiveFolder} dnd={dnd} />
+              activeFolder={activeFolder} setActiveFolder={setActiveFolder} dnd={dnd} tr={tr} />
           ))}
           {own.map((r) => <RecipeRow key={r.id} r={r} selected={r.id === selId} onOpen={onOpen} indent={depth + 1} dnd={dnd} />)}
         </>
@@ -104,7 +104,7 @@ function highlight(line, q) {
 export default function VaultSidebar({
   recipes, index, selId, onOpen, q, setQ, sortMode, setSortMode,
   onAutoCategorize, categorizingAI, folderFilter, setFolderFilter, tagFilter, setTagFilter,
-  loading, onOpenGraph, onCreateFolder, allFolders = [], onMoveFolder, onMoveRecipe,
+  loading, onOpenGraph, onCreateFolder, allFolders = [], onMoveFolder, onMoveRecipe, tr = (x) => x,
 }) {
   const [tab, setTab] = useState('files')
   const [collapsedFolders, setCollapsedFolders] = useState(new Set())
@@ -245,7 +245,7 @@ export default function VaultSidebar({
                   <FolderNode key={n.path} node={n} depth={0} recipesByFolder={recipesByFolder}
                     collapsed={collapsedFolders} toggle={toggleSet(setCollapsedFolders)}
                     selId={selId} onOpen={onOpen}
-                    activeFolder={folderFilter} setActiveFolder={setFolderFilter} dnd={dnd} />
+                    activeFolder={folderFilter} setActiveFolder={setFolderFilter} dnd={dnd} tr={tr} />
                 ))}
               </div>
             )}

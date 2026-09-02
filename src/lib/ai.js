@@ -33,3 +33,7 @@ export const categorizeIngredients = (ingredients, knownCategories) =>
   invoke({ type: 'categorize_ingredients', ingredients, known_categories: knownCategories })
 export const describeIngredient = (name, ingredientType) =>
   invoke({ type: 'describe_ingredient', name, ingredient_type: ingredientType })
+export const translateStrings = (items, targetLang) =>
+  invoke({ type: 'translate_strings', items, target_lang: targetLang })
+export const categorizeRecipe = (recipe, knownTags) =>
+  invoke({ type: 'categorize_recipe', title: recipe.title, category: recipe.category, ingredients: recipe.ingredients, steps: recipe.steps, known_tags: knownTags })

@@ -134,6 +134,36 @@ Return ONLY valid JSON, no markdown, no commentary before or after: {"cache": {"
 Return ONLY valid JSON: {"value": <number or string>, "unit": "<unit or empty string>", "explanation": "<1 sentence max 20 words explaining what this value means for this recipe>"}`
       const userMsg = `Recipe: ${body.recipe_title || ''}\nIngredients:\n${ings}\n\nExisting macros: total_batch=${existingM.total || 0}g, fat=${existingM.fat || 0}g, water=${existingM.water || 0}g, flour_equiv=${existingM.flourEqG || 0}g, free_water=${existingM.freeWaterG || 0}g\n\nCalculate: ${body.param_label}`
       result = await claudeJson([{ role: "user", content: userMsg }], systemPrompt2, 400)
+    } else if (body.type === "translate_strings") {
+      // Batch string translation for the app-wide language switch. Results are cached
+      // client-side in the `translations` table, so each phrase is paid for once.
+      const items = (body.items || []).map((t: string) => String(t))
+      const sys = `You translate short cooking-app strings into ${body.target_lang}.
+
+Return ONLY a JSON object of the form {"items": ["...", "..."]} whose array has the same length and order as the input array.
+Rules:
+- Translate naturally, using correct professional kitchen terminology.
+- Preserve every number, quantity, unit and symbol exactly as written.
+- Preserve markdown-ish markers: leading "## " section headers, [[wikilinks]] (translate the visible label only if it is not a recipe name — otherwise leave the whole link untouched), and #tags.
+- If a string is a proper noun, a brand, or already in the target language, return it unchanged.
+- Never add commentary, never merge or split entries.`
+      const out = await claudeJson(
+        [{ role: "user", content: `Translate to ${body.target_lang}:\n${JSON.stringify(items)}` }],
+        sys, 8000,
+      )
+      // Ask for an object rather than a bare array: claudeJson slices between the first "{"
+      // and last "}", which would mangle a top-level array if a translation contained a brace.
+      result = { items: Array.isArray(out) ? out : (out.items || out.translations || []) }
+    } else if (body.type === "categorize_recipe") {
+      const sys = `You are a professional chef organising a recipe library.
+Given one recipe, return a category and a handful of tags.
+Return ONLY valid JSON: {"category": "<2-4 words>", "tags": ["lowercase-tag", ...]}
+Tags describe technique, course, cuisine, main ingredient and dietary notes. Prefer reusing the existing tags supplied. 3-7 tags.`
+      const known = (body.known_tags || []).join(', ')
+      const msg = `Existing tags in this library: ${known || 'none'}\n\nRecipe: ${JSON.stringify({
+        title: body.title, category: body.category, ingredients: (body.ingredients || []).slice(0, 30), steps: (body.steps || []).slice(0, 6),
+      })}`
+      result = await claudeJson([{ role: "user", content: msg }], sys, 700)
     } else if (body.type === "categorize_ingredients") {
       const list = (body.ingredients || []).map((i: { name: string; ingredient_type?: string }) => `${i.name}${i.ingredient_type ? ` (nutrition type: ${i.ingredient_type})` : ''}`).join('\n')
       const known = (body.known_categories || []).join(', ')

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { extractLinks, normalizeKey, recipeText, segmentWikilinks, tagsOf } from '../lib/vault.js'
 import { isSectionHeader } from '../lib/recipeCalc.js'
+import { categorizeRecipe } from '../lib/ai.js'
 
 /** Renders text with [[wikilinks]] turned into clickable links; unresolved ones show muted. */
 export function LinkedText({ text, resolve, onOpen, onCreate }) {
@@ -25,6 +26,24 @@ export function LinkedText({ text, resolve, onOpen, onCreate }) {
 /** Folder path + tags for the open recipe, editable inline (Obsidian's "properties"). */
 export function RecipeProperties({ recipe, allFolders, allTags, onChange }) {
   const [tagInput, setTagInput] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+
+  // Fills in the category and tags from the recipe's own content, reusing tags already
+  // in the library rather than inventing near-duplicates.
+  async function aiFill() {
+    setAiBusy(true)
+    try {
+      const res = await categorizeRecipe(recipe, allTags)
+      const tags = Array.isArray(res?.tags) ? res.tags.map((t) => String(t).toLowerCase()) : []
+      onChange({
+        ...recipe,
+        category: res?.category || recipe.category,
+        tags: [...new Set([...(recipe.tags || []).map((t) => String(t).toLowerCase()), ...tags])],
+      })
+    } catch (e) {
+      alert('Could not categorise this recipe: ' + e.message)
+    } finally { setAiBusy(false) }
+  }
   const [folderOpen, setFolderOpen] = useState(false)
   const [folderDraft, setFolderDraft] = useState(recipe.folder || '')
 
@@ -101,6 +120,9 @@ export function RecipeProperties({ recipe, allFolders, allTags, onChange }) {
               if (e.key === 'Backspace' && !tagInput && explicit.length) onChange({ ...recipe, tags: explicit.slice(0, -1) })
             }}
           />
+          <button className="V-ai-fill" onClick={aiFill} disabled={aiBusy} title="Let AI set the category and tags from the recipe content">
+            {aiBusy ? '…' : '🤖 auto'}
+          </button>
           {tagInput && suggestions.length > 0 && (
             <div className="V-tag-suggest">
               {suggestions.map((t) => <button key={t} onMouseDown={(e) => { e.preventDefault(); addTag(t) }}>#{t}</button>)}

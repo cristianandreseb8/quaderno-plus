@@ -80,7 +80,7 @@ function CardMenu({ items }) {
 
 export default function HomePage({
   recipes, folders, path, setPath, onOpenRecipe, onCreateFolder, mediaUrl, onSetMedia, onNewRecipe,
-  onMoveFolder, onRenameFolder, onDeleteFolder, onMoveRecipe, onRequestMove,
+  onMoveFolder, onRenameFolder, onDeleteFolder, onMoveRecipe, onRequestMove, tr = (x) => x,
 }) {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
@@ -157,7 +157,7 @@ export default function HomePage({
             <button
               className={`H-crumb${i === crumbs.length - 1 ? ' current' : ''}`}
               onClick={() => setPath(c)} {...dropProps(c)}
-            >{c.split(FOLDER_SEP).pop()}</button>
+            >{tr(c.split(FOLDER_SEP).pop())}</button>
           </span>
         ))}
       </div>
@@ -209,7 +209,7 @@ export default function HomePage({
                   { label: 'Rename', run: () => { setRenameVal(f.name); setRenaming(f.path) } },
                   { label: 'Delete folder', danger: true, run: () => onDeleteFolder(f.path) },
                 ]} />
-                <span className="H-folder-name">{f.name}</span>
+                <span className="H-folder-name">{tr(f.name)}</span>
                 <span className="H-folder-count">{f.count} {f.count === 1 ? 'recipe' : 'recipes'}</span>
               </div>
             )

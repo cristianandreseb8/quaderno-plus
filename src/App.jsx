@@ -3,6 +3,8 @@ import { dbDelete, dbInsert, dbUpdate, dbLoad, dbSetFolder } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { ancestorPaths, buildVaultIndex, normalizeKey, tagsOf } from './lib/vault.js'
 import { KEY_FOLDERS, KEY_HOME_MEDIA, loadSettings, saveSetting } from './lib/settings.js'
+import { DEFAULT_LANGUAGES, applyRecipeTranslation, recipeStrings, translateMany } from './lib/i18n.js'
+import LanguageBar from './components/LanguageBar.jsx'
 import VaultSidebar from './components/VaultSidebar.jsx'
 import HomePage from './components/HomePage.jsx'
 
@@ -57,6 +59,11 @@ export default function App() {
   // is showing. On desktop both are always visible and this has no effect.
   const [mobileNav, setMobileNav] = useState(false)
   const [moveTarget, setMoveTarget] = useState(null) // {kind,id,name,currentPath} being moved
+  const [languages, setLanguages] = useState(DEFAULT_LANGUAGES)
+  const [lang, setLang] = useState(() => localStorage.getItem('qdplus_lang') || 'en')
+  const [transMap, setTransMap] = useState(null)   // Map(source -> translated) for the active language
+  const [transBusy, setTransBusy] = useState(false)
+  const [transProgress, setTransProgress] = useState(null)
 
   // Open on the home page rather than jumping straight into a recipe; the last recipe
   // you were working on is still one tap away via the "Continue" card there.
@@ -76,6 +83,7 @@ export default function App() {
     loadSettings().then((s) => {
       setHomeMedia(s[KEY_HOME_MEDIA]?.url || '')
       setCreatedFolders(Array.isArray(s[KEY_FOLDERS]) ? s[KEY_FOLDERS] : (s[KEY_FOLDERS]?.list || []))
+      if (Array.isArray(s.languages) && s.languages.length) setLanguages(s.languages)
     })
   }, [])
 
@@ -94,7 +102,19 @@ export default function App() {
   }
   async function updateRecipe(updated) {
     try {
-      const saved = await dbUpdate(updated)
+      // While a translation is on screen, the object handed back carries translated text.
+      // Keep the stored source text and take only the non-text changes.
+      const original = recipes.find((r) => r.id === updated.id)
+      const payload = (transMap && original)
+        ? {
+            ...updated,
+            title: original.title, category: original.category, time: original.time,
+            servings: original.servings, notes: original.notes,
+            storage_note: original.storage_note, watch_out: original.watch_out,
+            ingredients: original.ingredients, steps: original.steps,
+          }
+        : updated
+      const saved = await dbUpdate(payload)
       setRecipes((p) => p.map((x) => (x.id === saved.id ? saved : x)))
     } catch (e) {
       setSaveErr('Update failed: ' + e.message)
@@ -215,8 +235,61 @@ export default function App() {
     }
   }
 
-  const sel = recipes.find((x) => x.id === selId) || null
-  const vault = useMemo(() => buildVaultIndex(recipes), [recipes])
+  // Translation is deliberately lazy. Doing the whole library at once would mean thousands
+  // of strings and a long, expensive first switch, so this does the cheap list-level text
+  // (titles and categories) up front and the full body of a recipe only when it is opened.
+  // Everything lands in the shared cache, so each phrase is paid for exactly once, ever.
+  useEffect(() => {
+    localStorage.setItem('qdplus_lang', lang)
+    if (lang === 'en' || !recipes.length) { setTransMap(null); return }
+    let cancelled = false
+    setTransBusy(true); setTransProgress(null)
+    const folderSegments = recipes.flatMap((r) => String(r.folder || '').split('/')).map((x) => x.trim())
+    const listStrings = [...new Set([
+      ...recipes.flatMap((r) => [r.title, r.category]),
+      ...folderSegments,
+    ].filter(Boolean))]
+    translateMany(listStrings, lang, { onProgress: (done, total) => !cancelled && setTransProgress({ done, total }) })
+      .then((map) => { if (!cancelled) setTransMap((prev) => new Map([...(prev || []), ...map])) })
+      .catch((e) => { if (!cancelled) setSaveErr('Translation failed: ' + e.message) })
+      .finally(() => { if (!cancelled) { setTransBusy(false); setTransProgress(null) } })
+    return () => { cancelled = true }
+  }, [lang, recipes])
+
+  // Full body of whichever recipe is open.
+  useEffect(() => {
+    if (lang === 'en' || !selId) return
+    const source = recipes.find((r) => r.id === selId)
+    if (!source) return
+    let cancelled = false
+    setTransBusy(true)
+    translateMany(recipeStrings(source), lang, { onProgress: (done, total) => !cancelled && setTransProgress({ done, total }) })
+      .then((map) => { if (!cancelled) setTransMap((prev) => new Map([...(prev || []), ...map])) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) { setTransBusy(false); setTransProgress(null) } })
+    return () => { cancelled = true }
+  }, [lang, selId, recipes])
+
+  async function saveLanguages(list) {
+    setLanguages(list)
+    if (!(await saveSetting('languages', list))) setSaveErr('Could not save the language list.')
+  }
+
+  // What the UI actually renders: the stored recipes with translated text applied.
+  const shownRecipes = useMemo(
+    () => (transMap ? recipes.map((r) => applyRecipeTranslation(r, transMap)) : recipes),
+    [recipes, transMap],
+  )
+
+  // Display-only translation for labels that double as identifiers (folder path segments).
+  // The stored path is never rewritten — only what the user sees.
+  const tr = useMemo(() => (text) => (transMap && transMap.get(text)) || text, [transMap])
+
+  const sel = shownRecipes.find((x) => x.id === selId) || null
+  // The stored, source-language record. Everything that *writes* must go through this so a
+  // translated view can never be saved back over the original text.
+  const selSource = recipes.find((x) => x.id === selId) || null
+  const vault = useMemo(() => buildVaultIndex(shownRecipes), [shownRecipes])
   // Folders in use by recipes, plus empty ones the user created (and every parent of both).
   const allFolders = useMemo(() => {
     const set = new Set(vault.folderCounts.keys())
@@ -226,7 +299,7 @@ export default function App() {
   const allTags = useMemo(() => [...vault.tagCounts.keys()].sort(), [vault])
 
   const filtered = useMemo(() => {
-    let list = recipes.filter((r) => {
+    let list = shownRecipes.filter((r) => {
       if (folderFilter) {
         const f = String(r.folder || '')
         if (f !== folderFilter && !f.startsWith(folderFilter + '/')) return false
@@ -244,7 +317,7 @@ export default function App() {
       list = [...list].sort((a, b) => { const ia = idx(a.id), ib = idx(b.id); if (ia === -1 && ib === -1) return 0; if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib })
     }
     return list
-  }, [recipes, q, sortMode, recentlyOpened, folderFilter, tagFilter])
+  }, [shownRecipes, q, sortMode, recentlyOpened, folderFilter, tagFilter])
 
   const openRecipe = useCallback((id) => {
     setSelId(id); setMode('view'); setMobileNav(false)
@@ -456,6 +529,10 @@ export default function App() {
         <div className="Q-top-right">
           {saveErr && <span style={{ color: '#9b2c2c', fontSize: 10, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{saveErr}</span>}
           <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>{!loading && `${recipes.length} recipe${recipes.length !== 1 ? 's' : ''}`}</span>
+          <LanguageBar
+            languages={languages} current={lang} onPick={setLang}
+            onSaveLanguages={saveLanguages} busy={transBusy} progress={transProgress}
+          />
           <button className="btn ghost xs Q-home-btn" onClick={goHome} title="Go to home page">⌂ Home</button>
           <button className="btn id xs" onClick={() => setShowCompare(true)} title="Compare recipes">⚖ Compare</button>
           <button className="btn id xs" onClick={() => setShowLibrary(true)} title="Ingredient Library">📦 Library</button>
@@ -473,7 +550,7 @@ export default function App() {
           tagFilter={tagFilter} setTagFilter={setTagFilter}
           loading={loading} onOpenGraph={() => setShowGraph(true)}
           onCreateFolder={createFolder} allFolders={allFolders}
-          onMoveFolder={moveFolder} onMoveRecipe={moveRecipe}
+          onMoveFolder={moveFolder} onMoveRecipe={moveRecipe} tr={tr}
         />
 
         <main className="Q-main">
@@ -481,11 +558,11 @@ export default function App() {
             <button className="btn ghost xs Q-back-btn" style={{ marginBottom: 14 }} onClick={() => setMobileNav(true)}>☰ Folders & search</button>
             <Suspense fallback={<div className="Q-msg">Loading…</div>}>
               {mode === 'new' && <RecipeEditor onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(recipes[0]?.id || null) }} />}
-              {mode === 'edit' && sel && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
+              {mode === 'edit' && selSource && <RecipeEditor initial={selSource} onSave={saveRecipe} onCancel={() => setMode('view')} />}
               {mode === 'view' && sel && (
                 <RecipeView
                   key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)}
-                  onUpdate={updateRecipe} allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant}
+                  onUpdate={updateRecipe} allRecipes={shownRecipes} onCopy={copyRecipe} onSaveVariant={saveVariant}
                   vault={vault} allFolders={allFolders} allTags={allTags}
                   onOpenRecipe={openRecipe} onCreateFromLink={createFromLink} onLinkBack={linkBack}
                 />
@@ -500,13 +577,13 @@ export default function App() {
                   </button>
                 )}
                 <HomePage
-                  recipes={recipes} folders={allFolders} path={homePath} setPath={setHomePath}
+                  recipes={shownRecipes} folders={allFolders} path={homePath} setPath={setHomePath}
                   onOpenRecipe={openRecipe} onCreateFolder={createFolder}
                   mediaUrl={homeMedia} onSetMedia={setCover}
                   onNewRecipe={() => { setMode('new'); setSelId(null) }}
                   onMoveFolder={moveFolder} onRenameFolder={renameFolder}
                   onDeleteFolder={deleteFolder} onMoveRecipe={moveRecipe}
-                  onRequestMove={setMoveTarget}
+                  onRequestMove={setMoveTarget} tr={tr}
                 />
               </>
             )}
@@ -535,7 +612,7 @@ export default function App() {
       )}
       {showGraph && (
         <Suspense fallback={null}>
-          <GraphView recipes={recipes} index={vault} selId={selId} onOpen={openRecipe} onClose={() => setShowGraph(false)} />
+          <GraphView recipes={shownRecipes} index={vault} selId={selId} onOpen={openRecipe} onClose={() => setShowGraph(false)} />
         </Suspense>
       )}
       {moveTarget && (
@@ -558,7 +635,7 @@ export default function App() {
         <Suspense fallback={null}>
           <Palette
             mode={palette === 'command' ? 'command' : 'switcher'}
-            recipes={recipes} commands={commands}
+            recipes={shownRecipes} commands={commands}
             onClose={() => setPalette(null)}
             onOpenRecipe={openRecipe}
             onRunCommand={(c) => c.run()}
