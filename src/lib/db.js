@@ -61,6 +61,19 @@ export async function dbUpdate(r) {
   return fromDb(data)
 }
 
+// Bulk re-file: every id gets the same folder. Used when moving/renaming a folder, where
+// a whole subtree changes path at once — one request per destination instead of per recipe.
+export async function dbSetFolder(ids, folder) {
+  if (!ids.length) return []
+  const { data, error } = await supabase
+    .from('recipes')
+    .update({ folder, updated_at: new Date().toISOString() })
+    .in('id', ids)
+    .select()
+  if (error) throw error
+  return (data || []).map(fromDb)
+}
+
 export async function dbDelete(id) {
   const { error } = await supabase.from('recipes').delete().eq('id', id)
   if (error) throw error

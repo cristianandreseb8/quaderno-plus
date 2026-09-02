@@ -8,11 +8,14 @@ const TABS = [
   { key: 'starred', icon: '★', label: 'Bookmarks' },
 ]
 
-function RecipeRow({ r, selected, onOpen, indent = 0 }) {
+function RecipeRow({ r, selected, onOpen, indent = 0, dnd }) {
   return (
     <div
       className="Q-list-item V-row" role="button" tabIndex={0} aria-selected={selected}
       style={{ paddingLeft: 13 + indent * 13 }}
+      draggable={!!dnd}
+      onDragStart={dnd ? (e) => { dnd.start({ kind: 'recipe', id: r.id }); e.dataTransfer.effectAllowed = 'move' } : undefined}
+      onDragEnd={dnd ? dnd.end : undefined}
       onClick={() => onOpen(r.id)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(r.id) } }}
     >
@@ -27,7 +30,7 @@ function RecipeRow({ r, selected, onOpen, indent = 0 }) {
 }
 
 // One collapsible folder node; children render recursively so nesting has no depth limit.
-function FolderNode({ node, depth, recipesByFolder, collapsed, toggle, selId, onOpen, activeFolder, setActiveFolder }) {
+function FolderNode({ node, depth, recipesByFolder, collapsed, toggle, selId, onOpen, activeFolder, setActiveFolder, dnd }) {
   const isCollapsed = collapsed.has(node.path)
   const own = recipesByFolder.get(node.path) || []
   const isActive = activeFolder === node.path
@@ -36,6 +39,10 @@ function FolderNode({ node, depth, recipesByFolder, collapsed, toggle, selId, on
       <div
         className={`V-tree-row${isActive ? ' active' : ''}`}
         style={{ paddingLeft: 8 + depth * 12 }}
+        draggable={!!dnd}
+        onDragStart={dnd ? (e) => { e.stopPropagation(); dnd.start({ kind: 'folder', id: node.path }); e.dataTransfer.effectAllowed = 'move' } : undefined}
+        onDragEnd={dnd ? dnd.end : undefined}
+        {...(dnd ? dnd.dropProps(node.path) : {})}
         onClick={() => { toggle(node.path); setActiveFolder(isActive ? '' : node.path) }}
       >
         <span className="V-caret">{node.children.length || own.length ? (isCollapsed ? '▸' : '▾') : '·'}</span>
@@ -47,9 +54,9 @@ function FolderNode({ node, depth, recipesByFolder, collapsed, toggle, selId, on
           {node.children.map((c) => (
             <FolderNode key={c.path} node={c} depth={depth + 1} recipesByFolder={recipesByFolder}
               collapsed={collapsed} toggle={toggle} selId={selId} onOpen={onOpen}
-              activeFolder={activeFolder} setActiveFolder={setActiveFolder} />
+              activeFolder={activeFolder} setActiveFolder={setActiveFolder} dnd={dnd} />
           ))}
-          {own.map((r) => <RecipeRow key={r.id} r={r} selected={r.id === selId} onOpen={onOpen} indent={depth + 1} />)}
+          {own.map((r) => <RecipeRow key={r.id} r={r} selected={r.id === selId} onOpen={onOpen} indent={depth + 1} dnd={dnd} />)}
         </>
       )}
     </div>
@@ -96,13 +103,38 @@ function highlight(line, q) {
 export default function VaultSidebar({
   recipes, index, selId, onOpen, q, setQ, sortMode, setSortMode,
   onAutoCategorize, categorizingAI, folderFilter, setFolderFilter, tagFilter, setTagFilter,
-  loading, onOpenGraph, onCreateFolder, allFolders = [],
+  loading, onOpenGraph, onCreateFolder, allFolders = [], onMoveFolder, onMoveRecipe,
 }) {
   const [tab, setTab] = useState('files')
   const [collapsedFolders, setCollapsedFolders] = useState(new Set())
   const [collapsedTags, setCollapsedTags] = useState(new Set())
   const [addingFolder, setAddingFolder] = useState(false)
   const [newFolder, setNewFolder] = useState('')
+  const [drag, setDrag] = useState(null)
+  const [dropTarget, setDropTarget] = useState(null)
+
+  // Drag a recipe or folder onto a folder row to re-file it, mirroring the home page.
+  const dnd = (onMoveFolder && onMoveRecipe) ? {
+    start: setDrag,
+    end: () => { setDrag(null); setDropTarget(null) },
+    dropProps: (destPath) => ({
+      onDragOver: (e) => {
+        if (!drag) return
+        if (drag.kind === 'folder' && (destPath === drag.id || destPath.startsWith(drag.id + '/'))) return
+        e.preventDefault()
+        setDropTarget(destPath)
+      },
+      onDragLeave: () => setDropTarget((t) => (t === destPath ? null : t)),
+      onDrop: (e) => {
+        e.preventDefault(); e.stopPropagation()
+        if (!drag) return
+        if (drag.kind === 'recipe') onMoveRecipe(drag.id, destPath)
+        else if (drag.id !== destPath) onMoveFolder(drag.id, destPath)
+        setDrag(null); setDropTarget(null)
+      },
+      'data-drop': dropTarget === destPath ? '1' : '0',
+    }),
+  } : null
 
   const folderTree = useMemo(() => buildFolderTree(recipes, allFolders), [recipes, allFolders])
   // Counted over the recipes actually shown, so folder/search filters and the tag pane agree.
@@ -212,14 +244,14 @@ export default function VaultSidebar({
                   <FolderNode key={n.path} node={n} depth={0} recipesByFolder={recipesByFolder}
                     collapsed={collapsedFolders} toggle={toggleSet(setCollapsedFolders)}
                     selId={selId} onOpen={onOpen}
-                    activeFolder={folderFilter} setActiveFolder={setFolderFilter} />
+                    activeFolder={folderFilter} setActiveFolder={setFolderFilter} dnd={dnd} />
                 ))}
               </div>
             )}
             {!loading && (
               <div className="V-section">
                 <div className="V-section-h">{folderTree.length ? 'Unfiled' : 'All recipes'} <span className="V-count">{unfiled.length}</span></div>
-                {unfiled.map((r) => <RecipeRow key={r.id} r={r} selected={r.id === selId} onOpen={onOpen} />)}
+                {unfiled.map((r) => <RecipeRow key={r.id} r={r} selected={r.id === selId} onOpen={onOpen} dnd={dnd} />)}
                 {!unfiled.length && <div className="Q-msg" style={{ padding: '10px 14px', fontSize: 11.5 }}>Everything is filed into folders.</div>}
               </div>
             )}

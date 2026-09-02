@@ -120,6 +120,82 @@
   color: var(--muted); padding: 0 11px;
 }
 
+/* ---------- Card ⋯ menus ---------- */
+.H-folder, .H-card { position: relative; }
+.H-menu-wrap { position: absolute; top: 6px; right: 6px; z-index: 3; }
+.H-menu-btn {
+  width: 24px; height: 24px; border-radius: 6px; border: 1px solid transparent;
+  background: rgba(255,255,255,.9); color: var(--muted); cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0; opacity: 0; transition: opacity .12s;
+}
+.H-folder:hover .H-menu-btn, .H-card:hover .H-menu-btn, .H-menu-btn:focus { opacity: 1; }
+.H-menu-btn:hover { background: #fff; border-color: var(--rule); color: var(--ink); }
+.H-menu {
+  position: absolute; top: 26px; right: 0; display: flex; flex-direction: column;
+  min-width: 150px; background: #fff; border: 1px solid var(--rule); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.14); padding: 4px; z-index: 4;
+}
+.H-menu button {
+  text-align: left; background: none; border: none; cursor: pointer;
+  padding: 7px 9px; font-size: 12.5px; color: var(--ink); border-radius: 5px; white-space: nowrap;
+}
+.H-menu button:hover { background: #F3F3F2; }
+.H-menu button.danger { color: var(--red); }
+.H-menu button.danger:hover { background: #FDECEC; }
+
+/* Touch devices have no hover, so the menu button is always visible there. */
+@media (hover: none) {
+  .H-menu-btn { opacity: 1; border-color: var(--rule); }
+}
+
+/* ---------- Drag & drop ---------- */
+.H-folder[data-drop="1"], .H-crumb[data-drop="1"] {
+  border-color: var(--amber); background: #FFF7EE; box-shadow: 0 0 0 2px rgba(188,108,44,.25);
+}
+.H-folder[draggable="true"], .H-card[draggable="true"] { cursor: pointer; }
+.H-folder.renaming { gap: 8px; }
+.H-folder.renaming input {
+  width: 100%; border: 1px solid var(--navy); border-radius: 6px; padding: 6px 8px;
+  font-size: 13px; font-family: var(--sans); color: var(--ink); background: #fff;
+}
+.H-folder.renaming input:focus { outline: none; }
+.H-rename-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.H-drag-hint {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 22px; z-index: 200;
+  background: rgba(34,28,24,.9); color: #fff; font-size: 12px; padding: 7px 14px;
+  border-radius: 20px; pointer-events: none;
+}
+
+/* ---------- Move picker ---------- */
+.MP-overlay {
+  position: fixed; inset: 0; background: rgba(20,16,12,.42); z-index: 420;
+  display: flex; align-items: flex-start; justify-content: center; padding: 10vh 16px 16px;
+}
+.MP {
+  width: min(460px, 100%); max-height: 74vh; background: #fff; border: 1px solid var(--rule);
+  border-radius: 11px; box-shadow: 0 18px 50px rgba(0,0,0,.3); display: flex; flex-direction: column; overflow: hidden;
+}
+.MP-head { padding: 14px 16px 8px; }
+.MP-title { font-family: var(--serif); font-size: 16px; font-weight: 700; color: var(--ink); }
+.MP-sub { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+.MP-search {
+  margin: 0 16px 8px; border: 1px solid var(--rule); border-radius: 7px; padding: 8px 10px;
+  font-size: 13px; font-family: var(--sans); color: var(--ink); background: #fff;
+}
+.MP-search:focus { outline: none; border-color: var(--navy); }
+.MP-list { overflow: auto; flex: 1; padding: 0 8px 8px; }
+.MP-row {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  background: none; border: none; cursor: pointer; padding: 8px 9px; border-radius: 7px; font-size: 13px; color: var(--ink);
+}
+.MP-row:hover:not(:disabled) { background: #F1F5F9; }
+.MP-row:disabled { cursor: default; opacity: .55; }
+.MP-icon { width: 17px; text-align: center; flex-shrink: 0; }
+.MP-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.MP-here { font-family: var(--mono); font-size: 9px; color: var(--muted); flex-shrink: 0; }
+.MP-empty { padding: 20px; text-align: center; color: var(--muted); font-size: 12.5px; }
+.MP-foot { padding: 9px 16px; border-top: 1px solid var(--rule); display: flex; justify-content: flex-end; }
+
 .H-empty { color: var(--muted); font-size: 12.5px; padding: 4px 0 6px; }
 .H-blank { text-align: center; padding: 40px 20px; color: var(--muted); }
 .H-blank p { font-size: 13.5px; margin: 0 0 14px; }

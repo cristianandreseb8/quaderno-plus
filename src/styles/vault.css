@@ -128,3 +128,6 @@
   .V-graph { height: 94vh; }
   .V-prop-key { width: 44px; }
 }
+
+/* Drop target while dragging a recipe/folder onto a sidebar folder row. */
+.V-tree-row[data-drop="1"] { background: #FFF7EE; box-shadow: inset 3px 0 0 var(--amber); }

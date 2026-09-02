@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
-import { dbDelete, dbInsert, dbUpdate, dbLoad } from './lib/db.js'
+import { dbDelete, dbInsert, dbUpdate, dbLoad, dbSetFolder } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { ancestorPaths, buildVaultIndex, normalizeKey, tagsOf } from './lib/vault.js'
 import { KEY_FOLDERS, KEY_HOME_MEDIA, loadSettings, saveSetting } from './lib/settings.js'
@@ -31,6 +31,7 @@ const IngredientLibraryModal = lazyRetry(() => import('./components/IngredientLi
 const AppAIChat = lazyRetry(() => import('./components/AppAIChat.jsx'))
 const GraphView = lazyRetry(() => import('./components/GraphView.jsx'))
 const Palette = lazyRetry(() => import('./components/Palette.jsx'))
+const MovePicker = lazyRetry(() => import('./components/MovePicker.jsx'))
 
 export default function App() {
   const [recipes, setRecipes] = useState([])
@@ -55,6 +56,7 @@ export default function App() {
   // Mobile only: the sidebar and the main pane share the screen, so this tracks which one
   // is showing. On desktop both are always visible and this has no effect.
   const [mobileNav, setMobileNav] = useState(false)
+  const [moveTarget, setMoveTarget] = useState(null) // {kind,id,name,currentPath} being moved
 
   // Open on the home page rather than jumping straight into a recipe; the last recipe
   // you were working on is still one tap away via the "Continue" card there.
@@ -316,6 +318,93 @@ export default function App() {
     if (!(await saveSetting(KEY_FOLDERS, next))) setSaveErr('Could not save the new folder.')
   }
 
+  // --- Moving things around the tree -------------------------------------------------
+  // A folder is just a path prefix on its recipes, so moving or renaming one means
+  // rewriting that prefix everywhere it appears — on recipes and in the created-folder list.
+  async function rewriteFolderPrefix(fromPath, toPath) {
+    if (!fromPath || fromPath === toPath) return
+    const affected = recipes.filter((r) => {
+      const f = String(r.folder || '')
+      return f === fromPath || f.startsWith(fromPath + '/')
+    })
+    // Group by destination so each distinct new path is one request.
+    const byDest = new Map()
+    for (const r of affected) {
+      const dest = toPath + String(r.folder).slice(fromPath.length)
+      if (!byDest.has(dest)) byDest.set(dest, [])
+      byDest.get(dest).push(r.id)
+    }
+    try {
+      for (const [dest, ids] of byDest) {
+        const saved = await dbSetFolder(ids, dest)
+        setRecipes((p) => p.map((x) => saved.find((s) => s.id === x.id) || x))
+      }
+      const nextFolders = createdFolders.map((f) => (
+        f === fromPath || f.startsWith(fromPath + '/') ? toPath + f.slice(fromPath.length) : f
+      ))
+      setCreatedFolders(nextFolders)
+      await saveSetting(KEY_FOLDERS, nextFolders)
+      // Keep the user where they were looking if they moved the folder they're inside.
+      setHomePath((p) => (p === fromPath || p.startsWith(fromPath + '/') ? toPath + p.slice(fromPath.length) : p))
+      setFolderFilter((p) => (p === fromPath || p.startsWith(fromPath + '/') ? toPath + p.slice(fromPath.length) : p))
+    } catch (e) {
+      setSaveErr('Move failed: ' + e.message)
+    }
+  }
+
+  function isDescendant(path, maybeAncestor) {
+    return path === maybeAncestor || path.startsWith(maybeAncestor + '/')
+  }
+
+  async function moveFolder(fromPath, toParent) {
+    const name = fromPath.split('/').pop()
+    const dest = toParent ? `${toParent}/${name}` : name
+    if (dest === fromPath) return
+    // Moving a folder inside itself would orphan the whole subtree.
+    if (toParent && isDescendant(toParent, fromPath)) { setSaveErr("Can't move a folder into itself."); return }
+    if (allFolders.includes(dest)) { setSaveErr(`"${dest}" already exists.`); return }
+    await rewriteFolderPrefix(fromPath, dest)
+  }
+
+  async function renameFolder(fromPath, newName) {
+    const clean = String(newName || '').trim().replace(/\//g, ' ')
+    if (!clean) return
+    const parent = fromPath.includes('/') ? fromPath.slice(0, fromPath.lastIndexOf('/')) : ''
+    const dest = parent ? `${parent}/${clean}` : clean
+    if (dest === fromPath) return
+    if (allFolders.includes(dest)) { setSaveErr(`"${dest}" already exists.`); return }
+    await rewriteFolderPrefix(fromPath, dest)
+  }
+
+  async function moveRecipe(id, toPath) {
+    const r = recipes.find((x) => x.id === id)
+    if (!r || String(r.folder || '') === toPath) return
+    try {
+      const saved = await dbSetFolder([id], toPath)
+      setRecipes((p) => p.map((x) => saved.find((s) => s.id === x.id) || x))
+    } catch (e) { setSaveErr('Move failed: ' + e.message) }
+  }
+
+  // Removing a folder never deletes recipes — they move up to the parent.
+  async function deleteFolder(path) {
+    const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
+    const inside = recipes.filter((r) => isDescendant(String(r.folder || ''), path))
+    const msg = inside.length
+      ? `Remove the folder "${path}"?\n\n${inside.length} recipe${inside.length !== 1 ? 's' : ''} will move ${parent ? `to "${parent}"` : 'to the top level'}. Nothing is deleted.`
+      : `Remove the empty folder "${path}"?`
+    if (!window.confirm(msg)) return
+    try {
+      if (inside.length) {
+        const saved = await dbSetFolder(inside.map((r) => r.id), parent)
+        setRecipes((p) => p.map((x) => saved.find((s) => s.id === x.id) || x))
+      }
+      const nextFolders = createdFolders.filter((f) => !isDescendant(f, path))
+      setCreatedFolders(nextFolders)
+      await saveSetting(KEY_FOLDERS, nextFolders)
+      setHomePath((p) => (isDescendant(p, path) ? parent : p))
+    } catch (e) { setSaveErr('Delete folder failed: ' + e.message) }
+  }
+
   async function setCover(url) {
     setHomeMedia(url)
     if (!(await saveSetting(KEY_HOME_MEDIA, { url }))) setSaveErr('Could not save the cover.')
@@ -384,6 +473,7 @@ export default function App() {
           tagFilter={tagFilter} setTagFilter={setTagFilter}
           loading={loading} onOpenGraph={() => setShowGraph(true)}
           onCreateFolder={createFolder} allFolders={allFolders}
+          onMoveFolder={moveFolder} onMoveRecipe={moveRecipe}
         />
 
         <main className="Q-main">
@@ -414,6 +504,9 @@ export default function App() {
                   onOpenRecipe={openRecipe} onCreateFolder={createFolder}
                   mediaUrl={homeMedia} onSetMedia={setCover}
                   onNewRecipe={() => { setMode('new'); setSelId(null) }}
+                  onMoveFolder={moveFolder} onRenameFolder={renameFolder}
+                  onDeleteFolder={deleteFolder} onMoveRecipe={moveRecipe}
+                  onRequestMove={setMoveTarget}
                 />
               </>
             )}
@@ -443,6 +536,22 @@ export default function App() {
       {showGraph && (
         <Suspense fallback={null}>
           <GraphView recipes={recipes} index={vault} selId={selId} onOpen={openRecipe} onClose={() => setShowGraph(false)} />
+        </Suspense>
+      )}
+      {moveTarget && (
+        <Suspense fallback={null}>
+          <MovePicker
+            title={`Move ${moveTarget.kind === 'folder' ? 'folder' : 'recipe'}`}
+            subtitle={moveTarget.name}
+            folders={allFolders}
+            currentPath={moveTarget.currentPath}
+            blockedPrefix={moveTarget.kind === 'folder' ? moveTarget.id : null}
+            onPick={(dest) => {
+              if (moveTarget.kind === 'folder') moveFolder(moveTarget.id, dest)
+              else moveRecipe(moveTarget.id, dest)
+            }}
+            onClose={() => setMoveTarget(null)}
+          />
         </Suspense>
       )}
       {palette && (
