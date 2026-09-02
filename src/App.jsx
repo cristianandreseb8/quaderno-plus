@@ -367,6 +367,7 @@ export default function App() {
         <div className="Q-top-right">
           {saveErr && <span style={{ color: '#9b2c2c', fontSize: 10, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{saveErr}</span>}
           <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>{!loading && `${recipes.length} recipe${recipes.length !== 1 ? 's' : ''}`}</span>
+          <button className="btn ghost xs Q-home-btn" onClick={goHome} title="Go to home page">⌂ Home</button>
           <button className="btn id xs" onClick={() => setShowCompare(true)} title="Compare recipes">⚖ Compare</button>
           <button className="btn id xs" onClick={() => setShowLibrary(true)} title="Ingredient Library">📦 Library</button>
           <button className="btn ai xs" onClick={() => setShowAppAI(true)} title="App AI Assistant">🌐 AI</button>

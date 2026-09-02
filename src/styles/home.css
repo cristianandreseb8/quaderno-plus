@@ -3,6 +3,11 @@
 .Q-brand-btn { background: none; border: none; cursor: pointer; padding: 0; font-family: var(--serif); }
 .Q-brand-btn:hover { opacity: .75; }
 
+/* Home is the primary way back out of a recipe, so it reads a bit stronger than the
+   other ghost buttons and never wraps off the row on a narrow screen. */
+.Q-home-btn { border-color: var(--navy); color: var(--navy); }
+.Q-home-btn:hover { background: var(--navy); color: #fff; }
+
 .H-continue {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
   width: 100%; max-width: 900px; margin: 0 auto 18px; padding: 11px 14px;

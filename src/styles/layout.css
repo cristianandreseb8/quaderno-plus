@@ -6,7 +6,9 @@
 .Q-brand { font-family: var(--serif); font-size: 21px; color: var(--navy); white-space: nowrap; display: flex; align-items: baseline; gap: 6px; }
 .Q-brand .ai-badge { font-family: var(--mono); font-size: 9px; color: #fff; background: var(--ai); padding: 2px 6px; border-radius: 10px; letter-spacing: .1em; text-transform: uppercase; }
 .Q-brand .id-badge { font-family: var(--mono); font-size: 9px; color: #fff; background: var(--id); padding: 2px 6px; border-radius: 10px; letter-spacing: .1em; text-transform: uppercase; margin-left: 2px; }
-.Q-top-right { margin-left: auto; display: flex; gap: 7px; align-items: center; }
+/* wrap: with Home added this row is 5 buttons, which overflowed the phone header
+   and clipped "+ New" off the right edge. */
+.Q-top-right { margin-left: auto; display: flex; gap: 7px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
 .btn { font-family: var(--sans); font-size: 12px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--navy); background: transparent; color: var(--navy); padding: 6px 11px; border-radius: 6px; transition: background .13s, color .13s; white-space: nowrap; }
 .btn:hover { background: var(--navy); color: var(--paper); }
