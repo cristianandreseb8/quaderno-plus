@@ -93,6 +93,27 @@ export default function RecipeFooter({ recipe, recipes, onUpdate, onOpenRecipe }
         />
       </div>
 
+      <div className="RF-block RF-service">
+        <div className="RF-note-h">
+          Service — how to present the dish
+          <span className="RF-service-tag">front of house</span>
+        </div>
+        <div className="RF-service-hint">
+          Written here by the kitchen. Service will get their own read-only view of just this
+          section once team accounts exist — they will not see the method or the development log.
+        </div>
+        <div className="RF-grid">
+          <EditableNote
+            label="Short — one line at the table" hint="The single sentence a waiter says when setting the plate down."
+            value={recipe.service_short} onSave={(v) => onUpdate({ ...recipe, service_short: v })}
+          />
+          <EditableNote
+            label="Detailed — for briefing" hint="Origin, technique, key ingredients, allergens, why it is on the menu."
+            value={recipe.service_long} onSave={(v) => onUpdate({ ...recipe, service_long: v })}
+          />
+        </div>
+      </div>
+
       <div className="RF-block">
         <div className="RF-note-h">
           Related recipes &amp; techniques

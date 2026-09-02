@@ -618,13 +618,19 @@ export default function App() {
       {moveTarget && (
         <Suspense fallback={null}>
           <MovePicker
-            title={`Move ${moveTarget.kind === 'folder' ? 'folder' : 'recipe'}`}
+            title={moveTarget.kind === 'bulk' ? 'Move selection' : `Move ${moveTarget.kind === 'folder' ? 'folder' : 'recipe'}`}
             subtitle={moveTarget.name}
             folders={allFolders}
             currentPath={moveTarget.currentPath}
             blockedPrefix={moveTarget.kind === 'folder' ? moveTarget.id : null}
-            onPick={(dest) => {
-              if (moveTarget.kind === 'folder') moveFolder(moveTarget.id, dest)
+            blockedPrefixes={moveTarget.kind === 'bulk' ? moveTarget.items.filter((i) => i.kind === 'folder').map((i) => i.id) : null}
+            onPick={async (dest) => {
+              if (moveTarget.kind === 'bulk') {
+                // Folders first: moving a parent rewrites the paths of anything under it,
+                // so doing recipes afterwards works off the settled tree.
+                for (const it of moveTarget.items.filter((i) => i.kind === 'folder')) await moveFolder(it.id, dest)
+                for (const it of moveTarget.items.filter((i) => i.kind === 'recipe')) await moveRecipe(it.id, dest)
+              } else if (moveTarget.kind === 'folder') moveFolder(moveTarget.id, dest)
               else moveRecipe(moveTarget.id, dest)
             }}
             onClose={() => setMoveTarget(null)}

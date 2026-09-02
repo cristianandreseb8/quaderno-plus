@@ -8,18 +8,18 @@ import { fuzzySearch } from '../lib/vault.js'
  * `blockedPrefix` is set when moving a folder: that folder and everything under it are
  * invalid destinations (a folder can't contain itself).
  */
-export default function MovePicker({ title, subtitle, folders, currentPath, blockedPrefix, onPick, onClose }) {
+export default function MovePicker({ title, subtitle, folders, currentPath, blockedPrefix, blockedPrefixes, onPick, onClose }) {
   const [query, setQuery] = useState('')
 
   const options = useMemo(() => {
-    const usable = folders.filter((f) => {
-      if (blockedPrefix && (f === blockedPrefix || f.startsWith(blockedPrefix + '/'))) return false
-      return true
-    })
+    // A folder can never be moved into itself or its own subtree — true for a single
+    // folder and for every folder in a multi-selection.
+    const blocked = [blockedPrefix, ...(blockedPrefixes || [])].filter(Boolean)
+    const usable = folders.filter((f) => !blocked.some((b) => f === b || f.startsWith(b + '/')))
     const rows = [{ path: '', label: 'Top level (Home)' }, ...usable.map((f) => ({ path: f, label: f }))]
     if (!query.trim()) return rows
     return fuzzySearch(query, rows, (r) => r.label, 60).map((h) => h.item)
-  }, [folders, blockedPrefix, query])
+  }, [folders, blockedPrefix, blockedPrefixes, query])
 
   return (
     <div className="MP-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>

@@ -12,6 +12,7 @@ import { BacklinksPanel, LinkedText, RecipeProperties } from './VaultPanels.jsx'
 import ChefView from './ChefView.jsx'
 import { StatusBanner, StatusPicker } from './StatusBadge.jsx'
 import RecipeFooter from './RecipeFooter.jsx'
+import DevLogPanel from './DevLogPanel.jsx'
 import { addAck, getChefName, loadAcks, setChefName } from '../lib/acks.js'
 import { normalizeKey } from '../lib/vault.js'
 
@@ -47,6 +48,7 @@ export default function RecipeView({
   const [exportNotes, setExportNotes] = useState(false)
   const [showCopyLangMenu, setShowCopyLangMenu] = useState(false)
   const addNoteRef = useRef(null)
+  const [showDevLog, setShowDevLog] = useState(false)
   const [acks, setAcks] = useState([])
   const [chef, setChef] = useState(() => getChefName())
 
@@ -209,6 +211,7 @@ export default function RecipeView({
       <div className="Q-toolbar">
         {!appliedScale && <button className={`btn xs ${showScale ? 'amber' : 'ghost'}`} onClick={() => setShowScale(!showScale)}>⚖ Scale</button>}
         <button className={`btn xs ${showPct ? 'amber' : 'ghost'}`} onClick={() => setShowPct(!showPct)}>% Baker's</button>
+        <button className="btn xs ghost" onClick={() => setShowDevLog(true)} title="Development log — what you changed on each trial">🧪 Dev log</button>
         <button className="btn xs ghost" onClick={() => window.print()} title="Print as recipe cards">🖨 Print</button>
         <span className="CF-modes" title="Recipe layout">
           <button className={layout === 'chef' ? 'active' : ''} onClick={() => setLayout('chef')}>Chef</button>
@@ -418,6 +421,7 @@ export default function RecipeView({
       {tab === 'notes' && <NotesPanel recipe={recipe} onSave={handleSaveNotes} onSaveMedia={handleSaveMedia} onAddNote={addNoteRef} />}
       {tab === 'id' && <IDPanel recipe={recipe} onSave={handleSaveIdData} allRecipes={allRecipes} />}
       {tab === 'ai' && <AIAssistant recipe={viewR} onAction={handleAssistantAction} onRequestSaveNote={handleRequestSaveNote} />}
+      {showDevLog && <DevLogPanel recipe={recipe} onClose={() => setShowDevLog(false)} />}
       {lightboxSrc && <div className="Q-lightbox" onClick={() => setLightboxSrc(null)}><img src={lightboxSrc} alt="" /></div>}
     </div>
   )

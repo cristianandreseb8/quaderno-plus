@@ -86,6 +86,7 @@ export default function HomePage({
   const [newName, setNewName] = useState('')
   const [renaming, setRenaming] = useState(null)   // folder path being renamed
   const [renameVal, setRenameVal] = useState('')
+  const [sel, setSel] = useState(() => new Set())  // "folder:<path>" / "recipe:<id>"
   const [drag, setDrag] = useState(null)           // {kind:'folder'|'recipe', id}
   const [dropTarget, setDropTarget] = useState(null)
 
@@ -112,6 +113,32 @@ export default function HomePage({
 
   const crumbs = path ? ancestorPaths(path) : []
 
+  const selKey = (kind, id) => `${kind}:${id}`
+  const isSel = (kind, id) => sel.has(selKey(kind, id))
+  function toggleSel(kind, id) {
+    setSel((prev) => {
+      const next = new Set(prev)
+      const k = selKey(kind, id)
+      if (next.has(k)) next.delete(k); else next.add(k)
+      return next
+    })
+  }
+  function selectAllHere() {
+    setSel(new Set([...childFolders.map((f) => selKey('folder', f.path)), ...ownRecipes.map((r) => selKey('recipe', r.id))]))
+  }
+  const selectedItems = [...sel].map((k) => {
+    const i = k.indexOf(':')
+    return { kind: k.slice(0, i), id: k.slice(i + 1) }
+  })
+  // Dropping a selection moves the whole selection; dropping an unselected card moves just it.
+  function moveSelectionTo(destPath) {
+    for (const it of selectedItems) {
+      if (it.kind === 'recipe') onMoveRecipe(it.id, destPath)
+      else if (it.id !== destPath && !destPath.startsWith(it.id + FOLDER_SEP)) onMoveFolder(it.id, destPath)
+    }
+    setSel(new Set())
+  }
+
   function submitFolder() {
     const name = newName.trim().replace(/^\/+|\/+$/g, '')
     if (!name) { setCreating(false); return }
@@ -128,7 +155,8 @@ export default function HomePage({
   // --- drag & drop (desktop; the ⋯ → Move picker covers touch) ---
   function dropOn(destPath) {
     if (!drag) return
-    if (drag.kind === 'recipe') onMoveRecipe(drag.id, destPath)
+    if (isSel(drag.kind, drag.id) && sel.size > 1) moveSelectionTo(destPath)
+    else if (drag.kind === 'recipe') onMoveRecipe(drag.id, destPath)
     else if (drag.kind === 'folder' && drag.id !== destPath) onMoveFolder(drag.id, destPath)
     setDrag(null); setDropTarget(null)
   }
@@ -161,6 +189,17 @@ export default function HomePage({
           </span>
         ))}
       </div>
+
+      {sel.size > 0 && (
+        <div className="H-selbar">
+          <span className="H-selcount">{sel.size} selected</span>
+          <button className="H-btn primary" onClick={() => onRequestMove({ kind: 'bulk', items: selectedItems, name: `${sel.size} items`, currentPath: path })}>
+            Move to…
+          </button>
+          <button className="H-btn" onClick={selectAllHere}>Select all here</button>
+          <button className="H-btn" onClick={() => setSel(new Set())}>Clear</button>
+        </div>
+      )}
 
       <div className="H-section-head">
         <span className="H-section-title">Folders</span>
@@ -195,7 +234,7 @@ export default function HomePage({
               </div>
             ) : (
               <div
-                key={f.path} className="H-folder" role="button" tabIndex={0}
+                key={f.path} className={`H-folder${isSel('folder', f.path) ? ' selected' : ''}`} role="button" tabIndex={0}
                 draggable
                 onDragStart={(e) => { setDrag({ kind: 'folder', id: f.path }); e.dataTransfer.effectAllowed = 'move' }}
                 onDragEnd={() => { setDrag(null); setDropTarget(null) }}
@@ -203,6 +242,11 @@ export default function HomePage({
                 onClick={() => setPath(f.path)}
                 onKeyDown={(e) => { if (e.key === 'Enter') setPath(f.path) }}
               >
+                <input
+                  type="checkbox" className="H-select" checked={isSel('folder', f.path)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => toggleSel('folder', f.path)}
+                />
                 <span className="H-folder-icon">🗂</span>
                 <CardMenu items={[
                   { label: 'Move to…', run: () => onRequestMove({ kind: 'folder', id: f.path, name: f.name, currentPath: parentOf(f.path) }) },
@@ -228,7 +272,7 @@ export default function HomePage({
           <div className="H-grid recipes">
             {ownRecipes.map((r) => (
               <div
-                key={r.id} className="H-card" role="button" tabIndex={0}
+                key={r.id} className={`H-card${isSel('recipe', r.id) ? ' selected' : ''}`} role="button" tabIndex={0}
                 draggable
                 onDragStart={(e) => { setDrag({ kind: 'recipe', id: r.id }); e.dataTransfer.effectAllowed = 'move' }}
                 onDragEnd={() => { setDrag(null); setDropTarget(null) }}
@@ -238,6 +282,11 @@ export default function HomePage({
                 {r.thumbnail
                   ? <img src={r.thumbnail} alt="" className="H-card-img" />
                   : <div className="H-card-img placeholder">🍞</div>}
+                <input
+                  type="checkbox" className="H-select" checked={isSel('recipe', r.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => toggleSel('recipe', r.id)}
+                />
                 <CardMenu items={[
                   { label: 'Move to…', run: () => onRequestMove({ kind: 'recipe', id: r.id, name: r.title, currentPath: String(r.folder || '') }) },
                 ]} />
