@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fuzzySearch } from '../lib/vault.js'
+import { statusOf } from '../lib/status.js'
 
 // Renders the target string with the fuzzy-matched characters emphasised, the way
 // Obsidian's switcher shows you *why* a result matched.
@@ -78,7 +79,7 @@ export default function Palette({ mode, recipes, commands, onClose, onOpenRecipe
                 </>
               ) : (
                 <>
-                  <span className="V-palette-icon">📄</span>
+                  <span className="V-palette-icon" title={statusOf(hit.item)?.label || undefined}>{statusOf(hit.item)?.icon || '📄'}</span>
                   <span className="V-palette-title"><FuzzyLabel text={hit.item.title || 'Untitled'} positions={hit.positions} /></span>
                   <span className="V-palette-meta">{hit.item.folder || hit.item.category || ''}</span>
                 </>

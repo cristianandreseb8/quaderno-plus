@@ -21,6 +21,7 @@ function toDb(r) {
     is_favorite: r.is_favorite || false,
     tags: r.tags || [],
     folder: r.folder || '',
+    status: r.status || '',
   }
 }
 
@@ -38,6 +39,7 @@ function fromDb(r) {
     is_favorite: r.is_favorite || false,
     tags: r.tags || [],
     folder: r.folder || '',
+    status: r.status || '',
   }
 }
 

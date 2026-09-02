@@ -166,7 +166,7 @@ const LEADING_QTY_RE = new RegExp(
 // Unit words across EN/ES/DE/FR/IT — only these get dropped as a "unit" after the quantity;
 // anything else (e.g. "marraquetas" in "2 marraquetas") is treated as the start of the name,
 // since a plain qty+word regex can't otherwise tell a unit apart from a count noun.
-const KNOWN_UNITS = new Set([
+export const KNOWN_UNITS = new Set([
   'g', 'gr', 'gramo', 'gramos', 'gram', 'grams', 'kg', 'kilo', 'kilos', 'kilogram', 'kilograms', 'mg',
   'ml', 'l', 'lt', 'litro', 'litros', 'liter', 'liters', 'litre', 'litres', 'cl', 'dl',
   'oz', 'ounce', 'ounces', 'lb', 'lbs', 'pound', 'pounds', 'pint', 'pints', 'quart', 'quarts',

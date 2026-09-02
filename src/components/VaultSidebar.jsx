@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { buildFolderTree, buildTagTree, searchRecipes, tagAncestors, tagsOf } from '../lib/vault.js'
+import { StatusDot } from './StatusBadge.jsx'
 
 const TABS = [
   { key: 'files', icon: '🗂', label: 'Files' },
@@ -21,7 +22,7 @@ function RecipeRow({ r, selected, onOpen, indent = 0, dnd }) {
     >
       {r.thumbnail ? <img src={r.thumbnail} className="Q-list-thumb" alt="" /> : <div className="Q-list-thumb-ph">🍞</div>}
       <div style={{ minWidth: 0, flex: 1 }}>
-        <h4>{r.title || 'Untitled'}</h4>
+        <h4><StatusDot recipe={r} />{r.title || 'Untitled'}</h4>
         <span>{[r.category, r.source].filter(Boolean).join(' · ') || '—'}{r.fixed_lang && ` · 📌${r.fixed_lang}`}</span>
       </div>
       {r.is_favorite && <span style={{ fontSize: 11, flexShrink: 0 }}>⭐</span>}
@@ -265,7 +266,7 @@ export default function VaultSidebar({
           {q.trim() && !searchResults.length && <div className="Q-msg">No matches.</div>}
           {searchResults.map(({ recipe, hits }) => (
             <div key={recipe.id} className="V-result" onClick={() => onOpen(recipe.id)}>
-              <div className="V-result-title">{recipe.title || 'Untitled'}</div>
+              <div className="V-result-title"><StatusDot recipe={recipe} />{recipe.title || 'Untitled'}</div>
               {hits.map((h, i) => (
                 <div key={i} className="V-result-line">
                   <span className="V-field">{h.field}</span>{highlight(h.line, q.trim())}

@@ -1,0 +1,128 @@
+/* ---------- Status badges ---------- */
+.ST-badge {
+  display: inline-flex; align-items: center; gap: 4px; border: 1px solid; border-radius: 20px;
+  padding: 1px 8px 1px 6px; font-family: var(--mono); font-size: 9.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; vertical-align: middle;
+}
+.ST-badge.ST-sm { padding: 1px 5px; }
+.ST-icon { font-size: 10px; line-height: 1; }
+.ST-dot { font-size: 11px; line-height: 1; flex-shrink: 0; }
+
+.ST-picker { position: relative; display: inline-flex; }
+.ST-picker-btn {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  border: 1px solid var(--rule); background: #fff; color: var(--ink);
+  border-radius: 20px; padding: 3px 9px; font-size: 11.5px; font-family: var(--sans); font-weight: 600;
+}
+.ST-picker-btn:hover { background: #F3F3F2; }
+.ST-none { color: var(--muted); font-weight: 400; }
+.ST-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; display: flex; flex-direction: column;
+  min-width: 178px; background: #fff; border: 1px solid var(--rule); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.14); padding: 4px;
+}
+.ST-menu button {
+  display: flex; align-items: center; gap: 8px; text-align: left; background: none; border: none;
+  cursor: pointer; padding: 7px 9px; font-size: 12.5px; color: var(--ink); border-radius: 5px; white-space: nowrap;
+}
+.ST-menu button:hover { background: #F3F3F2; }
+.ST-menu button.active { background: #F1F5F9; font-weight: 600; }
+.ST-menu .ST-clear { color: var(--muted); border-top: 1px solid var(--rule); margin-top: 3px; padding-top: 8px; border-radius: 0; }
+
+/* ---------- View-mode toggle ---------- */
+.CF-modes { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.CF-modes button {
+  border: none; background: #fff; color: var(--muted); cursor: pointer;
+  font-size: 10.5px; font-weight: 600; font-family: var(--sans); padding: 4px 9px;
+}
+.CF-modes button.active { background: var(--navy); color: #fff; }
+
+/* ---------- Chef layout ---------- */
+.CF { font-family: var(--sans); color: var(--ink); }
+.CF-head { border-bottom: 2px solid var(--ink); padding-bottom: 12px; margin-bottom: 16px; }
+.CF-eyebrow {
+  font-family: var(--mono); font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: .18em; color: var(--amber); margin-bottom: 7px;
+}
+.CF-title {
+  font-family: var(--sans); font-size: 26px; font-weight: 800; letter-spacing: -.01em;
+  text-transform: uppercase; margin: 0; line-height: 1.1;
+}
+.CF-sub { font-family: var(--serif); font-style: italic; font-size: 14.5px; color: var(--muted); margin-top: 6px; line-height: 1.45; }
+
+.CF-meta { display: flex; flex-wrap: wrap; gap: 26px; margin: 0 0 26px; }
+.CF-meta div { display: flex; flex-direction: column; gap: 2px; }
+.CF-meta dt {
+  font-family: var(--mono); font-size: 8.5px; text-transform: uppercase;
+  letter-spacing: .16em; color: var(--muted);
+}
+.CF-meta dd { margin: 0; font-family: var(--serif); font-size: 14.5px; font-weight: 600; }
+
+.CF-h {
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .2em;
+  color: var(--amber); margin: 30px 0 10px; padding-bottom: 5px; border-bottom: 1px solid var(--rule);
+}
+
+.CF-table, .CF-ing { width: 100%; border-collapse: collapse; font-size: 13px; }
+.CF-table th, .CF-ing th {
+  font-family: var(--mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: .14em;
+  color: var(--muted); font-weight: 400; text-align: left; padding: 0 8px 6px 0; border-bottom: 1px solid var(--rule);
+}
+.CF-table th.num, .CF-ing th.num, .CF-table td.num, .CF-ing td.num { text-align: right; padding-right: 0; padding-left: 18px; }
+.CF-table td, .CF-ing td { padding: 7px 8px 7px 0; border-bottom: 1px solid #F0EFEC; vertical-align: baseline; }
+.CF-table tr:last-child td, .CF-ing tr:last-child td { border-bottom: none; }
+.CF-total-row td { font-weight: 700; border-top: 1.5px solid var(--ink); border-bottom: none !important; padding-top: 8px; }
+.CF-dim { color: var(--muted); font-style: italic; }
+
+.CF-comp { margin-top: 26px; }
+.CF-comp-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+.CF-comp-head h3 {
+  font-family: var(--serif); font-size: 16px; font-weight: 700; margin: 0; color: var(--navy);
+}
+.CF-yield { font-family: var(--mono); font-size: 9.5px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+
+.CF-ing tbody tr { cursor: pointer; }
+.CF-ing tbody tr:hover { background: #FAFAF9; }
+.CF-ing tbody tr.checked .CF-ing-name,
+.CF-ing tbody tr.checked .CF-ing-qty { text-decoration: line-through; color: var(--muted); }
+.CF-ing-name { overflow-wrap: anywhere; }
+.CF-ing-qty { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.CF-ing-pct { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+
+.CF-steps { margin: 0; padding-left: 0; list-style: none; counter-reset: cfstep; }
+.CF-steps li {
+  counter-increment: cfstep; position: relative; padding: 0 0 13px 34px;
+  font-size: 14px; line-height: 1.62;
+}
+.CF-steps li::before {
+  content: counter(cfstep, decimal-leading-zero);
+  position: absolute; left: 0; top: 1px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--amber);
+}
+.CF-steps li.highlighted { background: #FFF7EE; border-radius: 5px; padding-left: 34px; }
+.CF-notes { font-size: 13.5px; line-height: 1.65; color: var(--muted); white-space: pre-wrap; }
+
+@media (max-width: 700px) {
+  .CF-title { font-size: 21px; }
+  .CF-meta { gap: 16px; }
+  .CF-comp-head { flex-wrap: wrap; gap: 4px; }
+  .CF-yield { margin-left: 0; }
+}
+
+@media print {
+  .CF-ing tbody tr { cursor: default; }
+  .CF-h { break-after: avoid; }
+  .CF-comp { break-inside: avoid; }
+}
+
+.ST-row { margin-bottom: 10px; }
+
+/* status marker inline with a title in lists */
+.V-row h4 .ST-dot, .V-result-title .ST-dot { margin-right: 4px; }
+.H-card-status { padding: 0 11px; }
+.H-card-status:empty { display: none; }
+
+.CF-head-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+.CF-batch { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); }
+.CF-batch strong { color: var(--ink); font-size: 12px; letter-spacing: 0; }
+.CF-clear { background: none; border: none; cursor: pointer; font-family: var(--mono); font-size: 9.5px; color: var(--amber); text-decoration: underline; padding: 0; }

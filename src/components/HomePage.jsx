@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FOLDER_SEP, ancestorPaths } from '../lib/vault.js'
 import { resolveMedia } from '../lib/settings.js'
+import { StatusBadge } from './StatusBadge.jsx'
 
 function parentOf(path) {
   const i = path.lastIndexOf(FOLDER_SEP)
@@ -241,6 +242,7 @@ export default function HomePage({
                   { label: 'Move to…', run: () => onRequestMove({ kind: 'recipe', id: r.id, name: r.title, currentPath: String(r.folder || '') }) },
                 ]} />
                 <span className="H-card-title">{r.title || 'Untitled'}</span>
+                <span className="H-card-status"><StatusBadge recipe={r} /></span>
                 {r.category && <span className="H-card-meta">{r.category}</span>}
               </div>
             ))}

@@ -9,6 +9,8 @@ import NotesPanel from './NotesPanel.jsx'
 import IDPanel from './IDPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
 import { BacklinksPanel, LinkedText, RecipeProperties } from './VaultPanels.jsx'
+import ChefView from './ChefView.jsx'
+import { StatusPicker } from './StatusBadge.jsx'
 import { normalizeKey } from '../lib/vault.js'
 
 export default function RecipeView({
@@ -16,6 +18,9 @@ export default function RecipeView({
   vault, allFolders = [], allTags = [], onOpenRecipe, onCreateFromLink, onLinkBack,
 }) {
   const [tab, setTab] = useState('recipe')
+  // Presentation of the recipe body. 'chef' is the default professional-cookbook layout;
+  // 'classic' is the original list view. Remembered per device.
+  const [layout, setLayout] = useState(() => localStorage.getItem('qdplus_layout') || 'chef')
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const [checked, setChecked] = useState(new Set())
   const [highlightedSteps, setHighlightedSteps] = useState(new Set())
@@ -40,6 +45,8 @@ export default function RecipeView({
   const [exportNotes, setExportNotes] = useState(false)
   const [showCopyLangMenu, setShowCopyLangMenu] = useState(false)
   const addNoteRef = useRef(null)
+
+  useEffect(() => { localStorage.setItem('qdplus_layout', layout) }, [layout])
 
   useEffect(() => {
     setChecked(new Set()); setHighlightedSteps(new Set()); setAppliedScale(null); setTranslated(null)
@@ -179,6 +186,10 @@ export default function RecipeView({
       <div className="Q-toolbar">
         {!appliedScale && <button className={`btn xs ${showScale ? 'amber' : 'ghost'}`} onClick={() => setShowScale(!showScale)}>⚖ Scale</button>}
         <button className={`btn xs ${showPct ? 'amber' : 'ghost'}`} onClick={() => setShowPct(!showPct)}>% Baker's</button>
+        <span className="CF-modes" title="Recipe layout">
+          <button className={layout === 'chef' ? 'active' : ''} onClick={() => setLayout('chef')}>Chef</button>
+          <button className={layout === 'classic' ? 'active' : ''} onClick={() => setLayout('classic')}>Classic</button>
+        </span>
         <select style={{ border: '1px solid var(--rule)', borderRadius: 5, padding: '4px 7px', fontSize: 11.5, fontFamily: 'var(--mono)', background: '#fff', color: 'var(--ink)' }} value={targetLang} onChange={(e) => setTargetLang(e.target.value)}>
           {LANGS.map((l) => <option key={l}>{l}</option>)}
         </select>
@@ -280,9 +291,19 @@ export default function RecipeView({
           )}
         </div>
       )}
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.18em', color: 'var(--navy)', marginBottom: 7 }}>
-        Ingredients{checked.size > 0 && <button style={{ marginLeft: 10, fontFamily: 'var(--mono)', fontSize: 9, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', textDecoration: 'underline' }} onClick={() => { setChecked(new Set()); setHighlightedSteps(new Set()) }}>clear</button>}
-      </div>
+      {layout !== 'chef' && (
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.18em', color: 'var(--navy)', marginBottom: 7 }}>
+          Ingredients{checked.size > 0 && <button style={{ marginLeft: 10, fontFamily: 'var(--mono)', fontSize: 9, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', textDecoration: 'underline' }} onClick={() => { setChecked(new Set()); setHighlightedSteps(new Set()) }}>clear</button>}
+        </div>
+      )}
+      {layout === 'chef' ? (
+        <ChefView
+          recipe={viewR} checked={checked} onToggle={handleIngToggle}
+          highlightedSteps={highlightedSteps} resolveLink={resolveLink}
+          onOpenRecipe={onOpenRecipe} onCreateFromLink={onCreateFromLink}
+          onClearChecks={() => { setChecked(new Set()); setHighlightedSteps(new Set()) }}
+        />
+      ) : (<>
       {sections.map((sec, si) => {
         const pctData = showPct ? calcPct(sec.items, pctMode, pctBase, customBaseGrams ? parseFloat(customBaseGrams) : null) : null
         const secG = sec.items.reduce((s, ing) => { const p = parseIng(ing); return s + toGrams(p.qty, p.unit) }, 0)
@@ -323,6 +344,7 @@ export default function RecipeView({
           <LinkedText text={viewR.notes} resolve={resolveLink} onOpen={onOpenRecipe} onCreate={onCreateFromLink} />
         </div>
       )}
+      </>)}
       {recipe.source_photos?.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.16em', color: 'var(--muted)', marginBottom: 7 }}>Source photos</div>
@@ -353,7 +375,10 @@ export default function RecipeView({
         {viewR.source && <div className="Q-meta-item"><dt>Source</dt><dd>{viewR.source}</dd></div>}
       </dl>
       {vault && (
-        <RecipeProperties recipe={recipe} allFolders={allFolders} allTags={allTags} onChange={onUpdate} />
+        <>
+          <div className="ST-row"><StatusPicker recipe={recipe} onChange={onUpdate} /></div>
+          <RecipeProperties recipe={recipe} allFolders={allFolders} allTags={allTags} onChange={onUpdate} />
+        </>
       )}
       <div className="Q-tabs">
         {[['recipe', '📖 Recipe'], ['notes', '📝 Notes & Media'], ['id', '🔬 I+D'], ['ai', '🤖 AI']].map(([k, l]) => (
