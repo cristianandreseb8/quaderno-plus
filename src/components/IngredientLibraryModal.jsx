@@ -113,7 +113,7 @@ function IngredientForm({ item, setItem, onSave, onCancel, saveLabel, allCategor
   }
 
   return (
-    <div style={{ padding: 14, background: '#f5f0e8' }}>
+    <div style={{ padding: 14, background: '#F3F3F2' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 10 }}>
         <div>
           <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>Name</label>
@@ -197,7 +197,7 @@ function IngredientRow({ item, usage, expanded, selected, onToggleExpand, onTogg
             {item.canonical_name !== item.name && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>({item.canonical_name})</span>}
             {(item.categories || []).length > 0
               ? item.categories.map((c) => <span key={c} style={{ fontSize: 10, background: '#EEF1F5', color: 'var(--id)', borderRadius: 4, padding: '1px 6px', marginLeft: 6 }}>{c}</span>)
-              : <span style={{ fontSize: 10, background: '#f5f0e8', color: 'var(--muted)', borderRadius: 4, padding: '1px 6px', marginLeft: 8 }}>{item.ingredient_type}</span>}
+              : <span style={{ fontSize: 10, background: '#F3F3F2', color: 'var(--muted)', borderRadius: 4, padding: '1px 6px', marginLeft: 8 }}>{item.ingredient_type}</span>}
             {(item.aliases || []).length > 0 && <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 6 }}>+{item.aliases.length} aliases</span>}
           </div>
           {item.descriptor && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>{item.descriptor}</div>}
@@ -475,7 +475,7 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
           <button onClick={startCreate} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--id)', background: 'none', color: 'var(--id)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Add ingredient</button>
         </div>
 
-        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--rule)', background: '#f8f5ee' }}>
+        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--rule)', background: '#FAFAF9' }}>
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
             <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--muted)' }}>Scope:</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, cursor: 'pointer' }}>
@@ -519,7 +519,7 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
           </div>
         </div>
 
-        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--rule)', background: '#f4f0ea', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--rule)', background: '#F5F5F4', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--muted)' }}>Categorize:</span>
           <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
             {selectedIngredientIds.size ? `${selectedIngredientIds.size} selected` : `all ${filtered.length} shown`}

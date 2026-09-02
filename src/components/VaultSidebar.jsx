@@ -96,13 +96,15 @@ function highlight(line, q) {
 export default function VaultSidebar({
   recipes, index, selId, onOpen, q, setQ, sortMode, setSortMode,
   onAutoCategorize, categorizingAI, folderFilter, setFolderFilter, tagFilter, setTagFilter,
-  loading, onOpenGraph,
+  loading, onOpenGraph, onCreateFolder, allFolders = [],
 }) {
   const [tab, setTab] = useState('files')
   const [collapsedFolders, setCollapsedFolders] = useState(new Set())
   const [collapsedTags, setCollapsedTags] = useState(new Set())
+  const [addingFolder, setAddingFolder] = useState(false)
+  const [newFolder, setNewFolder] = useState('')
 
-  const folderTree = useMemo(() => buildFolderTree(recipes), [recipes])
+  const folderTree = useMemo(() => buildFolderTree(recipes, allFolders), [recipes, allFolders])
   // Counted over the recipes actually shown, so folder/search filters and the tag pane agree.
   const tagTree = useMemo(() => {
     const counts = new Map()
@@ -190,8 +192,22 @@ export default function VaultSidebar({
               <div className="V-section">
                 <div className="V-section-h">
                   Folders
+                  {onCreateFolder && <button className="V-clear" onClick={() => setAddingFolder(true)}>+ new</button>}
                   {folderFilter && <button className="V-clear" onClick={() => setFolderFilter('')}>clear</button>}
                 </div>
+                {addingFolder && (
+                  <div className="V-newfolder-row">
+                    <input
+                      autoFocus value={newFolder} onChange={(e) => setNewFolder(e.target.value)}
+                      placeholder="Folder name or A/B path"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { onCreateFolder(newFolder); setNewFolder(''); setAddingFolder(false) }
+                        if (e.key === 'Escape') { setNewFolder(''); setAddingFolder(false) }
+                      }}
+                    />
+                    <button onClick={() => { onCreateFolder(newFolder); setNewFolder(''); setAddingFolder(false) }}>Add</button>
+                  </div>
+                )}
                 {folderTree.map((n) => (
                   <FolderNode key={n.path} node={n} depth={0} recipesByFolder={recipesByFolder}
                     collapsed={collapsedFolders} toggle={toggleSet(setCollapsedFolders)}

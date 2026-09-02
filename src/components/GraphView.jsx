@@ -147,7 +147,7 @@ export default function GraphView({ recipes, index, selId, onOpen, onClose }) {
         ctx.beginPath()
         ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
         if (n.kind === 'ghost') {
-          ctx.fillStyle = '#FAF7F0'; ctx.fill()
+          ctx.fillStyle = '#FFFFFF'; ctx.fill()
           ctx.strokeStyle = '#B9AFA2'; ctx.setLineDash([2, 2]); ctx.stroke(); ctx.setLineDash([])
         } else {
           ctx.fillStyle = n.id === selId ? '#BC6C2C' : '#1F3A4D'

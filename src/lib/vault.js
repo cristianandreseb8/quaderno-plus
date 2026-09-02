@@ -141,23 +141,27 @@ export function buildVaultIndex(recipes) {
 }
 
 // Nested {name, path, count, children[]} tree for the folder pane.
-export function buildFolderTree(recipes) {
+// `extraPaths` lets caller-created folders show up even before any recipe lives in them.
+export function buildFolderTree(recipes, extraPaths = []) {
   const root = { name: '', path: '', children: new Map(), count: 0 }
-  for (const r of recipes || []) {
-    const folder = String(r.folder || '').trim()
-    if (!folder) continue
-    const parts = folder.split(FOLDER_SEP).map((p) => p.trim()).filter(Boolean)
+  const ensure = (folder, counts) => {
+    const parts = String(folder || '').split(FOLDER_SEP).map((p) => p.trim()).filter(Boolean)
     let node = root
-    let acc = []
+    const acc = []
     for (const part of parts) {
       acc.push(part)
       if (!node.children.has(part)) {
         node.children.set(part, { name: part, path: acc.join(FOLDER_SEP), children: new Map(), count: 0 })
       }
       node = node.children.get(part)
-      node.count++
+      if (counts) node.count++
     }
   }
+  for (const r of recipes || []) {
+    const folder = String(r.folder || '').trim()
+    if (folder) ensure(folder, true)
+  }
+  for (const p of extraPaths) ensure(p, false)
   const toArray = (node) => [...node.children.values()]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((c) => ({ name: c.name, path: c.path, count: c.count, children: toArray(c) }))

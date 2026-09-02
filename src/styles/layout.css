@@ -13,7 +13,7 @@
 .btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .btn:disabled { opacity: .4; cursor: default; }
 .btn.amber { border-color: var(--amber); color: var(--amber); } .btn.amber:hover { background: var(--amber); color: #fff; }
-.btn.ghost { border-color: var(--rule); color: var(--muted); } .btn.ghost:hover { background: #ede6d9; color: var(--ink); }
+.btn.ghost { border-color: var(--rule); color: var(--muted); } .btn.ghost:hover { background: #ECECEB; color: var(--ink); }
 .btn.green { border-color: var(--green); color: var(--green); } .btn.green:hover { background: var(--green); color: #fff; }
 .btn.ai { border-color: var(--ai); color: var(--ai); } .btn.ai:hover { background: var(--ai); color: #fff; }
 .btn.id { border-color: var(--id); color: var(--id); } .btn.id:hover { background: var(--id); color: #fff; }
@@ -22,20 +22,22 @@
 .btn.xs { font-size: 10.5px; padding: 4px 8px; }
 
 .Q-body { flex: 1; display: grid; grid-template-columns: 282px 1fr; min-height: 0; }
-.Q-side { border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; }
+/* min-width:0 — grid items default to min-width:auto, so the nowrap folder/recipe
+   names in the sidebar would otherwise stretch the column past the viewport. */
+.Q-side { border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--paper); }
 .Q-search { padding: 10px 12px; border-bottom: 1px solid var(--rule); }
 .Q-search input { width: 100%; border: 1px solid var(--rule); background: #fff; border-radius: 6px; padding: 7px 10px; font-size: 12.5px; font-family: var(--sans); color: var(--ink); }
 .Q-search input:focus { outline: none; border-color: var(--navy); }
 .Q-list { overflow: auto; flex: 1; }
 .Q-list-item { width: 100%; text-align: left; background: none; border: none; cursor: pointer; padding: 9px 13px; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; }
-.Q-list-item:hover { background: #f3ede0; }
-.Q-list-item[aria-selected=true] { background: #fff; box-shadow: inset 3px 0 0 var(--amber); }
+.Q-list-item:hover { background: #F4F4F3; }
+.Q-list-item[aria-selected=true] { background: #F1F5F9; box-shadow: inset 3px 0 0 var(--amber); }
 .Q-list-thumb { width: 34px; height: 34px; border-radius: 5px; object-fit: cover; flex-shrink: 0; }
 .Q-list-thumb-ph { width: 34px; height: 34px; border-radius: 5px; background: var(--rule); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; }
 .Q-list-item h4 { font-family: var(--serif); font-size: 14px; font-weight: 600; margin: 0 0 2px; }
 .Q-list-item span { font-family: var(--mono); font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
 .Q-msg { padding: 20px 14px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
-.Q-main { overflow: auto; }
+.Q-main { overflow: auto; min-width: 0; }
 .Q-pane { max-width: 820px; margin: 0 auto; padding: 28px 36px 100px; }
 
 .Q-hero { max-width: 500px; margin: 10vh auto 0; text-align: center; padding: 20px; }

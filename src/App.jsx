@@ -1,8 +1,10 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { dbDelete, dbInsert, dbUpdate, dbLoad } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
-import { buildVaultIndex, normalizeKey, tagsOf } from './lib/vault.js'
+import { ancestorPaths, buildVaultIndex, normalizeKey, tagsOf } from './lib/vault.js'
+import { KEY_FOLDERS, KEY_HOME_MEDIA, loadSettings, saveSetting } from './lib/settings.js'
 import VaultSidebar from './components/VaultSidebar.jsx'
+import HomePage from './components/HomePage.jsx'
 
 // After a redeploy, chunk filenames change and a client that loaded the old index.html
 // gets a 404 when it lazy-loads a panel — which used to unmount the app to a blank screen.
@@ -47,16 +49,32 @@ export default function App() {
   const [palette, setPalette] = useState(null) // null | 'switcher' | 'command'
   const [folderFilter, setFolderFilter] = useState('')
   const [tagFilter, setTagFilter] = useState('')
+  const [homeMedia, setHomeMedia] = useState('')
+  const [createdFolders, setCreatedFolders] = useState([])
+  const [homePath, setHomePath] = useState('')
+  // Mobile only: the sidebar and the main pane share the screen, so this tracks which one
+  // is showing. On desktop both are always visible and this has no effect.
+  const [mobileNav, setMobileNav] = useState(false)
+
+  // Open on the home page rather than jumping straight into a recipe; the last recipe
+  // you were working on is still one tap away via the "Continue" card there.
+  const [lastRecipeId, setLastRecipeId] = useState(() => localStorage.getItem('qdplus_last_recipe') || null)
 
   useEffect(() => {
     dbLoad().then((data) => {
       setRecipes(data)
       const lastId = localStorage.getItem('qdplus_last_recipe')
-      const restored = lastId && data.some((r) => r.id === lastId) ? lastId : data[0]?.id || null
-      setSelId(restored)
+      setLastRecipeId(lastId && data.some((r) => r.id === lastId) ? lastId : null)
     })
       .catch((e) => setSaveErr('Load failed: ' + e.message))
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    loadSettings().then((s) => {
+      setHomeMedia(s[KEY_HOME_MEDIA]?.url || '')
+      setCreatedFolders(Array.isArray(s[KEY_FOLDERS]) ? s[KEY_FOLDERS] : (s[KEY_FOLDERS]?.list || []))
+    })
   }, [])
 
   useEffect(() => {
@@ -197,7 +215,12 @@ export default function App() {
 
   const sel = recipes.find((x) => x.id === selId) || null
   const vault = useMemo(() => buildVaultIndex(recipes), [recipes])
-  const allFolders = useMemo(() => [...vault.folderCounts.keys()].sort(), [vault])
+  // Folders in use by recipes, plus empty ones the user created (and every parent of both).
+  const allFolders = useMemo(() => {
+    const set = new Set(vault.folderCounts.keys())
+    for (const f of createdFolders) for (const anc of ancestorPaths(f)) set.add(anc)
+    return [...set].sort()
+  }, [vault, createdFolders])
   const allTags = useMemo(() => [...vault.tagCounts.keys()].sort(), [vault])
 
   const filtered = useMemo(() => {
@@ -222,7 +245,7 @@ export default function App() {
   }, [recipes, q, sortMode, recentlyOpened, folderFilter, tagFilter])
 
   const openRecipe = useCallback((id) => {
-    setSelId(id); setMode('view')
+    setSelId(id); setMode('view'); setMobileNav(false)
     setRecentlyOpened((prev) => {
       const next = [id, ...prev.filter((x) => x !== id)].slice(0, 50)
       localStorage.setItem('qdplus_opened', JSON.stringify(next))
@@ -284,7 +307,25 @@ export default function App() {
     } catch (e) { setSaveErr('Filing failed: ' + e.message) } finally { setCategorizingAI(false) }
   }
 
+  // An empty folder has no recipe pointing at it, so it only exists in settings until used.
+  async function createFolder(path) {
+    const clean = String(path || '').split('/').map((p) => p.trim()).filter(Boolean).join('/')
+    if (!clean || allFolders.includes(clean)) return
+    const next = [...createdFolders, clean]
+    setCreatedFolders(next)
+    if (!(await saveSetting(KEY_FOLDERS, next))) setSaveErr('Could not save the new folder.')
+  }
+
+  async function setCover(url) {
+    setHomeMedia(url)
+    if (!(await saveSetting(KEY_HOME_MEDIA, { url }))) setSaveErr('Could not save the cover.')
+  }
+
+  function goHome() { setSelId(null); setMode('view'); setHomePath(''); setMobileNav(false) }
+
   const commands = useMemo(() => [
+    { id: 'home', icon: '⌂', title: 'Go to home page', shortcut: '', run: goHome },
+    { id: 'newfolder', icon: '🗂', title: 'Create a new folder', shortcut: '', run: () => { goHome(); setTimeout(() => document.querySelector('.H-section-head .H-btn')?.click(), 60) } },
     { id: 'file', icon: '🗂', title: 'Organize: file recipes into folders by category', shortcut: '', run: fileByCategory },
     { id: 'new', icon: '＋', title: 'Create new recipe', shortcut: '', run: () => { setMode('new'); setSelId(null) } },
     { id: 'graph', icon: '🕸', title: 'Open graph view', shortcut: '⌘G', run: () => setShowGraph(true) },
@@ -313,14 +354,16 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const isOpen = mode !== 'view' || !!sel
+  // On mobile the main pane (home page or a recipe) is the default; the sidebar is opened
+  // deliberately. Desktop ignores this — the media query only kicks in under 700px.
+  const isOpen = !mobileNav
 
   return (
     <div className="Q" data-open={isOpen ? '1' : '0'}>
       <header className="Q-top">
-        <div className="Q-brand">
+        <button className="Q-brand Q-brand-btn" onClick={goHome} title="Go to home page">
           Quaderno<span className="ai-badge">AI</span><span className="id-badge">+</span>
-        </div>
+        </button>
         <div className="Q-top-right">
           {saveErr && <span style={{ color: '#9b2c2c', fontSize: 10, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{saveErr}</span>}
           <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>{!loading && `${recipes.length} recipe${recipes.length !== 1 ? 's' : ''}`}</span>
@@ -339,11 +382,12 @@ export default function App() {
           folderFilter={folderFilter} setFolderFilter={setFolderFilter}
           tagFilter={tagFilter} setTagFilter={setTagFilter}
           loading={loading} onOpenGraph={() => setShowGraph(true)}
+          onCreateFolder={createFolder} allFolders={allFolders}
         />
 
         <main className="Q-main">
           <div className="Q-pane">
-            <button className="btn ghost xs Q-back-btn" style={{ marginBottom: 14 }} onClick={() => { setMode('view'); setSelId(null) }}>← All recipes</button>
+            <button className="btn ghost xs Q-back-btn" style={{ marginBottom: 14 }} onClick={() => setMobileNav(true)}>☰ Folders & search</button>
             <Suspense fallback={<div className="Q-msg">Loading…</div>}>
               {mode === 'new' && <RecipeEditor onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(recipes[0]?.id || null) }} />}
               {mode === 'edit' && sel && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
@@ -357,12 +401,20 @@ export default function App() {
               )}
             </Suspense>
             {mode === 'view' && !sel && !loading && (
-              <div className="Q-hero">
-                <div className="glyph">❦</div>
-                <h2>Quaderno+</h2>
-                <p>Professional recipe intelligence with R&D tools. Baker's percentages, sensory evaluation, version tracking, media library, and AI assistance — all in one place.</p>
-                <button className="btn amber" onClick={() => setMode('new')}>Add first recipe</button>
-              </div>
+              <>
+                {lastRecipeId && recipes.some((r) => r.id === lastRecipeId) && !homePath && (
+                  <button className="H-continue" onClick={() => openRecipe(lastRecipeId)}>
+                    <span className="H-continue-label">Continue where you left off</span>
+                    <span className="H-continue-title">{recipes.find((r) => r.id === lastRecipeId)?.title}</span>
+                  </button>
+                )}
+                <HomePage
+                  recipes={recipes} folders={allFolders} path={homePath} setPath={setHomePath}
+                  onOpenRecipe={openRecipe} onCreateFolder={createFolder}
+                  mediaUrl={homeMedia} onSetMedia={setCover}
+                  onNewRecipe={() => { setMode('new'); setSelId(null) }}
+                />
+              </>
             )}
           </div>
         </main>
