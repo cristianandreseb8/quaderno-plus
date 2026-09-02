@@ -19,6 +19,8 @@ function toDb(r) {
     fixed_lang: r.fixed_lang || null,
     copied_from: r.copied_from || null,
     is_favorite: r.is_favorite || false,
+    tags: r.tags || [],
+    folder: r.folder || '',
   }
 }
 
@@ -34,6 +36,8 @@ function fromDb(r) {
     fixed_lang: r.fixed_lang || null,
     copied_from: r.copied_from || null,
     is_favorite: r.is_favorite || false,
+    tags: r.tags || [],
+    folder: r.folder || '',
   }
 }
 

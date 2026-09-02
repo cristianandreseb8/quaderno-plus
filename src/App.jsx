@@ -1,6 +1,8 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { dbDelete, dbInsert, dbUpdate, dbLoad } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
+import { buildVaultIndex, normalizeKey, tagsOf } from './lib/vault.js'
+import VaultSidebar from './components/VaultSidebar.jsx'
 
 // After a redeploy, chunk filenames change and a client that loaded the old index.html
 // gets a 404 when it lazy-loads a panel — which used to unmount the app to a blank screen.
@@ -25,6 +27,8 @@ const RecipeEditor = lazyRetry(() => import('./components/RecipeEditor.jsx'))
 const ComparePanel = lazyRetry(() => import('./components/ComparePanel.jsx'))
 const IngredientLibraryModal = lazyRetry(() => import('./components/IngredientLibraryModal.jsx'))
 const AppAIChat = lazyRetry(() => import('./components/AppAIChat.jsx'))
+const GraphView = lazyRetry(() => import('./components/GraphView.jsx'))
+const Palette = lazyRetry(() => import('./components/Palette.jsx'))
 
 export default function App() {
   const [recipes, setRecipes] = useState([])
@@ -39,6 +43,10 @@ export default function App() {
   const [showCompare, setShowCompare] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
   const [categorizingAI, setCategorizingAI] = useState(false)
+  const [showGraph, setShowGraph] = useState(false)
+  const [palette, setPalette] = useState(null) // null | 'switcher' | 'command'
+  const [folderFilter, setFolderFilter] = useState('')
+  const [tagFilter, setTagFilter] = useState('')
 
   useEffect(() => {
     dbLoad().then((data) => {
@@ -188,8 +196,17 @@ export default function App() {
   }
 
   const sel = recipes.find((x) => x.id === selId) || null
+  const vault = useMemo(() => buildVaultIndex(recipes), [recipes])
+  const allFolders = useMemo(() => [...vault.folderCounts.keys()].sort(), [vault])
+  const allTags = useMemo(() => [...vault.tagCounts.keys()].sort(), [vault])
+
   const filtered = useMemo(() => {
     let list = recipes.filter((r) => {
+      if (folderFilter) {
+        const f = String(r.folder || '')
+        if (f !== folderFilter && !f.startsWith(folderFilter + '/')) return false
+      }
+      if (tagFilter && !tagsOf(r).some((t) => t === tagFilter || t.startsWith(tagFilter + '/'))) return false
       if (!q.trim()) return true
       return [r.title, r.category, ...(r.ingredients || [])].join(' ').toLowerCase().includes(q.toLowerCase())
     })
@@ -202,16 +219,99 @@ export default function App() {
       list = [...list].sort((a, b) => { const ia = idx(a.id), ib = idx(b.id); if (ia === -1 && ib === -1) return 0; if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib })
     }
     return list
-  }, [recipes, q, sortMode, recentlyOpened])
+  }, [recipes, q, sortMode, recentlyOpened, folderFilter, tagFilter])
 
-  function openRecipe(id) {
+  const openRecipe = useCallback((id) => {
     setSelId(id); setMode('view')
     setRecentlyOpened((prev) => {
       const next = [id, ...prev.filter((x) => x !== id)].slice(0, 50)
       localStorage.setItem('qdplus_opened', JSON.stringify(next))
       return next
     })
+  }, [])
+
+  // Clicking an unresolved [[link]] creates that recipe, the way Obsidian creates a note on the fly.
+  async function createFromLink(title) {
+    const existing = recipes.find((r) => normalizeKey(r.title) === normalizeKey(title))
+    if (existing) { openRecipe(existing.id); return }
+    try {
+      const saved = await dbInsert({
+        title, category: '', time: '', servings: '', notes: '', source: 'Manual',
+        ingredients: [], steps: [], notes_pad: '', thumbnail: '', source_photos: [],
+        id_data: '', media_library: '', fixed_lang: null, copied_from: null,
+        tags: [], folder: sel?.folder || '',
+      })
+      setRecipes((p) => [saved, ...p])
+      setSelId(saved.id); setMode('edit')
+    } catch (e) { setSaveErr('Create failed: ' + e.message) }
   }
+
+  // Appends a [[link]] to the source recipe's notes — the "Link it" button on unlinked mentions.
+  async function linkBack(fromId, targetTitle) {
+    const r = recipes.find((x) => x.id === fromId)
+    if (!r) return
+    const note = (r.notes || '').trim()
+    await updateRecipe({ ...r, notes: (note ? note + '\n' : '') + `Related: [[${targetTitle}]]` })
+  }
+
+  // Turns the existing (messy, inconsistently-cased) categories into a clean folder tree.
+  // "Panadería / Viennoiserie" nests as two levels; "cookies"/"Cookies" collapse to one folder.
+  async function fileByCategory() {
+    const canonical = new Map()
+    const freq = new Map()
+    for (const r of recipes) {
+      const cat = String(r.category || '').trim()
+      if (!cat) continue
+      const path = cat.split('/').map((p) => p.trim()).filter(Boolean).join('/')
+      const key = path.toLowerCase()
+      freq.set(key, (freq.get(key) || 0) + 1)
+      const prev = canonical.get(key)
+      // Prefer the capitalised spelling when the same folder appears in several casings.
+      if (!prev || (/^[a-z]/.test(prev) && /^[A-Z]/.test(path))) canonical.set(key, path)
+    }
+    const targets = recipes.filter((r) => !String(r.folder || '').trim() && String(r.category || '').trim())
+    if (!targets.length) { alert('Every recipe with a category is already filed.'); return }
+    if (!window.confirm(`File ${targets.length} recipe${targets.length !== 1 ? 's' : ''} into ${canonical.size} folders based on their category?\n\nRecipes already in a folder are left alone.`)) return
+    setCategorizingAI(true)
+    try {
+      for (const r of targets) {
+        const key = String(r.category || '').split('/').map((p) => p.trim()).filter(Boolean).join('/').toLowerCase()
+        const folder = canonical.get(key)
+        if (!folder) continue
+        const saved = await dbUpdate({ ...r, folder })
+        setRecipes((p) => p.map((x) => (x.id === saved.id ? saved : x)))
+      }
+    } catch (e) { setSaveErr('Filing failed: ' + e.message) } finally { setCategorizingAI(false) }
+  }
+
+  const commands = useMemo(() => [
+    { id: 'file', icon: '🗂', title: 'Organize: file recipes into folders by category', shortcut: '', run: fileByCategory },
+    { id: 'new', icon: '＋', title: 'Create new recipe', shortcut: '', run: () => { setMode('new'); setSelId(null) } },
+    { id: 'graph', icon: '🕸', title: 'Open graph view', shortcut: '⌘G', run: () => setShowGraph(true) },
+    { id: 'switch', icon: '🔎', title: 'Quick switcher: jump to recipe', shortcut: '⌘O', run: () => setPalette('switcher') },
+    { id: 'library', icon: '📦', title: 'Open ingredient library', shortcut: '', run: () => setShowLibrary(true) },
+    { id: 'compare', icon: '⚖', title: 'Compare recipes', shortcut: '', run: () => setShowCompare(true) },
+    { id: 'ai', icon: '🌐', title: 'Open AI assistant', shortcut: '', run: () => setShowAppAI(true) },
+    { id: 'cat', icon: '🏷', title: 'AI auto-categorize recipes', shortcut: '', run: handleAutoCategories },
+    { id: 'clearf', icon: '✕', title: 'Clear folder & tag filters', shortcut: '', run: () => { setFolderFilter(''); setTagFilter('') } },
+    { id: 'star', icon: '★', title: 'Toggle bookmark on current recipe', shortcut: '', run: () => sel && updateRecipe({ ...sel, is_favorite: !sel.is_favorite }) },
+    { id: 'edit', icon: '✎', title: 'Edit current recipe', shortcut: '', run: () => sel && setMode('edit') },
+  ], [sel, recipes])
+
+  // Obsidian's core shortcuts. Uses code-based keys so they work on non-QWERTY layouts too.
+  useEffect(() => {
+    function onKey(e) {
+      const mod = e.metaKey || e.ctrlKey
+      if (!mod) return
+      const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')
+      if (e.code === 'KeyO' && !e.shiftKey) { e.preventDefault(); setPalette('switcher') }
+      else if (e.code === 'KeyP' && !e.shiftKey) { e.preventDefault(); setPalette('command') }
+      else if (e.code === 'KeyG' && !e.shiftKey) { e.preventDefault(); setShowGraph((v) => !v) }
+      else if (e.code === 'KeyF' && e.shiftKey && !inField) { e.preventDefault(); setPalette(null); document.querySelector('.Q-search input')?.focus() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const isOpen = mode !== 'view' || !!sel
 
@@ -232,42 +332,14 @@ export default function App() {
       </header>
 
       <div className="Q-body">
-        <aside className="Q-side">
-          <div className="Q-search"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search recipes…" /></div>
-          <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Sort:</span>
-            <select value={sortMode} onChange={(e) => setSortMode(e.target.value)} style={{ flex: 1, border: '1px solid var(--rule)', borderRadius: 5, padding: '3px 5px', fontSize: 11, fontFamily: 'var(--mono)', background: '#fff', color: 'var(--ink)' }}>
-              <option value="recent">Recent first</option>
-              <option value="opened">Last opened</option>
-              <option value="az">A → Z</option>
-              <option value="za">Z → A</option>
-              <option value="category">Category</option>
-              <option value="favorites">Favorites</option>
-            </select>
-          </div>
-          <div style={{ padding: '4px 12px 5px', borderBottom: '1px solid var(--rule)' }}>
-            <button onClick={handleAutoCategories} disabled={categorizingAI} className="btn ghost xs" style={{ width: '100%', fontSize: 10 }}>
-              {categorizingAI ? 'Categorizing...' : 'AI auto-categorize'}
-            </button>
-          </div>
-          <div className="Q-list">
-            {loading && <div className="Q-msg">Loading…</div>}
-            {!loading && !filtered.length && <div className="Q-msg">{q ? 'No matches.' : 'No recipes yet!'}</div>}
-            {filtered.map((r) => (
-              <div
-                key={r.id} className="Q-list-item" role="button" tabIndex={0} aria-selected={r.id === selId && mode === 'view'}
-                onClick={() => openRecipe(r.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecipe(r.id) } }}
-              >
-                {r.thumbnail ? <img src={r.thumbnail} className="Q-list-thumb" alt="" /> : <div className="Q-list-thumb-ph">🍞</div>}
-                <button onClick={(e) => { e.stopPropagation(); updateRecipe({ ...r, is_favorite: !r.is_favorite }) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '0 2px', flexShrink: 0, lineHeight: 1 }}>{r.is_favorite ? '⭐' : '☆'}</button>
-                <div>
-                  <h4>{r.title}</h4>
-                  <span>{[r.category, r.source].filter(Boolean).join(' · ') || '—'}{r.fixed_lang && ` · 📌${r.fixed_lang}`}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </aside>
+        <VaultSidebar
+          recipes={filtered} index={vault} selId={mode === 'view' ? selId : null} onOpen={openRecipe}
+          q={q} setQ={setQ} sortMode={sortMode} setSortMode={setSortMode}
+          onAutoCategorize={handleAutoCategories} categorizingAI={categorizingAI}
+          folderFilter={folderFilter} setFolderFilter={setFolderFilter}
+          tagFilter={tagFilter} setTagFilter={setTagFilter}
+          loading={loading} onOpenGraph={() => setShowGraph(true)}
+        />
 
         <main className="Q-main">
           <div className="Q-pane">
@@ -275,7 +347,14 @@ export default function App() {
             <Suspense fallback={<div className="Q-msg">Loading…</div>}>
               {mode === 'new' && <RecipeEditor onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(recipes[0]?.id || null) }} />}
               {mode === 'edit' && sel && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
-              {mode === 'view' && sel && <RecipeView key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)} onUpdate={updateRecipe} allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant} />}
+              {mode === 'view' && sel && (
+                <RecipeView
+                  key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)}
+                  onUpdate={updateRecipe} allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant}
+                  vault={vault} allFolders={allFolders} allTags={allTags}
+                  onOpenRecipe={openRecipe} onCreateFromLink={createFromLink} onLinkBack={linkBack}
+                />
+              )}
             </Suspense>
             {mode === 'view' && !sel && !loading && (
               <div className="Q-hero">
@@ -306,6 +385,22 @@ export default function App() {
       {showLibrary && (
         <Suspense fallback={null}>
           <IngredientLibraryModal onClose={() => setShowLibrary(false)} recipes={recipes} />
+        </Suspense>
+      )}
+      {showGraph && (
+        <Suspense fallback={null}>
+          <GraphView recipes={recipes} index={vault} selId={selId} onOpen={openRecipe} onClose={() => setShowGraph(false)} />
+        </Suspense>
+      )}
+      {palette && (
+        <Suspense fallback={null}>
+          <Palette
+            mode={palette === 'command' ? 'command' : 'switcher'}
+            recipes={recipes} commands={commands}
+            onClose={() => setPalette(null)}
+            onOpenRecipe={openRecipe}
+            onRunCommand={(c) => c.run()}
+          />
         </Suspense>
       )}
     </div>
