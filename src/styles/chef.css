@@ -352,7 +352,16 @@
 @media (max-width: 700px) { .DL { height: 94vh; } .DL-form-row { flex-wrap: wrap; } }
 
 /* ---------- Rubber-band selection ---------- */
-.H-surface { position: relative; min-height: 220px; }
+.H-surface {
+  position: relative;
+  /* The grid fills the pane edge to edge, which left almost nowhere to start a
+     rubber-band drag. The negative margin pulls a grabbable gutter out on each side
+     without shifting the cards, and the min-height keeps empty space below the last
+     row so there is always somewhere to begin a selection. */
+  padding: 0 18px 40px;
+  margin: 0 -18px;
+  min-height: 60vh;
+}
 .H-marquee {
   position: absolute; z-index: 5; pointer-events: none;
   border: 1px solid var(--navy); background: rgba(31,58,77,.10); border-radius: 2px;
