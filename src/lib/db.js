@@ -19,17 +19,6 @@ function toDb(r) {
     fixed_lang: r.fixed_lang || null,
     copied_from: r.copied_from || null,
     is_favorite: r.is_favorite || false,
-    tags: r.tags || [],
-    folder: r.folder || '',
-    status: r.status || '',
-    service_short: r.service_short || '',
-    service_long: r.service_long || '',
-    status_note: r.status_note || '',
-    storage_note: r.storage_note || '',
-    watch_out: r.watch_out || '',
-    critical_steps: r.critical_steps || [],
-    related: r.related || [],
-    next_recipe_id: r.next_recipe_id || null,
   }
 }
 
@@ -45,17 +34,6 @@ function fromDb(r) {
     fixed_lang: r.fixed_lang || null,
     copied_from: r.copied_from || null,
     is_favorite: r.is_favorite || false,
-    tags: r.tags || [],
-    folder: r.folder || '',
-    status: r.status || '',
-    service_short: r.service_short || '',
-    service_long: r.service_long || '',
-    status_note: r.status_note || '',
-    storage_note: r.storage_note || '',
-    watch_out: r.watch_out || '',
-    critical_steps: r.critical_steps || [],
-    related: r.related || [],
-    next_recipe_id: r.next_recipe_id || null,
   }
 }
 
@@ -77,19 +55,6 @@ export async function dbUpdate(r) {
   const { data, error } = await supabase.from('recipes').update(toDb(r)).eq('id', r.id).select().single()
   if (error) throw error
   return fromDb(data)
-}
-
-// Bulk re-file: every id gets the same folder. Used when moving/renaming a folder, where
-// a whole subtree changes path at once — one request per destination instead of per recipe.
-export async function dbSetFolder(ids, folder) {
-  if (!ids.length) return []
-  const { data, error } = await supabase
-    .from('recipes')
-    .update({ folder, updated_at: new Date().toISOString() })
-    .in('id', ids)
-    .select()
-  if (error) throw error
-  return (data || []).map(fromDb)
 }
 
 export async function dbDelete(id) {

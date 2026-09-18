@@ -8,22 +8,9 @@ import { LANGS } from '../lib/constants.js'
 import NotesPanel from './NotesPanel.jsx'
 import IDPanel from './IDPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
-import { BacklinksPanel, LinkedText, RecipeProperties } from './VaultPanels.jsx'
-import ChefView from './ChefView.jsx'
-import { StatusBanner, StatusPicker } from './StatusBadge.jsx'
-import RecipeFooter from './RecipeFooter.jsx'
-import DevLogPanel from './DevLogPanel.jsx'
-import { addAck, getChefName, loadAcks, setChefName } from '../lib/acks.js'
-import { normalizeKey } from '../lib/vault.js'
 
-export default function RecipeView({
-  recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant,
-  vault, allFolders = [], allTags = [], onOpenRecipe, onCreateFromLink, onLinkBack,
-}) {
+export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant }) {
   const [tab, setTab] = useState('recipe')
-  // Presentation of the recipe body. 'chef' is the default professional-cookbook layout;
-  // 'classic' is the original list view. Remembered per device.
-  const [layout, setLayout] = useState(() => localStorage.getItem('qdplus_layout') || 'chef')
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const [checked, setChecked] = useState(new Set())
   const [highlightedSteps, setHighlightedSteps] = useState(new Set())
@@ -48,30 +35,6 @@ export default function RecipeView({
   const [exportNotes, setExportNotes] = useState(false)
   const [showCopyLangMenu, setShowCopyLangMenu] = useState(false)
   const addNoteRef = useRef(null)
-  const [showDevLog, setShowDevLog] = useState(false)
-  const [acks, setAcks] = useState([])
-  const [chef, setChef] = useState(() => getChefName())
-
-  useEffect(() => { loadAcks(recipe.id).then(setAcks) }, [recipe.id])
-
-  // Signing off a critical step needs a name to attribute it to; ask once per device.
-  async function acknowledgeStep(i) {
-    let who = chef
-    if (!who) {
-      who = (window.prompt('Your name — recorded against this sign-off:') || '').trim()
-      if (!who) return
-      setChefName(who); setChef(who)
-    }
-    if (await addAck(recipe.id, i, who)) setAcks(await loadAcks(recipe.id))
-  }
-
-  function toggleCritical(i) {
-    const cur = Array.isArray(recipe.critical_steps) ? recipe.critical_steps : []
-    const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort((a, b) => a - b)
-    onUpdate({ ...recipe, critical_steps: next })
-  }
-
-  useEffect(() => { localStorage.setItem('qdplus_layout', layout) }, [layout])
 
   useEffect(() => {
     setChecked(new Set()); setHighlightedSteps(new Set()); setAppliedScale(null); setTranslated(null)
@@ -200,23 +163,11 @@ export default function RecipeView({
     [viewR],
   )
 
-  // [[Wikilink]] target -> recipe, matched on title regardless of case/spacing.
-  const resolveLink = useMemo(() => {
-    const byTitle = vault?.byTitle
-    return (target) => (byTitle ? byTitle.get(normalizeKey(target)) || null : null)
-  }, [vault])
-
   const recipeContent = (
     <div>
       <div className="Q-toolbar">
         {!appliedScale && <button className={`btn xs ${showScale ? 'amber' : 'ghost'}`} onClick={() => setShowScale(!showScale)}>⚖ Scale</button>}
         <button className={`btn xs ${showPct ? 'amber' : 'ghost'}`} onClick={() => setShowPct(!showPct)}>% Baker's</button>
-        <button className="btn xs ghost" onClick={() => setShowDevLog(true)} title="Development log — what you changed on each trial">🧪 Dev log</button>
-        <button className="btn xs ghost" onClick={() => window.print()} title="Print as recipe cards">🖨 Print</button>
-        <span className="CF-modes" title="Recipe layout">
-          <button className={layout === 'chef' ? 'active' : ''} onClick={() => setLayout('chef')}>Chef</button>
-          <button className={layout === 'classic' ? 'active' : ''} onClick={() => setLayout('classic')}>Classic</button>
-        </span>
         <select style={{ border: '1px solid var(--rule)', borderRadius: 5, padding: '4px 7px', fontSize: 11.5, fontFamily: 'var(--mono)', background: '#fff', color: 'var(--ink)' }} value={targetLang} onChange={(e) => setTargetLang(e.target.value)}>
           {LANGS.map((l) => <option key={l}>{l}</option>)}
         </select>
@@ -318,20 +269,9 @@ export default function RecipeView({
           )}
         </div>
       )}
-      {layout !== 'chef' && (
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.18em', color: 'var(--navy)', marginBottom: 7 }}>
-          Ingredients{checked.size > 0 && <button style={{ marginLeft: 10, fontFamily: 'var(--mono)', fontSize: 9, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', textDecoration: 'underline' }} onClick={() => { setChecked(new Set()); setHighlightedSteps(new Set()) }}>clear</button>}
-        </div>
-      )}
-      {layout === 'chef' ? (
-        <ChefView
-          recipe={viewR} checked={checked} onToggle={handleIngToggle}
-          highlightedSteps={highlightedSteps} resolveLink={resolveLink}
-          onOpenRecipe={onOpenRecipe} onCreateFromLink={onCreateFromLink}
-          onClearChecks={() => { setChecked(new Set()); setHighlightedSteps(new Set()) }}
-          acks={acks} chefName={chef} onAcknowledge={acknowledgeStep} onToggleCritical={toggleCritical}
-        />
-      ) : (<>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.18em', color: 'var(--navy)', marginBottom: 7 }}>
+        Ingredients{checked.size > 0 && <button style={{ marginLeft: 10, fontFamily: 'var(--mono)', fontSize: 9, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', textDecoration: 'underline' }} onClick={() => { setChecked(new Set()); setHighlightedSteps(new Set()) }}>clear</button>}
+      </div>
       {sections.map((sec, si) => {
         const pctData = showPct ? calcPct(sec.items, pctMode, pctBase, customBaseGrams ? parseFloat(customBaseGrams) : null) : null
         const secG = sec.items.reduce((s, ing) => { const p = parseIng(ing); return s + toGrams(p.qty, p.unit) }, 0)
@@ -360,30 +300,15 @@ export default function RecipeView({
       {viewR.steps?.length > 0 && (
         <>
           <div className="Q-steps-label">Method{highlightedSteps.size > 0 && <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--amber)', marginLeft: 10 }}>{highlightedSteps.size} step{highlightedSteps.size > 1 ? 's' : ''} highlighted</span>}</div>
-          <ol className="Q-steps">{viewR.steps.map((s, i) => (
-            <li key={i} className={highlightedSteps.has(i) ? 'highlighted' : ''}>
-              <LinkedText text={s} resolve={resolveLink} onOpen={onOpenRecipe} onCreate={onCreateFromLink} />
-            </li>
-          ))}</ol>
+          <ol className="Q-steps">{viewR.steps.map((s, i) => <li key={i} className={highlightedSteps.has(i) ? 'highlighted' : ''}>{s}</li>)}</ol>
         </>
       )}
-      {viewR.notes && (
-        <div className="Q-baker-note">
-          <LinkedText text={viewR.notes} resolve={resolveLink} onOpen={onOpenRecipe} onCreate={onCreateFromLink} />
-        </div>
-      )}
-      </>)}
+      {viewR.notes && <div className="Q-baker-note">{viewR.notes}</div>}
       {recipe.source_photos?.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.16em', color: 'var(--muted)', marginBottom: 7 }}>Source photos</div>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>{recipe.source_photos.map((src, i) => <img key={i} src={src} style={{ height: 64, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--rule)' }} onClick={() => setLightboxSrc(src)} alt="" />)}</div>
         </div>
-      )}
-      {vault && onOpenRecipe && (
-        <RecipeFooter recipe={recipe} recipes={allRecipes} onUpdate={onUpdate} onOpenRecipe={onOpenRecipe} />
-      )}
-      {vault && onOpenRecipe && (
-        <BacklinksPanel recipe={recipe} recipes={allRecipes} index={vault} onOpen={onOpenRecipe} onLinkBack={onLinkBack} />
       )}
       <div className="Q-view-foot"><button className="btn" onClick={onEdit}>Edit</button><button className="btn danger" onClick={onDelete}>Delete</button></div>
     </div>
@@ -405,13 +330,6 @@ export default function RecipeView({
         {viewR.servings && <div className="Q-meta-item"><dt>Yield</dt><dd>{viewR.servings}</dd></div>}
         {viewR.source && <div className="Q-meta-item"><dt>Source</dt><dd>{viewR.source}</dd></div>}
       </dl>
-      {vault && (
-        <>
-          <StatusBanner recipe={recipe} onChange={onUpdate} />
-          <div className="ST-row"><StatusPicker recipe={recipe} onChange={onUpdate} /></div>
-          <RecipeProperties recipe={recipe} allFolders={allFolders} allTags={allTags} onChange={onUpdate} />
-        </>
-      )}
       <div className="Q-tabs">
         {[['recipe', '📖 Recipe'], ['notes', '📝 Notes & Media'], ['id', '🔬 I+D'], ['ai', '🤖 AI']].map(([k, l]) => (
           <button key={k} className={`Q-tab-btn${tab === k ? ' active' : ''}${k === 'ai' ? ' ai-tab' : ''}${k === 'id' ? ' id-tab' : ''}`} onClick={() => setTab(k)}>{l}</button>
@@ -421,7 +339,6 @@ export default function RecipeView({
       {tab === 'notes' && <NotesPanel recipe={recipe} onSave={handleSaveNotes} onSaveMedia={handleSaveMedia} onAddNote={addNoteRef} />}
       {tab === 'id' && <IDPanel recipe={recipe} onSave={handleSaveIdData} allRecipes={allRecipes} />}
       {tab === 'ai' && <AIAssistant recipe={viewR} onAction={handleAssistantAction} onRequestSaveNote={handleRequestSaveNote} />}
-      {showDevLog && <DevLogPanel recipe={recipe} onClose={() => setShowDevLog(false)} />}
       {lightboxSrc && <div className="Q-lightbox" onClick={() => setLightboxSrc(null)}><img src={lightboxSrc} alt="" /></div>}
     </div>
   )
