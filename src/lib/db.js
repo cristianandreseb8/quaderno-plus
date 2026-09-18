@@ -37,10 +37,17 @@ function fromDb(r) {
   }
 }
 
+// The full select is ~14 MB (source photos, media library) and takes 2–3.5 s — right at the
+// anon statement timeout — so an occasional load fails. Retry before giving up.
 export async function dbLoad() {
-  const { data, error } = await supabase.from('recipes').select('*').order('created_at', { ascending: false })
-  if (error) throw error
-  return (data || []).map(fromDb)
+  let lastErr
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data, error } = await supabase.from('recipes').select('*').order('created_at', { ascending: false })
+    if (!error) return (data || []).map(fromDb)
+    lastErr = error
+    await new Promise((res) => setTimeout(res, 800 * (attempt + 1)))
+  }
+  throw lastErr
 }
 
 export async function dbInsert(r) {
