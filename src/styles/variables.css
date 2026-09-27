@@ -1,24 +1,114 @@
-.Q {
-  --paper: #FFFFFF;
-  --ink: #221C18;
-  --muted: #6E645C;
-  --rule: #E8E7E4;
+/* Design tokens. Every template (Settings → Appearance) overrides the same set, so
+   components only ever reference tokens — never raw colors. */
+:root {
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  --heading: var(--serif);
+  --heading-weight: 600;
+
+  --bg: #FFFFFF;
+  --side: #FAFAF8;
+  --surface: #FFFFFF;
+  --surface-2: #F6F5F2;
+  --hover: #F1F0EC;
+  --ink: #1D1B19;
+  --muted: #6B665F;
+  --faint: #A29C93;
+  --rule: #E8E6E1;
+  --rule-strong: #D6D2CB;
+  --accent: #B8652A;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #FBEFE3;
   --navy: #1F3A4D;
-  --amber: #BC6C2C;
-  --warm: #F7F6F4;
   --green: #2D6A4F;
+  --green-soft: #EAF3EE;
   --ai: #5B3A8C;
-  --red: #9b2c2c;
+  --ai-soft: #F3EFFA;
+  --red: #A33A3A;
+  --red-soft: #FBEDED;
   --teal: #1A6B6B;
   --id: #1A5276;
-  --serif: Georgia, "Iowan Old Style", serif;
-  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: ui-monospace, "SF Mono", "Menlo", monospace;
+  --id-soft: #F2F6FA;
+  --id-line: #CFDDEA;
+  --shadow-sm: 0 1px 2px rgba(20, 16, 12, .06), 0 1px 1px rgba(20, 16, 12, .04);
+  --shadow-lg: 0 18px 50px -12px rgba(20, 16, 12, .28), 0 4px 12px rgba(20, 16, 12, .08);
+  --overlay: rgba(24, 20, 16, .34);
+  --radius: 10px;
+  --radius-sm: 7px;
+  --fs: 14.5px; /* recipe reading size — Settings → Text size */
+
+  /* legacy aliases used by older panels */
+  --paper: var(--bg);
+  --amber: var(--accent);
+  --warm: var(--accent-soft);
+  color-scheme: light;
+}
+
+:root[data-theme="paper"] {
+  --bg: #FAF7F0; --side: #F5F0E6; --surface: #FFFDF8; --surface-2: #F3EDE1; --hover: #EFE7D8;
+  --ink: #221C18; --muted: #6E645C; --faint: #A69A8C; --rule: #E6DECF; --rule-strong: #D5C9B5;
+  --accent: #BC6C2C; --accent-soft: #FBEBDA; --navy: #1F3A4D;
+}
+
+:root[data-theme="bistro"] {
+  --serif: "Didot", "Bodoni 72", "Iowan Old Style", Georgia, serif;
+  --bg: #F8F4EC; --side: #F2ECE0; --surface: #FFFCF6; --surface-2: #F1EADD; --hover: #EAE1D0;
+  --ink: #2A1E17; --muted: #735F52; --faint: #A8968A; --rule: #E4D9C8; --rule-strong: #D2C3AD;
+  --accent: #8C2F39; --accent-soft: #F6E4E3; --navy: #3B2A20;
+  --green: #3F6B4A;
+}
+
+:root[data-theme="nordic"] {
+  --heading: var(--sans); --heading-weight: 650;
+  --bg: #F6F7F8; --side: #EFF1F3; --surface: #FFFFFF; --surface-2: #F2F4F6; --hover: #E9ECEF;
+  --ink: #1C2127; --muted: #5F6B7A; --faint: #98A2B0; --rule: #E2E6EA; --rule-strong: #CDD3DA;
+  --accent: #2E6F8E; --accent-soft: #E6F1F6; --navy: #1C2127;
+}
+
+:root[data-theme="kitchen"] {
+  --heading: var(--sans); --heading-weight: 750;
+  --bg: #FFFFFF; --side: #F7F7F7; --surface: #FFFFFF; --surface-2: #F2F2F2; --hover: #EAEAEA;
+  --ink: #000000; --muted: #3A3A3A; --faint: #767676; --rule: #D4D4D4; --rule-strong: #A8A8A8;
+  --accent: #C2410C; --accent-soft: #FFEDD5; --navy: #0B2540;
+  --fs: 16.5px;
+}
+
+:root[data-theme="slate"] {
+  color-scheme: dark;
+  --bg: #131518; --side: #171A1E; --surface: #1C1F24; --surface-2: #22262C; --hover: #292E35;
+  --ink: #E9E6E1; --muted: #A1A6AD; --faint: #6F757D; --rule: #2C3138; --rule-strong: #3A4048;
+  --accent: #E09A5B; --accent-ink: #1A1206; --accent-soft: #3A2A1C; --navy: #DCE4EC;
+  --green: #74C69D; --green-soft: #1E3128; --ai: #B79DEB; --ai-soft: #2A2336;
+  --red: #F08A8A; --red-soft: #3A2224; --teal: #6CCACA; --id: #8DB9E2; --id-soft: #1D2630; --id-line: #2F4052;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-lg: 0 18px 50px -12px rgba(0, 0, 0, .7), 0 4px 12px rgba(0, 0, 0, .4);
+  --overlay: rgba(0, 0, 0, .55);
+}
+
+/* Text size multiplies the template's base reading size. */
+:root[data-textsize="s"] { --fs-scale: .9; }
+:root[data-textsize="m"] { --fs-scale: 1; }
+:root[data-textsize="l"] { --fs-scale: 1.12; }
+:root[data-textsize="xl"] { --fs-scale: 1.26; }
+
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+.Q {
   font-family: var(--sans);
+  font-size: 14px;
   color: var(--ink);
-  background: var(--paper);
-  min-height: 100vh;
+  background: var(--bg);
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
 }
 .Q * { box-sizing: border-box; }
+.Q ::selection { background: var(--accent-soft); }
+.Q input, .Q select, .Q textarea, .Q button { font: inherit; color: inherit; }
+.Q input::placeholder, .Q textarea::placeholder { color: var(--faint); }
+
+/* aliases referenced by the R&D panel */
+:root { --border: var(--rule); }

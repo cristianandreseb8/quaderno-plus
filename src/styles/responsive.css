@@ -1,16 +1,48 @@
-.Q-back-btn { display: none; }
-@media (max-width: 700px) {
-  .Q-body { grid-template-columns: 1fr; }
-  .Q-side { display: flex; }
+@media (max-width: 1180px) {
+  .Q-hbtn .lbl { display: none; }
+  .Q-hbtn { padding: 0 9px; }
+}
+@media (max-width: 1020px) {
+  .Q-body { grid-template-columns: 264px minmax(0, 1fr); }
+  .Q-pane { padding: 24px 26px 110px; }
+}
+@media (max-width: 760px) {
+  .Q-top { padding: 0 8px 0 14px; gap: 6px; }
+  .Q-top-wide { display: none; }
+  .Q-top-right .Q-top-narrow { display: inline-flex; }
+  .Q-top-right > .Q-menu-wrap:last-child .lbl { display: none; }
+  .Q-top-right > .Q-menu-wrap:last-child .btn { width: 38px; padding: 0; }
+  .Q-import-pill { font-size: 11px; padding: 0 9px; }
+  .Q-body { grid-template-columns: minmax(0, 1fr); }
+  .Q-side { border-right: none; }
   .Q-main { display: none; }
   .Q[data-open="1"] .Q-side { display: none; }
   .Q[data-open="1"] .Q-main { display: block; }
-  .Q-back-btn { display: inline-flex; }
-  .Q-pane { padding: 16px 14px 80px; }
-  .Q-toolbar .right { margin-left: 0; }
-  .Q-app-ai-panel, .Q-compare-panel { width: 100vw; }
+  .Q-back-btn { display: inline-flex; align-items: center; gap: 6px; margin: -6px 0 14px -6px; height: 32px; padding: 0 8px; border: none; border-radius: 8px; background: none; color: var(--accent); font: 600 14px var(--sans); cursor: pointer; }
+  .Q-pane { padding: 18px 16px 100px; }
+  .Q-view-header { gap: 14px; }
+  .Q-recipe-thumb { width: 76px; height: 76px; border-radius: 12px; }
+  .Q-tabbar-actions .lbl { display: none; }
+  .Q-tabbar-actions .btn { width: 34px; padding: 0; }
+  .Q-tab-btn { padding: 10px 9px 11px; font-size: 13px; }
+  .Q-tab-btn svg { display: none; }
+  .Q-tab-btn .full { display: none; }
+  .Q-tab-btn .short { display: inline; }
+  .Q-rtools { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: -16px; margin-right: -16px; padding: 0 16px 2px; }
+  .Q-rtools::-webkit-scrollbar { display: none; }
+  .Q-rtools > * { flex-shrink: 0; }
+  .Q-ing-qty { min-width: 4.6em; }
+  .Q-ed-top { grid-template-columns: 1fr; }
+  .Q-ed-photo img, .Q-ed-photo-ph { width: 100%; height: 150px; }
+  .Q-grid2 { grid-template-columns: 1fr; gap: 0; }
+  .Q-modal-overlay { padding: 0; align-items: flex-end; }
+  .Q-modal { border-radius: 18px 18px 0 0; max-height: 94dvh; }
+  .Q-drawer, .Q-compare-panel { width: 100vw; }
+  .Q-set-row { flex-wrap: wrap; }
+  .Q-theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ID-param-grid { grid-template-columns: 1fr 1fr; }
+  .Q-toasts { bottom: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .Q-view, .Q-chat-typing span, .Q-recording-pill { animation: none; }
+  .Q *, .Q *::before, .Q *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

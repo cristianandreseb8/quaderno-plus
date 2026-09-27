@@ -1,9 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Camera, ClipboardPaste, FileUp, ImagePlus, Loader2, Sparkles, Trash2, X } from 'lucide-react'
 import { compressImage, compressThumbnail } from '../lib/media.js'
 import { extractWithClaude, structureText } from '../lib/ai.js'
 import DraggableIngList from './DraggableIngList.jsx'
 
-export default function RecipeEditor({ initial, onSave, onCancel }) {
+const AUTOFILL = [
+  ['text', 'Paste text', ClipboardPaste],
+  ['photo', 'Photos', Camera],
+  ['pdf', 'PDF or book', FileUp],
+]
+
+export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'blank', onImportPdf }) {
   const initIngs = initial?.ingredients || []
   const [r, setR] = useState(() => ({
     title: initial?.title || '', category: initial?.category || '', time: initial?.time || '', servings: initial?.servings || '',
@@ -11,8 +18,8 @@ export default function RecipeEditor({ initial, onSave, onCancel }) {
     source_photos: initial?.source_photos || [], steps: initial?.steps || [], id_data: initial?.id_data || '', media_library: initial?.media_library || '',
     fixed_lang: initial?.fixed_lang || null, copied_from: initial?.copied_from || null,
   }))
-  const [ingredientLines, setIngredientLines] = useState(initIngs)
-  const [tab, setTab] = useState('text')
+  const [ingredientLines, setIngredientLines] = useState(() => (initIngs.length ? initIngs : ['']))
+  const [tab, setTab] = useState(initial ? null : (startWith === 'text' || startWith === 'photo' ? startWith : null))
   const [images, setImages] = useState([])
   const [rawText, setRawText] = useState('')
   const [scanning, setScanning] = useState(false)
@@ -25,7 +32,7 @@ export default function RecipeEditor({ initial, onSave, onCancel }) {
     setErr('')
     try {
       const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'))
-      if (!imgs.length) { setErr('No image files.'); return }
+      if (!imgs.length) { setErr('Those files are not images.'); return }
       const compressed = await Promise.all(imgs.map((f) => compressImage(f)))
       setImages((p) => [...p, ...compressed])
     } catch (e) {
@@ -41,21 +48,26 @@ export default function RecipeEditor({ initial, onSave, onCancel }) {
       if (fs.length) { e.preventDefault(); processFiles(fs) }
     }
     document.addEventListener('paste', onPaste)
-    return () => document.removeEventListener('paste', onPaste)
+    return () => { document.removeEventListener('paste', onPaste) }
   }, [tab])
 
+  function applyExtracted(data, source) {
+    setIngredientLines(data.ingredients?.length ? data.ingredients : [''])
+    setR((p) => ({
+      ...p, title: data.title || p.title, category: data.category || p.category, time: data.time || p.time, servings: data.servings || p.servings,
+      notes: data.notes || p.notes, source, steps: data.steps || p.steps,
+    }))
+  }
   async function runFromPhotos() {
     if (!images.length) { setErr('Add at least one photo.'); return }
     setScanning(true); setErr('')
     try {
       const data = await extractWithClaude(images)
-      setIngredientLines(data.ingredients || [])
-      setR((p) => ({
-        ...p, title: data.title || p.title, category: data.category || p.category, time: data.time || p.time, servings: data.servings || p.servings,
-        notes: data.notes || p.notes, source: 'Photo', source_photos: images.map((im) => im.url), steps: data.steps || p.steps,
-      }))
+      applyExtracted(data, 'Photo')
+      setR((p) => ({ ...p, source_photos: images.map((im) => im.url) }))
+      setTab(null)
     } catch (e) {
-      setErr('Could not read photos. (' + e.message + ')')
+      setErr('Could not read the photos. (' + e.message + ')')
     } finally {
       setScanning(false)
     }
@@ -65,14 +77,10 @@ export default function RecipeEditor({ initial, onSave, onCancel }) {
     setScanning(true); setErr('')
     try {
       const data = await structureText(rawText)
-      setIngredientLines(data.ingredients || [])
-      setR((p) => ({
-        ...p, title: data.title || p.title, category: data.category || p.category, time: data.time || p.time, servings: data.servings || p.servings,
-        notes: data.notes || p.notes, source: 'Text', steps: data.steps || p.steps,
-      }))
-      setRawText('')
+      applyExtracted(data, 'Text')
+      setRawText(''); setTab(null)
     } catch (e) {
-      setErr('Could not structure text. (' + e.message + ')')
+      setErr('Could not structure the text. (' + e.message + ')')
     } finally {
       setScanning(false)
     }
@@ -84,7 +92,7 @@ export default function RecipeEditor({ initial, onSave, onCancel }) {
       const d = await compressThumbnail(f)
       setR((p) => ({ ...p, thumbnail: d }))
     } catch (e) {
-      setErr('Thumbnail error: ' + e.message)
+      setErr('Photo error: ' + e.message)
     }
     e.target.value = ''
   }
@@ -92,94 +100,112 @@ export default function RecipeEditor({ initial, onSave, onCancel }) {
     onSave({
       id: initial?.id, title: r.title.trim() || 'Untitled', category: r.category.trim(), time: r.time.trim(), servings: r.servings.trim(),
       notes: r.notes.trim(), source: r.source || 'Manual', notes_pad: r.notes_pad || '', thumbnail: r.thumbnail || '', source_photos: r.source_photos || [],
-      ingredients: ingredientLines.filter(Boolean), steps: r.steps || [], id_data: r.id_data || '', media_library: r.media_library || '',
+      ingredients: ingredientLines.map((l) => l.trim()).filter((l) => l && l !== '##'), steps: (r.steps || []).filter((s) => String(s).trim()), id_data: r.id_data || '', media_library: r.media_library || '',
       fixed_lang: r.fixed_lang || null, copied_from: r.copied_from || null, createdAt: initial?.createdAt || Date.now(),
     })
+  }
+  function pickAutofill(k) {
+    setErr('')
+    if (k === 'pdf') { onImportPdf?.(); return }
+    setTab((cur) => (cur === k ? null : k))
   }
 
   return (
     <div className="Q-ed">
-      <h2>{initial?.id ? 'Edit recipe' : 'New recipe'}</h2>
-      <div style={{ border: '1.5px solid var(--rule)', borderRadius: 10, marginBottom: 18, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--rule)', background: '#f5efe6' }}>
-          {[['text', '📋 Paste text'], ['photo', '📷 From photo']].map(([k, l]) => (
-            <button key={k} onClick={() => { setTab(k); setErr('') }} style={{
-              flex: 1, padding: '9px 8px', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
-              textTransform: 'uppercase', letterSpacing: '.1em', background: tab === k ? '#fff' : 'transparent', color: tab === k ? 'var(--navy)' : 'var(--muted)',
-              borderBottom: tab === k ? '2px solid var(--amber)' : '2px solid transparent',
-            }}>{l}</button>
-          ))}
+      <div className="Q-ed-head">
+        <h2>{initial?.id ? 'Edit recipe' : 'New recipe'}</h2>
+        <div className="Q-ed-head-actions">
+          <button className="btn ghost sm" onClick={onCancel}>Cancel</button>
+          <button className="btn primary sm" onClick={save}>Save</button>
         </div>
-        <div style={{ padding: '13px 15px' }}>
-          {tab === 'text' && (
-            <>
-              <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '0 0 9px', lineHeight: 1.5 }}>Paste any recipe text. Claude structures it automatically.</p>
-              <textarea value={rawText} onChange={(e) => setRawText(e.target.value)} rows={6} placeholder="Paste recipe text here…"
-                style={{ width: '100%', border: '1px solid var(--rule)', borderRadius: 7, padding: '9px 11px', fontSize: 13, fontFamily: 'var(--sans)', color: 'var(--ink)', resize: 'vertical', background: '#fff', display: 'block', marginBottom: 9 }} />
-              <button className="btn amber xs" onClick={runFromText} disabled={scanning || !rawText.trim()} style={{ width: '100%', padding: 9, fontSize: 13 }}>
-                {scanning ? 'Structuring…' : 'Structure with Claude →'}
-              </button>
-            </>
-          )}
-          {tab === 'photo' && (
-            <>
-              <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '0 0 9px', lineHeight: 1.5 }}>Upload 1–6 photos. Auto-compressed.</p>
-              <div onDrop={handleDrop} onDragOver={(e) => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)}
-                style={{ position: 'relative', borderRadius: 8, marginBottom: 9, border: `2px dashed ${dragOver ? 'var(--navy)' : 'var(--amber)'}`, background: dragOver ? '#EAF2EE' : 'rgba(188,108,44,.05)', padding: '18px 12px', textAlign: 'center', cursor: scanning ? 'default' : 'pointer' }}>
-                <div style={{ pointerEvents: 'none' }}>
-                  <div style={{ fontSize: 22, marginBottom: 4 }}>📷</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--navy)' }}>Tap · drag & drop · paste ⌘V</div>
+      </div>
+
+      <div className={`Q-autofill${tab ? ' open' : ''}`}>
+        <div className="Q-autofill-bar">
+          <span className="Q-autofill-lbl"><Sparkles size={15} /> Fill in with AI</span>
+          <div className="Q-seg">
+            {AUTOFILL.filter(([k]) => !(initial && k === 'pdf')).map(([k, l, Icon]) => (
+              <button key={k} type="button" className={tab === k ? 'on' : ''} onClick={() => pickAutofill(k)}><Icon size={14} /> {l}</button>
+            ))}
+          </div>
+        </div>
+        {tab === 'text' && (
+          <div className="Q-autofill-body">
+            <textarea
+              className="Q-textarea" value={rawText} onChange={(e) => setRawText(e.target.value)} rows={7} autoFocus
+              placeholder="Paste a recipe from anywhere — a website, a message, your notes. AI sorts it into title, ingredients and method."
+            />
+            <button className="btn primary block" onClick={runFromText} disabled={scanning || !rawText.trim()}>
+              {scanning ? <><Loader2 size={15} className="spin" /> Reading…</> : <><Sparkles size={15} /> Fill the form</>}
+            </button>
+          </div>
+        )}
+        {tab === 'photo' && (
+          <div className="Q-autofill-body">
+            <div
+              className={`Q-drop${dragOver ? ' over' : ''}`}
+              onDrop={handleDrop} onDragOver={(e) => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)}
+            >
+              <Camera size={22} />
+              <div className="Q-drop-t">Take or choose photos of the recipe</div>
+              <div className="Q-drop-s">Up to 6 pages · drag & drop or paste (⌘V)</div>
+              <input type="file" accept="image/*" multiple disabled={scanning} onChange={handleFileInput} aria-label="Choose photos" />
+            </div>
+            {images.length > 0 && (
+              <>
+                <div className="Q-thumbs">
+                  {images.map((im, i) => (
+                    <div className="Q-thumb" key={i}><img src={im.url} alt="" /><button onClick={() => setImages((p) => p.filter((_, j) => j !== i))} disabled={scanning} aria-label="Remove"><X size={11} /></button></div>
+                  ))}
                 </div>
-                <input type="file" accept="image/*" multiple disabled={scanning} onChange={handleFileInput} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: scanning ? 'default' : 'pointer' }} />
-              </div>
-              {images.length > 0 && (
-                <>
-                  <div className="Q-thumbs">
-                    {images.map((im, i) => (
-                      <div className="Q-thumb" key={i}><img src={im.url} alt="" /><button onClick={() => setImages((p) => p.filter((_, j) => j !== i))} disabled={scanning}>×</button></div>
-                    ))}
-                  </div>
-                  <button className="btn amber xs" onClick={runFromPhotos} disabled={scanning} style={{ marginTop: 7, width: '100%', padding: 9, fontSize: 13 }}>
-                    {scanning ? `Reading ${images.length} photo${images.length > 1 ? 's' : ''}…` : 'Extract with Claude →'}
-                  </button>
-                </>
-              )}
-            </>
+                <button className="btn primary block" onClick={runFromPhotos} disabled={scanning}>
+                  {scanning ? <><Loader2 size={15} className="spin" /> Reading {images.length} photo{images.length > 1 ? 's' : ''}…</> : <><Sparkles size={15} /> Fill the form</>}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        {err && <div className="Q-err">{err}</div>}
+      </div>
+
+      <div className="Q-ed-top">
+        <div className="Q-ed-photo">
+          {r.thumbnail
+            ? <img src={r.thumbnail} onClick={() => setLightboxSrc(r.thumbnail)} alt="" />
+            : <label className="Q-ed-photo-ph"><ImagePlus size={22} /><span>Add photo</span><input type="file" accept="image/*" onChange={handleThumbnail} /></label>}
+          {r.thumbnail && (
+            <div className="Q-ed-photo-actions">
+              <label className="Q-link">Change<input type="file" accept="image/*" onChange={handleThumbnail} hidden /></label>
+              <button className="Q-link danger" onClick={() => setR((p) => ({ ...p, thumbnail: '' }))}><Trash2 size={12} /></button>
+            </div>
           )}
-          {err && <div className="Q-err" style={{ marginTop: 7 }}>{err}</div>}
+        </div>
+        <div className="Q-ed-fields">
+          <div className="Q-field"><label>Title</label><input className="Q-title-input" value={r.title} onChange={set('title')} placeholder="e.g. Panettone classico" /></div>
+          <div className="Q-grid2">
+            <div className="Q-field"><label>Category</label><input value={r.category} onChange={set('category')} placeholder="e.g. Grandi lievitati" /></div>
+            <div className="Q-field"><label>Source</label><input value={r.source} onChange={set('source')} placeholder="Book, chef, website…" /></div>
+          </div>
+          <div className="Q-grid2">
+            <div className="Q-field"><label>Time</label><input value={r.time} onChange={set('time')} placeholder="e.g. 36 h" /></div>
+            <div className="Q-field"><label>Yield</label><input value={r.servings} onChange={set('servings')} placeholder="e.g. 2 × 1 kg" /></div>
+          </div>
         </div>
       </div>
+
       <div className="Q-field">
-        <label>Thumbnail photo</label>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {r.thumbnail && <img src={r.thumbnail} style={{ width: 58, height: 58, borderRadius: 6, objectFit: 'cover', cursor: 'pointer', border: '1px solid var(--rule)' }} onClick={() => setLightboxSrc(r.thumbnail)} alt="" />}
-          <label className="btn ghost xs" style={{ cursor: 'pointer' }}>{r.thumbnail ? 'Change' : 'Add photo'}<input type="file" accept="image/*" onChange={handleThumbnail} style={{ display: 'none' }} /></label>
-          {r.thumbnail && <button className="btn danger xs" onClick={() => setR((p) => ({ ...p, thumbnail: '' }))}>Remove</button>}
-        </div>
-        <div className="hint">Compressed · appears in list, recipe header, and all exports</div>
-      </div>
-      <div className="Q-field"><label>Title</label><input value={r.title} onChange={set('title')} placeholder="Panettone Classico" /></div>
-      <div className="Q-grid2">
-        <div className="Q-field"><label>Category</label><input value={r.category} onChange={set('category')} placeholder="Grandi Lievitati" /></div>
-        <div className="Q-field"><label>Source</label><input value={r.source} onChange={set('source')} /></div>
-      </div>
-      <div className="Q-grid2">
-        <div className="Q-field"><label>Time</label><input value={r.time} onChange={set('time')} placeholder="~36 h" /></div>
-        <div className="Q-field"><label>Yield</label><input value={r.servings} onChange={set('servings')} placeholder="2 × 1 kg" /></div>
-      </div>
-      <div className="Q-field">
-        <label>Ingredients — drag ⠇ to reorder</label>
+        <label>Ingredients</label>
         <DraggableIngList lines={ingredientLines} onChange={setIngredientLines} />
-        <div className="hint">Drag to reorder · × to remove · use <strong>+ Section</strong> for ## headers</div>
+        <div className="hint">Write quantity, unit, then the name — "500 g bread flour". Drag the handle to reorder. Add a section for multi-part recipes.</div>
       </div>
       <div className="Q-field">
-        <label>Method — one step per line</label>
-        <textarea rows={7} value={(r.steps || []).join('\n')} onChange={(e) => setR((p) => ({ ...p, steps: e.target.value.split('\n') }))} placeholder="Step 1…" />
+        <label>Method</label>
+        <textarea className="Q-textarea" rows={8} value={(r.steps || []).join('\n')} onChange={(e) => setR((p) => ({ ...p, steps: e.target.value.split('\n') }))} placeholder="One step per line" />
       </div>
-      <div className="Q-field"><label>Baker's notes</label><textarea rows={2} value={r.notes} onChange={set('notes')} placeholder="Temperatures, flour specs, adjustments…" /></div>
-      {r.fixed_lang && <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)', marginBottom: 10 }}>📌 Fixed language: {r.fixed_lang}</div>}
+      <div className="Q-field"><label>Notes</label><textarea className="Q-textarea" rows={3} value={r.notes} onChange={set('notes')} placeholder="Temperatures, flour specs, adjustments…" /></div>
+      {r.fixed_lang && <div className="Q-dim" style={{ marginBottom: 10 }}>Fixed language version: {r.fixed_lang}</div>}
       <div className="Q-ed-foot">
-        <button className="btn" onClick={save}>Save recipe</button>
+        <button className="btn primary" onClick={save}>Save recipe</button>
         <button className="btn ghost" onClick={onCancel}>Cancel</button>
       </div>
       {lightboxSrc && <div className="Q-lightbox" onClick={() => setLightboxSrc(null)}><img src={lightboxSrc} alt="" /></div>}

@@ -77,6 +77,94 @@ When creating recipes be complete and professional. For multi-dough use ## secti
 
 For batch creation generate complete recipes, not just stubs. Be generous with ingredients and steps.`
 
+// ── PDF / cookbook import ─────────────────────────────────────────────────────
+// The client splits a PDF into small page batches (plus one look-ahead page) and sends
+// them one at a time, so each request stays well inside the function's time limit.
+const PDF_MODEL = "claude-opus-5"
+
+const RECIPE_LIST_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["recipes"],
+  properties: {
+    recipes: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["title", "category", "time", "servings", "ingredients", "steps", "notes", "page", "complete"],
+        properties: {
+          title: { type: "string" },
+          category: { type: "string" },
+          time: { type: "string" },
+          servings: { type: "string" },
+          ingredients: { type: "array", items: { type: "string" } },
+          steps: { type: "array", items: { type: "string" } },
+          notes: { type: "string" },
+          page: { type: "integer" },
+          complete: { type: "boolean" },
+        },
+      },
+    },
+  },
+}
+
+const PDF_SYSTEM = `You extract recipes from document pages for a professional kitchen's recipe database. You are precise with numbers: quantities, units, temperatures and times are copied exactly as printed, never converted or rounded.`
+
+function pdfPrompt(b: Record<string, unknown>): string {
+  const first = Number(b.first_page), last = Number(b.last_page)
+  const ctx = b.context_page ? Number(b.context_page) : null
+  const known = ((b.known_categories as string[]) || []).slice(0, 60).join(", ")
+  const pages = first === last ? `page ${first}` : `pages ${first}–${last}`
+  const method = b.mode === "own"
+    ? `- steps: copy each method step as written. notes: tips printed with the recipe, as written, or "".`
+    : `- steps: clear, concise method steps written in your own words, in the language of the document. Keep every quantity, temperature, time, speed and visual cue; leave out stories and anecdotes. notes: at most two short technical tips in your own words, or "".`
+  return `The attached PDF contains ${pages} of "${b.source || "a document"}"${ctx ? `, followed by page ${ctx} as look-ahead only` : ""}. Page 1 of the attachment is page ${first} of the original.
+
+Extract every recipe that STARTS on ${pages}.
+- If such a recipe continues onto ${ctx ? `the look-ahead page ${ctx}` : "a later page"}, ${ctx ? "finish it from that page" : "extract what is shown and set complete to false"}.
+- Skip recipes that start on the look-ahead page (they are processed with the next batch) and skip text at the top of page ${first} that continues a recipe from an earlier page.
+- A dish built from several components (a dough and its filling, a cake with its glaze) is ONE recipe: put each component's ingredients after a header line "## Component name".
+- ingredients: one per line as quantity, unit, two spaces, name — e.g. "500 g  bread flour", "2  eggs", "1 tsp  fine salt". Keep preparation notes after the name ("cold, diced"). Lines with no quantity are just the name.
+${method}
+- title, time and servings (yield: pieces, weight or portions) as printed; "" when absent. Keep the document's language.
+- category: 1–3 words, consistent across the book.${known ? ` Reuse one of these when it fits: ${known}.` : ""}
+- page: the original page number where the recipe starts. complete: false when the recipe is cut off within these pages.
+- Pages without recipes (introductions, essays, photos, indexes, tables of contents) produce nothing. Return {"recipes": []} if there are none.`
+}
+
+async function claudePdfRecipes(b: Record<string, unknown>) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json", "x-api-key": KEY, "anthropic-version": "2023-06-01",
+      "anthropic-beta": "server-side-fallback-2026-07-01",
+    },
+    body: JSON.stringify({
+      model: PDF_MODEL,
+      max_tokens: 16000,
+      fallbacks: "default",
+      output_config: { effort: "low", format: { type: "json_schema", schema: RECIPE_LIST_SCHEMA } },
+      system: PDF_SYSTEM,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: b.pdf } },
+          { type: "text", text: pdfPrompt(b) },
+        ],
+      }],
+    }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data?.error?.message || `AI request failed (${res.status})`)
+  if (data.stop_reason === "refusal") throw new Error("The AI declined to read these pages.")
+  // A truncated structured response is not valid JSON; the client retries the batch page by page.
+  if (data.stop_reason === "max_tokens") throw new Error("TOO_MUCH_CONTENT")
+  const text = (data.content || []).filter((c: { type: string }) => c.type === "text").map((c: { text: string }) => c.text).join("")
+  const parsed = JSON.parse(text)
+  return { recipes: parsed.recipes || [], usage: data.usage || null }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS })
 
@@ -134,6 +222,36 @@ Return ONLY valid JSON, no markdown, no commentary before or after: {"cache": {"
 Return ONLY valid JSON: {"value": <number or string>, "unit": "<unit or empty string>", "explanation": "<1 sentence max 20 words explaining what this value means for this recipe>"}`
       const userMsg = `Recipe: ${body.recipe_title || ''}\nIngredients:\n${ings}\n\nExisting macros: total_batch=${existingM.total || 0}g, fat=${existingM.fat || 0}g, water=${existingM.water || 0}g, flour_equiv=${existingM.flourEqG || 0}g, free_water=${existingM.freeWaterG || 0}g\n\nCalculate: ${body.param_label}`
       result = await claudeJson([{ role: "user", content: userMsg }], systemPrompt2, 400)
+    } else if (body.type === "translate_strings") {
+      // Batch string translation for the app-wide language switch. Results are cached
+      // client-side in the `translations` table, so each phrase is paid for once.
+      const items = (body.items || []).map((t: string) => String(t))
+      const sys = `You translate short cooking-app strings into ${body.target_lang}.
+
+Return ONLY a JSON object of the form {"items": ["...", "..."]} whose array has the same length and order as the input array.
+Rules:
+- Translate naturally, using correct professional kitchen terminology.
+- Preserve every number, quantity, unit and symbol exactly as written.
+- Preserve markdown-ish markers: leading "## " section headers, [[wikilinks]] (translate the visible label only if it is not a recipe name — otherwise leave the whole link untouched), and #tags.
+- If a string is a proper noun, a brand, or already in the target language, return it unchanged.
+- Never add commentary, never merge or split entries.`
+      const out = await claudeJson(
+        [{ role: "user", content: `Translate to ${body.target_lang}:\n${JSON.stringify(items)}` }],
+        sys, 8000,
+      )
+      // Ask for an object rather than a bare array: claudeJson slices between the first "{"
+      // and last "}", which would mangle a top-level array if a translation contained a brace.
+      result = { items: Array.isArray(out) ? out : (out.items || out.translations || []) }
+    } else if (body.type === "categorize_recipe") {
+      const sys = `You are a professional chef organising a recipe library.
+Given one recipe, return a category and a handful of tags.
+Return ONLY valid JSON: {"category": "<2-4 words>", "tags": ["lowercase-tag", ...]}
+Tags describe technique, course, cuisine, main ingredient and dietary notes. Prefer reusing the existing tags supplied. 3-7 tags.`
+      const known = (body.known_tags || []).join(', ')
+      const msg = `Existing tags in this library: ${known || 'none'}\n\nRecipe: ${JSON.stringify({
+        title: body.title, category: body.category, ingredients: (body.ingredients || []).slice(0, 30), steps: (body.steps || []).slice(0, 6),
+      })}`
+      result = await claudeJson([{ role: "user", content: msg }], sys, 700)
     } else if (body.type === "categorize_ingredients") {
       const list = (body.ingredients || []).map((i: { name: string; ingredient_type?: string }) => `${i.name}${i.ingredient_type ? ` (nutrition type: ${i.ingredient_type})` : ''}`).join('\n')
       const known = (body.known_categories || []).join(', ')
@@ -149,6 +267,9 @@ Return ONLY valid JSON, no markdown: {"categories": {"<ingredient name exactly a
       const sys = `You are a professional baker and food writer. Write one short, precise descriptor (max 25 words, one sentence, no markdown) for the given ingredient: what it is, its character/flavor, and its typical culinary role. No fluff, no marketing language.`
       const text = await claudeText([{ role: "user", content: `Ingredient: ${body.name}${body.ingredient_type ? ` (nutrition type: ${body.ingredient_type})` : ''}` }], sys, 150)
       result = { text: text.trim() }
+    } else if (body.type === "extract_pdf") {
+      if (!body.pdf) throw new Error("No PDF data received")
+      result = await claudePdfRecipes(body)
     } else if (body.type === "auto_categorize") {
       const list = (body.recipes || []).map((r: { id: string; title: string; ingredients: string[] }) => `id:${r.id} title:"${r.title}" ingredients:${(r.ingredients || []).slice(0, 8).join(', ')}`).join('\n')
       const systemPrompt3 = `You are a professional baker. Assign a short, consistent category (2-4 words, e.g. "Grandi Lievitati", "Pan Bread", "Pastry", "Viennoiserie") to each recipe based on its title and ingredients.

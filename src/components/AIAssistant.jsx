@@ -95,7 +95,7 @@ export default function AIAssistant({ recipe, onAction, onRequestSaveNote }) {
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <select value={voice.lang} onChange={(e) => voice.setLang(e.target.value)} style={{ border: '1px solid var(--rule)', borderRadius: 5, padding: '2px 5px', fontSize: 10, fontFamily: 'var(--mono)', background: '#fff', color: 'var(--ink)' }}>
+          <select value={voice.lang} onChange={(e) => voice.setLang(e.target.value)} style={{ border: '1px solid var(--rule)', borderRadius: 5, padding: '2px 5px', fontSize: 10, fontFamily: 'var(--mono)', background: 'var(--surface)', color: 'var(--ink)' }}>
             {voice.VOICE_LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
           </select>
           <button className={`Q-voice-btn${voice.recording ? ' recording' : ''}`} onClick={voice.recording ? voice.stop : voice.start}>{voice.recording ? '⏹' : '🎙'}</button>

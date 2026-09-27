@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { GripVertical, X } from 'lucide-react'
 import { isSectionHeader } from '../lib/recipeCalc.js'
 
 function findScroller(fromEl) {
@@ -63,7 +65,7 @@ export default function DraggableIngList({ lines, onChange }) {
           onDrop={() => dragIdx !== null && move(dragIdx, idx)}
           onDragEnd={() => { setDragIdx(null); setOverIdx(null) }}
         >
-          <span className="Q-drag-handle">⠇</span>
+          <span className="Q-drag-handle" aria-hidden="true"><GripVertical size={15} /></span>
           <input
             className={`Q-drag-input${isSectionHeader(line) ? ' section' : ''}`}
             value={isSectionHeader(line) ? line.replace(/^##?\s*/, '') : line}
@@ -72,24 +74,24 @@ export default function DraggableIngList({ lines, onChange }) {
               n[idx] = isSectionHeader(line) ? '## ' + e.target.value : e.target.value
               onChange(n)
             }}
+            onKeyDown={(e) => {
+              // Enter adds the next line, so a whole ingredient list can be typed without the mouse.
+              if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+              e.preventDefault()
+              const n = [...lines]
+              n.splice(idx + 1, 0, '')
+              // Render synchronously so focus moves before the next keystroke arrives.
+              flushSync(() => onChange(n))
+              listRef.current?.querySelectorAll('.Q-drag-input')[idx + 1]?.focus()
+            }}
             placeholder={isSectionHeader(line) ? 'Section name' : '500 g  ingredient name'}
           />
-          <button className="Q-drag-rm" onClick={() => onChange(lines.filter((_, i) => i !== idx))}>×</button>
+          <button type="button" className="Q-drag-rm" onClick={() => onChange(lines.filter((_, i) => i !== idx))} aria-label="Remove line"><X size={14} /></button>
         </div>
       ))}
       <div className="Q-drag-footer">
-        <button
-          onClick={() => onChange([...lines, ''])}
-          style={{ fontSize: 11.5, background: 'none', border: '1px solid var(--rule)', borderRadius: 5, padding: '4px 10px', cursor: 'pointer', color: 'var(--muted)' }}
-        >
-          + Ingredient
-        </button>
-        <button
-          onClick={() => onChange([...lines, '## '])}
-          style={{ fontSize: 11.5, background: 'none', border: '1px solid var(--amber)', borderRadius: 5, padding: '4px 10px', cursor: 'pointer', color: 'var(--amber)' }}
-        >
-          + Section
-        </button>
+        <button type="button" className="Q-mini-btn" onClick={() => onChange([...lines, ''])}>+ Ingredient</button>
+        <button type="button" className="Q-mini-btn accent" onClick={() => onChange([...lines, '## '])}>+ Section</button>
       </div>
     </div>
   )

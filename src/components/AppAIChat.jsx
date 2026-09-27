@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Sparkles, X } from 'lucide-react'
 import { askAppAssistant } from '../lib/ai.js'
 import { useVoiceInput } from '../lib/voice.js'
 
@@ -61,15 +62,15 @@ export default function AppAIChat({ recipes, onAction, onClose }) {
   return (
     <>
       <div className="Q-app-ai-header">
-        <div className="Q-app-ai-title">🌐 App Assistant</div>
-        <button className="btn ghost xs" onClick={onClose}>✕ Close</button>
+        <div className="Q-app-ai-title"><Sparkles size={18} /> Assistant</div>
+        <button className="Q-icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
       </div>
       <div className="Q-app-ai-msgs">
         {messages.length === 0 && (
           <div style={{ padding: '16px 0', textAlign: 'center' }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>🌐</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ai)', marginBottom: 5 }}>Quaderno+ — App Assistant</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 12 }}>Search, create, batch-import, delete recipes. Use natural language.</div>
+            <div style={{ width: 52, height: 52, borderRadius: 16, background: 'var(--ai-soft)', color: 'var(--ai)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}><Sparkles size={24} /></div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)', marginBottom: 5 }}>What should we cook up?</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 14 }}>Ask in your own words: create recipes, find them, or tidy up your library.</div>
             <div className="Q-quick-chips" style={{ justifyContent: 'center' }}>{CHIPS.map((c) => <button key={c} className="Q-chip" onClick={() => setInput(c)}>{c}</button>)}</div>
           </div>
         )}
@@ -84,13 +85,13 @@ export default function AppAIChat({ recipes, onAction, onClose }) {
       </div>
       <div className="Q-app-ai-input">
         <textarea
-          style={{ flex: 1, border: '1px solid var(--rule)', borderRadius: 8, padding: '8px 10px', fontSize: 13, fontFamily: 'var(--sans)', color: 'var(--ink)', resize: 'none', background: '#fff' }}
+          className="Q-chat-input"
           value={input} onChange={(e) => setInput(e.target.value)} rows={2} disabled={loading}
           placeholder="Ask anything… (Enter to send)"
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <select value={voice.lang} onChange={(e) => voice.setLang(e.target.value)} style={{ border: '1px solid var(--rule)', borderRadius: 5, padding: '2px 5px', fontSize: 10, fontFamily: 'var(--mono)', background: '#fff', color: 'var(--ink)' }}>
+          <select value={voice.lang} onChange={(e) => voice.setLang(e.target.value)} style={{ border: '1px solid var(--rule)', borderRadius: 5, padding: '2px 5px', fontSize: 10, fontFamily: 'var(--mono)', background: 'var(--surface)', color: 'var(--ink)' }}>
             {voice.VOICE_LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
           </select>
           <button className={`Q-voice-btn${voice.recording ? ' recording' : ''}`} onClick={voice.recording ? voice.stop : voice.start}>{voice.recording ? '⏹' : '🎙'}</button>

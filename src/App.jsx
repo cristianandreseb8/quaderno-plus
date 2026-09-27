@@ -1,6 +1,12 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
-import { dbDelete, dbInsert, dbUpdate, dbLoad } from './lib/db.js'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ArrowLeft, ArrowUpDown, BookOpen, Camera, ClipboardPaste, Columns2, FilePlus2, FileUp, Menu as MenuIcon, Package, Plus, Search, Settings, Sparkles, Star, X,
+} from 'lucide-react'
+import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadOne } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
+import { SettingsContext, applySettings, loadSettings, saveSettings } from './lib/settings.js'
+import Toaster, { toast } from './components/ui/Toaster.jsx'
+import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
 
 // After a redeploy, chunk filenames change and a client that loaded the old index.html
 // gets a 404 when it lazy-loads a panel — which used to unmount the app to a blank screen.
@@ -25,29 +31,53 @@ const RecipeEditor = lazyRetry(() => import('./components/RecipeEditor.jsx'))
 const ComparePanel = lazyRetry(() => import('./components/ComparePanel.jsx'))
 const IngredientLibraryModal = lazyRetry(() => import('./components/IngredientLibraryModal.jsx'))
 const AppAIChat = lazyRetry(() => import('./components/AppAIChat.jsx'))
+const SettingsModal = lazyRetry(() => import('./components/SettingsModal.jsx'))
+const PdfImport = lazyRetry(() => import('./components/PdfImport.jsx'))
+
+const SORTS = [
+  ['recent', 'Recently added'],
+  ['opened', 'Recently opened'],
+  ['az', 'Title A → Z'],
+  ['za', 'Title Z → A'],
+  ['category', 'Category'],
+  ['favorites', 'Favorites first'],
+]
 
 export default function App() {
   const [recipes, setRecipes] = useState([])
   const [loading, setLoading] = useState(true)
   const [selId, setSelId] = useState(null)
   const [mode, setMode] = useState('view')
+  const [editorStart, setEditorStart] = useState('blank')
   const [q, setQ] = useState('')
-  const [sortMode, setSortMode] = useState('recent')
+  const [catFilter, setCatFilter] = useState('')
+  const [sortMode, setSortMode] = useState(() => localStorage.getItem('qdplus_sort') || 'recent')
   const [recentlyOpened, setRecentlyOpened] = useState(() => { try { return JSON.parse(localStorage.getItem('qdplus_opened') || '[]') } catch { return [] } })
-  const [saveErr, setSaveErr] = useState('')
   const [showAppAI, setShowAppAI] = useState(false)
   const [showCompare, setShowCompare] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importStatus, setImportStatus] = useState(null) // { running, pct, found } while a PDF import is alive
   const [categorizingAI, setCategorizingAI] = useState(false)
+  const [settings, setSettings] = useState(loadSettings)
+  const searchRef = useRef(null)
+
+  const updateSettings = useCallback((patch) => {
+    setSettings((prev) => { const next = { ...prev, ...patch }; saveSettings(next); return next })
+  }, [])
+  useEffect(() => { applySettings(settings) }, [settings])
+  const settingsCtx = useMemo(() => ({ settings, update: updateSettings }), [settings, updateSettings])
 
   useEffect(() => {
     dbLoad().then((data) => {
       setRecipes(data)
       const lastId = localStorage.getItem('qdplus_last_recipe')
       const restored = lastId && data.some((r) => r.id === lastId) ? lastId : data[0]?.id || null
-      setSelId(restored)
+      // On phones the list is the home screen; only auto-open a recipe on wide screens.
+      setSelId(window.matchMedia('(max-width: 760px)').matches ? null : restored)
     })
-      .catch((e) => setSaveErr('Load failed: ' + e.message))
+      .catch((e) => toast.error('Could not load recipes: ' + e.message))
       .finally(() => setLoading(false))
   }, [])
 
@@ -55,13 +85,45 @@ export default function App() {
     if (mode === 'view' && selId) localStorage.setItem('qdplus_last_recipe', selId)
   }, [selId, mode])
 
+  // The list holds "lite" rows; fetch the full recipe (photos, media) when one is opened.
+  const selLite = recipes.find((x) => x.id === selId)?._lite
+  useEffect(() => {
+    if (!selId || !selLite) return undefined
+    let cancelled = false
+    dbLoadOne(selId)
+      .then((full) => {
+        if (cancelled) return
+        // Only replace a row that is still lite — a save in the meantime already returned the full row.
+        setRecipes((p) => p.map((x) => (x.id === full.id && x._lite ? full : x)))
+      })
+      .catch((e) => { if (!cancelled) toast.error('Could not open the recipe: ' + e.message) })
+    return () => { cancelled = true }
+  }, [selId, selLite])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = (e.target.tagName || '').toLowerCase()
+      if (e.key === '/' && !['input', 'textarea', 'select'].includes(tag) && !e.target.isContentEditable) {
+        e.preventDefault(); searchRef.current?.focus()
+      }
+      if (e.key === 'Escape' && !document.querySelector('.Q-menu, .Q-modal-overlay:not([style*="none"])')) {
+        setShowAppAI(false); setShowCompare(false)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('keydown', onKey) }
+  }, [])
+
+  function setSort(s) { setSortMode(s); try { localStorage.setItem('qdplus_sort', s) } catch (_) { /* storage unavailable */ } }
+
   async function saveRecipe(rec) {
     try {
       const saved = rec.id && recipes.some((x) => x.id === rec.id) ? await dbUpdate(rec) : await dbInsert(rec)
       setRecipes((p) => { const ex = p.some((x) => x.id === saved.id); return ex ? p.map((x) => (x.id === saved.id ? saved : x)) : [saved, ...p] })
       setSelId(saved.id); setMode('view')
+      toast.success('Recipe saved')
     } catch (e) {
-      setSaveErr('Save failed: ' + e.message)
+      toast.error('Save failed: ' + e.message)
     }
   }
   async function updateRecipe(updated) {
@@ -69,23 +131,26 @@ export default function App() {
       const saved = await dbUpdate(updated)
       setRecipes((p) => p.map((x) => (x.id === saved.id ? saved : x)))
     } catch (e) {
-      setSaveErr('Update failed: ' + e.message)
+      toast.error('Update failed: ' + e.message)
     }
   }
   async function deleteRecipe(id) {
-    if (!window.confirm('Delete this recipe?')) return
+    const rec = recipes.find((x) => x.id === id)
+    if (!window.confirm(`Delete "${rec?.title || 'this recipe'}"? This cannot be undone.`)) return
     try {
       await dbDelete(id)
       const next = recipes.filter((x) => x.id !== id)
-      setRecipes(next); setSelId(next[0]?.id || null); setMode('view')
+      setRecipes(next); setSelId(window.matchMedia('(max-width: 760px)').matches ? null : next[0]?.id || null); setMode('view')
+      toast('Recipe deleted')
     } catch (e) {
-      setSaveErr('Delete failed: ' + e.message)
+      toast.error('Delete failed: ' + e.message)
     }
   }
   async function copyRecipe(sourceRecipe, fixedLang) {
     try {
       let rec = { ...sourceRecipe, id: undefined, title: sourceRecipe.title + (fixedLang ? ` (${fixedLang})` : '  (Copy)'), notes_pad: '', media_library: '', id_data: '', fixed_lang: fixedLang || null, copied_from: sourceRecipe.id }
       if (fixedLang) {
+        toast(`Translating to ${fixedLang}…`)
         try {
           const translated = await translateRecipe(sourceRecipe, fixedLang)
           rec = { ...rec, ...translated, thumbnail: sourceRecipe.thumbnail, source_photos: sourceRecipe.source_photos, fixed_lang: fixedLang, copied_from: sourceRecipe.id }
@@ -96,8 +161,9 @@ export default function App() {
       const saved = await dbInsert(rec)
       setRecipes((p) => [saved, ...p])
       setSelId(saved.id); setMode('view')
+      toast.success('Copy created')
     } catch (e) {
-      setSaveErr('Copy failed: ' + e.message)
+      toast.error('Copy failed: ' + e.message)
     }
   }
   async function saveVariant(variantRecipe, label) {
@@ -110,8 +176,9 @@ export default function App() {
       const saved = await dbInsert(rec)
       setRecipes((p) => [saved, ...p])
       setSelId(saved.id); setMode('view')
+      toast.success('Saved as a new recipe')
     } catch (e) {
-      setSaveErr('Save copy failed: ' + e.message)
+      toast.error('Save copy failed: ' + e.message)
     }
   }
   // The model is told to emit ingredients/steps as plain strings, but coerce anyway —
@@ -134,21 +201,21 @@ export default function App() {
   async function handleAppAIAction(action) {
     switch (action.type) {
       case 'create_recipe':
-        if (!isUsableAIRecipe(action.recipe)) { setSaveErr('AI sent an empty recipe — nothing was created.'); break }
+        if (!isUsableAIRecipe(action.recipe)) { toast.error('AI sent an empty recipe — nothing was created.'); break }
         try {
           const saved = await dbInsert({ ...sanitizeAIRecipe(action.recipe), notes_pad: '', thumbnail: '', source_photos: [], id_data: '', media_library: '', fixed_lang: null, copied_from: null })
           setRecipes((p) => [saved, ...p])
           setSelId(saved.id); setMode('view')
-        } catch (e) { setSaveErr('Create failed: ' + e.message) }
+        } catch (e) { toast.error('Create failed: ' + e.message) }
         break
       case 'batch_create': {
         const usable = (action.recipes || []).filter(isUsableAIRecipe)
-        if (!usable.length) { setSaveErr('AI sent no usable recipes — nothing was created.'); break }
+        if (!usable.length) { toast.error('AI sent no usable recipes — nothing was created.'); break }
         try {
           const created = await Promise.all(usable.map((r) => dbInsert({ ...sanitizeAIRecipe(r), notes_pad: '', thumbnail: '', source_photos: [], id_data: '', media_library: '', fixed_lang: null, copied_from: null })))
           setRecipes((p) => [...created, ...p])
           if (created[0]) { setSelId(created[0].id); setMode('view') }
-        } catch (e) { setSaveErr('Batch create failed: ' + e.message) }
+        } catch (e) { toast.error('Batch create failed: ' + e.message) }
         break
       }
       case 'delete_recipe':
@@ -157,7 +224,7 @@ export default function App() {
             await dbDelete(action.id)
             setRecipes((p) => p.filter((r) => r.id !== action.id))
             if (selId === action.id) setSelId(null)
-          } catch (e) { setSaveErr('Delete failed: ' + e.message) }
+          } catch (e) { toast.error('Delete failed: ' + e.message) }
         }
         break
       case 'select_recipe':
@@ -170,8 +237,8 @@ export default function App() {
   }
   async function handleAutoCategories() {
     const uncategorized = recipes.filter((r) => !r.category)
-    if (!uncategorized.length) { alert('All recipes already have categories.'); return }
-    if (!window.confirm('Auto-categorize ' + uncategorized.length + ' recipes without categories?')) return
+    if (!uncategorized.length) { toast('All recipes already have a category.'); return }
+    if (!window.confirm('Let AI suggest a category for ' + uncategorized.length + ' recipes without one?')) return
     setCategorizingAI(true)
     try {
       const data = await autoCategorize(uncategorized.map((r) => ({ id: r.id, title: r.title, category: '', ingredients: (r.ingredients || []).slice(0, 8) })))
@@ -179,19 +246,31 @@ export default function App() {
         const rec = recipes.find((r) => r.id === u.id)
         if (rec) { const saved = await dbUpdate({ ...rec, category: u.category }); setRecipes((p) => p.map((r) => (r.id === saved.id ? saved : r))) }
       }
-      alert('Categorized ' + (data?.updates?.length || 0) + ' recipes.')
+      toast.success('Categorized ' + (data?.updates?.length || 0) + ' recipes')
     } catch (e) {
-      setSaveErr('Auto-categorize failed: ' + e.message)
+      toast.error('Auto-categorize failed: ' + e.message)
     } finally {
       setCategorizingAI(false)
     }
   }
 
+  // PDF import saves each recipe as soon as it is found, so the list fills up live.
+  const onImportedRecipe = useCallback((saved) => { setRecipes((p) => [saved, ...p]) }, [])
+  const onImportRemoved = useCallback((id) => { setRecipes((p) => p.filter((r) => r.id !== id)) }, [])
+
+  const categories = useMemo(() => {
+    const counts = new Map()
+    recipes.forEach((r) => { const c = (r.category || '').trim(); if (c) counts.set(c, (counts.get(c) || 0) + 1) })
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [recipes])
+
   const sel = recipes.find((x) => x.id === selId) || null
   const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase()
     let list = recipes.filter((r) => {
-      if (!q.trim()) return true
-      return [r.title, r.category, ...(r.ingredients || [])].join(' ').toLowerCase().includes(q.toLowerCase())
+      if (catFilter && (r.category || '').trim() !== catFilter) return false
+      if (!needle) return true
+      return [r.title, r.category, r.source, ...(r.ingredients || [])].join(' ').toLowerCase().includes(needle)
     })
     if (sortMode === 'az') list = [...list].sort((a, b) => a.title.localeCompare(b.title))
     else if (sortMode === 'za') list = [...list].sort((a, b) => b.title.localeCompare(a.title))
@@ -202,7 +281,7 @@ export default function App() {
       list = [...list].sort((a, b) => { const ia = idx(a.id), ib = idx(b.id); if (ia === -1 && ib === -1) return 0; if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib })
     }
     return list
-  }, [recipes, q, sortMode, recentlyOpened])
+  }, [recipes, q, catFilter, sortMode, recentlyOpened])
 
   function openRecipe(id) {
     setSelId(id); setMode('view')
@@ -212,102 +291,196 @@ export default function App() {
       return next
     })
   }
+  function startNew(kind) {
+    if (kind === 'pdf') { setImportOpen(true); return }
+    setEditorStart(kind); setMode('new'); setSelId(null)
+  }
+  function goBack() { setMode('view'); setSelId(null) }
 
   const isOpen = mode !== 'view' || !!sel
+  const uncategorizedCount = recipes.filter((r) => !r.category).length
+  const importMounted = importOpen || !!importStatus
+
+  const newMenu = (compact) => (
+    <Menu
+      width={250}
+      trigger={(p) => (
+        <button className={`btn primary${compact ? ' icon-only' : ''}`} onClick={p.toggle} aria-expanded={p.open} title="Add a recipe">
+          <Plus size={16} strokeWidth={2.4} /><span className="lbl">New</span>
+        </button>
+      )}
+    >
+      <MenuLabel>Add a recipe</MenuLabel>
+      <MenuItem icon={FilePlus2} onClick={() => startNew('blank')} hint="Write it">Blank recipe</MenuItem>
+      <MenuItem icon={ClipboardPaste} onClick={() => startNew('text')} hint="AI tidies it">Paste text</MenuItem>
+      <MenuItem icon={Camera} onClick={() => startNew('photo')} hint="AI reads it">From photos</MenuItem>
+      <MenuSep />
+      <MenuItem icon={FileUp} onClick={() => startNew('pdf')} hint="1 or many">Import PDF or book</MenuItem>
+    </Menu>
+  )
 
   return (
-    <div className="Q" data-open={isOpen ? '1' : '0'}>
-      <header className="Q-top">
-        <div className="Q-brand">
-          Quaderno<span className="ai-badge">AI</span><span className="id-badge">+</span>
-        </div>
-        <div className="Q-top-right">
-          {saveErr && <span style={{ color: '#9b2c2c', fontSize: 10, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{saveErr}</span>}
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>{!loading && `${recipes.length} recipe${recipes.length !== 1 ? 's' : ''}`}</span>
-          <button className="btn id xs" onClick={() => setShowCompare(true)} title="Compare recipes">⚖ Compare</button>
-          <button className="btn id xs" onClick={() => setShowLibrary(true)} title="Ingredient Library">📦 Library</button>
-          <button className="btn ai xs" onClick={() => setShowAppAI(true)} title="App AI Assistant">🌐 AI</button>
-          <button className="btn amber" onClick={() => { setMode('new'); setSelId(null) }}>＋ New</button>
-        </div>
-      </header>
-
-      <div className="Q-body">
-        <aside className="Q-side">
-          <div className="Q-search"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search recipes…" /></div>
-          <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Sort:</span>
-            <select value={sortMode} onChange={(e) => setSortMode(e.target.value)} style={{ flex: 1, border: '1px solid var(--rule)', borderRadius: 5, padding: '3px 5px', fontSize: 11, fontFamily: 'var(--mono)', background: '#fff', color: 'var(--ink)' }}>
-              <option value="recent">Recent first</option>
-              <option value="opened">Last opened</option>
-              <option value="az">A → Z</option>
-              <option value="za">Z → A</option>
-              <option value="category">Category</option>
-              <option value="favorites">Favorites</option>
-            </select>
-          </div>
-          <div style={{ padding: '4px 12px 5px', borderBottom: '1px solid var(--rule)' }}>
-            <button onClick={handleAutoCategories} disabled={categorizingAI} className="btn ghost xs" style={{ width: '100%', fontSize: 10 }}>
-              {categorizingAI ? 'Categorizing...' : 'AI auto-categorize'}
+    <SettingsContext.Provider value={settingsCtx}>
+      <div className="Q" data-open={isOpen ? '1' : '0'}>
+        <header className="Q-top">
+          <div className="Q-brand"><BookOpen size={19} strokeWidth={1.8} /> <span>Quaderno<b>+</b></span></div>
+          {importStatus && (
+            <button className="Q-import-pill" onClick={() => setImportOpen(true)} title="Show PDF import">
+              <span className="dot" /> Importing · {importStatus.pct}%{importStatus.found ? ` · ${importStatus.found} found` : ''}
             </button>
+          )}
+          <div className="Q-top-right">
+            <button className="Q-hbtn ai" onClick={() => setShowAppAI(true)} title="AI assistant — create, find and organise recipes">
+              <Sparkles size={17} /><span className="lbl">Assistant</span>
+            </button>
+            <div className="Q-top-wide">
+              <button className="Q-hbtn" onClick={() => setShowLibrary(true)} title="Ingredient library"><Package size={17} /><span className="lbl">Ingredients</span></button>
+              <button className="Q-hbtn" onClick={() => setShowCompare(true)} title="Compare recipes"><Columns2 size={17} /><span className="lbl">Compare</span></button>
+              <button className="Q-hbtn" onClick={() => setShowSettings(true)} title="Settings"><Settings size={17} /></button>
+            </div>
+            <Menu
+              className="Q-top-narrow" width={210}
+              trigger={(p) => <button className="Q-hbtn" onClick={p.toggle} aria-label="More"><MenuIcon size={18} /></button>}
+            >
+              <MenuItem icon={Package} onClick={() => setShowLibrary(true)}>Ingredient library</MenuItem>
+              <MenuItem icon={Columns2} onClick={() => setShowCompare(true)}>Compare recipes</MenuItem>
+              <MenuItem icon={Settings} onClick={() => setShowSettings(true)}>Settings</MenuItem>
+            </Menu>
+            {newMenu(false)}
           </div>
-          <div className="Q-list">
-            {loading && <div className="Q-msg">Loading…</div>}
-            {!loading && !filtered.length && <div className="Q-msg">{q ? 'No matches.' : 'No recipes yet!'}</div>}
-            {filtered.map((r) => (
-              <div
-                key={r.id} className="Q-list-item" role="button" tabIndex={0} aria-selected={r.id === selId && mode === 'view'}
-                onClick={() => openRecipe(r.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecipe(r.id) } }}
+        </header>
+
+        <div className="Q-body">
+          <aside className="Q-side">
+            <div className="Q-side-tools">
+              <div className="Q-search">
+                <Search size={15} className="Q-search-ico" />
+                <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search recipes" aria-label="Search recipes" />
+                {q && <button className="Q-search-x" onClick={() => setQ('')} aria-label="Clear search"><X size={14} /></button>}
+              </div>
+              <Menu
+                width={230}
+                trigger={(p) => (
+                  <button className={`Q-icon-btn${catFilter || sortMode !== 'recent' ? ' on' : ''}`} onClick={p.toggle} title="Sort and filter" aria-label="Sort and filter">
+                    <ArrowUpDown size={16} />
+                  </button>
+                )}
               >
-                {r.thumbnail ? <img src={r.thumbnail} className="Q-list-thumb" alt="" /> : <div className="Q-list-thumb-ph">🍞</div>}
-                <button onClick={(e) => { e.stopPropagation(); updateRecipe({ ...r, is_favorite: !r.is_favorite }) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '0 2px', flexShrink: 0, lineHeight: 1 }}>{r.is_favorite ? '⭐' : '☆'}</button>
-                <div>
-                  <h4>{r.title}</h4>
-                  <span>{[r.category, r.source].filter(Boolean).join(' · ') || '—'}{r.fixed_lang && ` · 📌${r.fixed_lang}`}</span>
+                <MenuLabel>Sort by</MenuLabel>
+                {SORTS.map(([k, l]) => <MenuItem key={k} checked={sortMode === k} onClick={() => setSort(k)}>{l}</MenuItem>)}
+                {categories.length > 0 && (
+                  <>
+                    <MenuSep />
+                    <MenuLabel>Category</MenuLabel>
+                    <div className="Q-menu-scroll">
+                      <MenuItem checked={!catFilter} onClick={() => setCatFilter('')}>All categories</MenuItem>
+                      {categories.map(([c, n]) => <MenuItem key={c} checked={catFilter === c} hint={n} onClick={() => setCatFilter(c)}>{c}</MenuItem>)}
+                    </div>
+                  </>
+                )}
+              </Menu>
+            </div>
+            <div className="Q-side-meta">
+              {catFilter
+                ? <button className="Q-chip-filter" onClick={() => setCatFilter('')}>{catFilter}<X size={12} /></button>
+                : <span>{loading ? 'Loading…' : `${filtered.length} ${filtered.length === 1 ? 'recipe' : 'recipes'}`}</span>}
+              {catFilter && <span>{filtered.length}</span>}
+            </div>
+            <div className="Q-list">
+              {loading && Array.from({ length: 8 }).map((_, i) => <div key={i} className="Q-list-skel"><i /><div><b /><s /></div></div>)}
+              {!loading && !filtered.length && (
+                <div className="Q-msg">{q || catFilter ? 'No recipes match.' : 'No recipes yet.'}</div>
+              )}
+              {filtered.map((r) => (
+                <div
+                  key={r.id} className="Q-list-item" role="button" tabIndex={0} aria-selected={r.id === selId && mode === 'view'}
+                  onClick={() => openRecipe(r.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecipe(r.id) } }}
+                >
+                  {r.thumbnail ? <img src={r.thumbnail} className="Q-list-thumb" alt="" loading="lazy" /> : <div className="Q-list-thumb ph">{(r.title || '?').trim().charAt(0).toUpperCase()}</div>}
+                  <div className="Q-list-txt">
+                    <h4>{r.title}</h4>
+                    <span>{[r.category, r.source].filter(Boolean).join(' · ') || 'Uncategorized'}{r.fixed_lang && ` · ${r.fixed_lang}`}</span>
+                  </div>
+                  <button
+                    className={`Q-fav${r.is_favorite ? ' on' : ''}`} title={r.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                    onClick={(e) => { e.stopPropagation(); updateRecipe({ ...r, is_favorite: !r.is_favorite }) }}
+                  >
+                    <Star size={15} fill={r.is_favorite ? 'currentColor' : 'none'} />
+                  </button>
                 </div>
-              </div>
-            ))}
-          </div>
-        </aside>
+              ))}
+            </div>
+          </aside>
 
-        <main className="Q-main">
-          <div className="Q-pane">
-            <button className="btn ghost xs Q-back-btn" style={{ marginBottom: 14 }} onClick={() => { setMode('view'); setSelId(null) }}>← All recipes</button>
-            <Suspense fallback={<div className="Q-msg">Loading…</div>}>
-              {mode === 'new' && <RecipeEditor onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(recipes[0]?.id || null) }} />}
-              {mode === 'edit' && sel && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
-              {mode === 'view' && sel && <RecipeView key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)} onUpdate={updateRecipe} allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant} />}
-            </Suspense>
-            {mode === 'view' && !sel && !loading && (
-              <div className="Q-hero">
-                <div className="glyph">❦</div>
-                <h2>Quaderno+</h2>
-                <p>Professional recipe intelligence with R&D tools. Baker's percentages, sensory evaluation, version tracking, media library, and AI assistance — all in one place.</p>
-                <button className="btn amber" onClick={() => setMode('new')}>Add first recipe</button>
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
-
-      {showAppAI && (
-        <div className="Q-app-ai-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowAppAI(false) }}>
-          <div className="Q-app-ai-panel">
-            <Suspense fallback={<div className="Q-msg">Loading…</div>}>
-              <AppAIChat recipes={recipes} onAction={handleAppAIAction} onClose={() => setShowAppAI(false)} />
-            </Suspense>
-          </div>
+          <main className="Q-main">
+            <div className="Q-pane">
+              {isOpen && <button className="Q-back-btn" onClick={goBack}><ArrowLeft size={16} /> Recipes</button>}
+              <Suspense fallback={<div className="Q-msg">Loading…</div>}>
+                {mode === 'new' && <RecipeEditor key={'new-' + editorStart} startWith={editorStart} onImportPdf={() => setImportOpen(true)} onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(window.matchMedia('(max-width: 760px)').matches ? null : recipes[0]?.id || null) }} />}
+                {mode === 'edit' && sel && !sel._lite && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
+                {mode === 'view' && sel && sel._lite && <div className="Q-view-loading"><div /><div /><div /></div>}
+                {mode === 'view' && sel && !sel._lite && <RecipeView key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)} onUpdate={updateRecipe} allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant} />}
+              </Suspense>
+              {mode === 'view' && !sel && !loading && (
+                <div className="Q-hero">
+                  <div className="Q-hero-ico"><BookOpen size={30} strokeWidth={1.5} /></div>
+                  <h2>{recipes.length ? 'Pick a recipe to start cooking' : 'Welcome to Quaderno+'}</h2>
+                  <p>{recipes.length
+                    ? 'Choose one from the list, or add something new — type it, paste it, snap a photo, or import a whole PDF cookbook.'
+                    : 'Your professional recipe notebook. Add your first recipe by typing it, pasting text, taking photos, or importing a PDF cookbook.'}</p>
+                  <div className="Q-hero-actions">
+                    <button className="btn primary" onClick={() => startNew('blank')}><Plus size={16} /> New recipe</button>
+                    <button className="btn ghost" onClick={() => startNew('pdf')}><FileUp size={16} /> Import PDF or book</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </main>
         </div>
-      )}
-      {showCompare && (
-        <Suspense fallback={null}>
-          <ComparePanel recipes={recipes} onClose={() => setShowCompare(false)} />
-        </Suspense>
-      )}
-      {showLibrary && (
-        <Suspense fallback={null}>
-          <IngredientLibraryModal onClose={() => setShowLibrary(false)} recipes={recipes} />
-        </Suspense>
-      )}
-    </div>
+
+        {showAppAI && (
+          <div className="Q-drawer-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowAppAI(false) }}>
+            <div className="Q-drawer Q-app-ai-panel">
+              <Suspense fallback={<div className="Q-msg">Loading…</div>}>
+                <AppAIChat recipes={recipes} onAction={handleAppAIAction} onClose={() => setShowAppAI(false)} />
+              </Suspense>
+            </div>
+          </div>
+        )}
+        {showCompare && (
+          <Suspense fallback={null}>
+            <ComparePanel recipes={recipes} onClose={() => setShowCompare(false)} />
+          </Suspense>
+        )}
+        {showLibrary && (
+          <Suspense fallback={null}>
+            <IngredientLibraryModal onClose={() => setShowLibrary(false)} recipes={recipes} />
+          </Suspense>
+        )}
+        {showSettings && (
+          <Suspense fallback={null}>
+            <SettingsModal
+              onClose={() => setShowSettings(false)} recipeCount={recipes.length}
+              uncategorizedCount={uncategorizedCount} categorizing={categorizingAI} onAutoCategorize={handleAutoCategories}
+            />
+          </Suspense>
+        )}
+        {importMounted && (
+          <Suspense fallback={null}>
+            <PdfImport
+              hidden={!importOpen}
+              onHide={() => setImportOpen(false)}
+              onStatus={setImportStatus}
+              onSaved={onImportedRecipe}
+              onRemoved={onImportRemoved}
+              onOpenRecipe={(id) => { setImportOpen(false); openRecipe(id) }}
+              onShowAll={(source) => { setImportOpen(false); setCatFilter(''); setQ(source) }}
+              knownCategories={categories.map(([c]) => c)}
+            />
+          </Suspense>
+        )}
+        <Toaster />
+      </div>
+    </SettingsContext.Provider>
   )
 }

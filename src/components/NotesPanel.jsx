@@ -116,7 +116,7 @@ export default function NotesPanel({ recipe, onSave, onSaveMedia, onAddNote }) {
               {saving && <span style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>saving…</span>}
               {voice.recording && <span className="Q-recording-pill">🔴 Recording…</span>}
               {tabs.length > 1 && <button className="btn danger xs" onClick={() => removeTab(activeIdx)}>Remove tab</button>}
-              <select value={voice.lang} onChange={(e) => voice.setLang(e.target.value)} style={{ border: '1px solid var(--rule)', borderRadius: 5, padding: '2px 5px', fontSize: 10, fontFamily: 'var(--mono)', background: '#fff', color: 'var(--ink)' }}>
+              <select value={voice.lang} onChange={(e) => voice.setLang(e.target.value)} style={{ border: '1px solid var(--rule)', borderRadius: 5, padding: '2px 5px', fontSize: 10, fontFamily: 'var(--mono)', background: 'var(--surface)', color: 'var(--ink)' }}>
                 {voice.VOICE_LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
               </select>
               <button className={`Q-voice-btn${voice.recording ? ' recording' : ''}`} onClick={voice.recording ? voice.stop : voice.start} title="Voice note">{voice.recording ? '⏹' : '🎙'}</button>

@@ -46,7 +46,7 @@ function CategoryEditor({ categories, setCategories, allCategories }) {
       <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Categories (an ingredient can belong to several)</label>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
         {categories.map((c) => (
-          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, padding: '3px 4px 3px 10px', borderRadius: 14, background: '#EEF1F5', color: 'var(--id)', border: '1px solid #C8DFF0' }}>
+          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, padding: '3px 4px 3px 10px', borderRadius: 14, background: 'var(--id-soft)', color: 'var(--id)', border: '1px solid var(--id-line)' }}>
             {c}
             <button onClick={() => removeCategory(c)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--id)', fontSize: 12, padding: '0 3px', lineHeight: 1 }}>×</button>
           </span>
@@ -65,7 +65,7 @@ function CategoryEditor({ categories, setCategories, allCategories }) {
       {suggestions.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
           {suggestions.map((c) => (
-            <button key={c} onClick={() => addCategory(c)} style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 12, border: '1px solid var(--rule)', background: '#fff', color: 'var(--muted)', cursor: 'pointer' }}>+ {c}</button>
+            <button key={c} onClick={() => addCategory(c)} style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 12, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--muted)', cursor: 'pointer' }}>+ {c}</button>
           ))}
         </div>
       )}
@@ -113,7 +113,7 @@ function IngredientForm({ item, setItem, onSave, onCancel, saveLabel, allCategor
   }
 
   return (
-    <div style={{ padding: 14, background: '#f5f0e8' }}>
+    <div style={{ padding: 14, background: 'var(--surface-2)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 10 }}>
         <div>
           <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>Name</label>
@@ -196,8 +196,8 @@ function IngredientRow({ item, usage, expanded, selected, onToggleExpand, onTogg
             <span style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 14 }}>{item.name}</span>
             {item.canonical_name !== item.name && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>({item.canonical_name})</span>}
             {(item.categories || []).length > 0
-              ? item.categories.map((c) => <span key={c} style={{ fontSize: 10, background: '#EEF1F5', color: 'var(--id)', borderRadius: 4, padding: '1px 6px', marginLeft: 6 }}>{c}</span>)
-              : <span style={{ fontSize: 10, background: '#f5f0e8', color: 'var(--muted)', borderRadius: 4, padding: '1px 6px', marginLeft: 8 }}>{item.ingredient_type}</span>}
+              ? item.categories.map((c) => <span key={c} style={{ fontSize: 10, background: 'var(--id-soft)', color: 'var(--id)', borderRadius: 4, padding: '1px 6px', marginLeft: 6 }}>{c}</span>)
+              : <span style={{ fontSize: 10, background: 'var(--surface-2)', color: 'var(--muted)', borderRadius: 4, padding: '1px 6px', marginLeft: 8 }}>{item.ingredient_type}</span>}
             {(item.aliases || []).length > 0 && <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 6 }}>+{item.aliases.length} aliases</span>}
           </div>
           {item.descriptor && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>{item.descriptor}</div>}
@@ -219,7 +219,7 @@ function IngredientRow({ item, usage, expanded, selected, onToggleExpand, onTogg
       {expanded && usage.length > 0 && (
         <div style={{ padding: '2px 14px 10px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {usage.map((r) => (
-            <span key={r.id} style={{ fontSize: 11, background: '#F8FBFF', border: '1px solid #C8DFF0', borderRadius: 20, padding: '2px 9px', color: 'var(--id)' }}>{r.title}</span>
+            <span key={r.id} style={{ fontSize: 11, background: 'var(--id-soft)', border: '1px solid var(--id-line)', borderRadius: 20, padding: '2px 9px', color: 'var(--id)' }}>{r.title}</span>
           ))}
         </div>
       )}
@@ -460,8 +460,8 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>&#x2715;</button>
         </div>
         <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ingredients..." style={{ flex: 1, minWidth: 160, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 13 }} />
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 13 }}>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ingredients..." style={{ flex: 1, minWidth: 160, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 13 }} />
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 13 }}>
             <option value="">All categories</option>
             {allCategories.map((c) => <option key={c} value={c}>{c}{categoryCounts.get(c) ? ` (${categoryCounts.get(c)})` : ''}</option>)}
           </select>
@@ -469,13 +469,13 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
             <input type="checkbox" checked={favoritesOnly} onChange={(e) => setFavoritesOnly(e.target.checked)} /> ⭐ Favorites only
           </label>
           <div style={{ display: 'flex', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
-            <button onClick={() => setViewMode('list')} style={{ padding: '5px 10px', fontSize: 12, border: 'none', cursor: 'pointer', background: viewMode === 'list' ? 'var(--id)' : '#fff', color: viewMode === 'list' ? '#fff' : 'var(--muted)' }}>List</button>
-            <button onClick={() => setViewMode('category')} style={{ padding: '5px 10px', fontSize: 12, border: 'none', cursor: 'pointer', background: viewMode === 'category' ? 'var(--id)' : '#fff', color: viewMode === 'category' ? '#fff' : 'var(--muted)' }}>By category</button>
+            <button onClick={() => setViewMode('list')} style={{ padding: '5px 10px', fontSize: 12, border: 'none', cursor: 'pointer', background: viewMode === 'list' ? 'var(--id)' : 'var(--surface)', color: viewMode === 'list' ? '#fff' : 'var(--muted)' }}>List</button>
+            <button onClick={() => setViewMode('category')} style={{ padding: '5px 10px', fontSize: 12, border: 'none', cursor: 'pointer', background: viewMode === 'category' ? 'var(--id)' : 'var(--surface)', color: viewMode === 'category' ? '#fff' : 'var(--muted)' }}>By category</button>
           </div>
           <button onClick={startCreate} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--id)', background: 'none', color: 'var(--id)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Add ingredient</button>
         </div>
 
-        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--rule)', background: '#f8f5ee' }}>
+        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--rule)', background: 'var(--surface-2)' }}>
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
             <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--muted)' }}>Scope:</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, cursor: 'pointer' }}>
@@ -485,19 +485,19 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
               <input type="radio" checked={scope === 'selected'} onChange={() => { setScope('selected'); setShowRecipePicker(true) }} /> Selected recipes ({selectedRecipeIds.size})
             </label>
             {scope === 'selected' && (
-              <button onClick={() => setShowRecipePicker((p) => !p)} style={{ fontSize: 11.5, padding: '3px 9px', borderRadius: 14, border: '1px solid var(--rule)', background: '#fff', color: 'var(--muted)', cursor: 'pointer' }}>
+              <button onClick={() => setShowRecipePicker((p) => !p)} style={{ fontSize: 11.5, padding: '3px 9px', borderRadius: 14, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--muted)', cursor: 'pointer' }}>
                 {showRecipePicker ? 'Hide list' : 'Choose recipes…'}
               </button>
             )}
           </div>
           {scope === 'selected' && showRecipePicker && (
-            <div style={{ maxHeight: 140, overflow: 'auto', display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8, padding: 8, background: '#fff', border: '1px solid var(--rule)', borderRadius: 7 }}>
+            <div style={{ maxHeight: 140, overflow: 'auto', display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8, padding: 8, background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 7 }}>
               {recipes.map((r) => (
                 <button key={r.id} onClick={() => toggleSelectedRecipe(r.id)}
                   style={{
                     fontSize: 11.5, padding: '3px 10px', borderRadius: 14, cursor: 'pointer',
                     border: `1.5px solid ${selectedRecipeIds.has(r.id) ? 'var(--id)' : 'var(--rule)'}`,
-                    background: selectedRecipeIds.has(r.id) ? '#EEF1F5' : '#fff',
+                    background: selectedRecipeIds.has(r.id) ? 'var(--id-soft)' : 'var(--surface)',
                     color: selectedRecipeIds.has(r.id) ? 'var(--id)' : 'var(--muted)',
                   }}>
                   {r.title}
@@ -508,7 +508,7 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={addScopedIngredients} disabled={bulkBusy || !scopedMissingNames.length}
               title="Register missing ingredient names in the library without calling the AI"
-              style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600, cursor: bulkBusy || !scopedMissingNames.length ? 'default' : 'pointer', opacity: bulkBusy || !scopedMissingNames.length ? 0.5 : 1 }}>
+              style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600, cursor: bulkBusy || !scopedMissingNames.length ? 'default' : 'pointer', opacity: bulkBusy || !scopedMissingNames.length ? 0.5 : 1 }}>
               + Add {scopedMissingNames.length || ''} ingredient{scopedMissingNames.length !== 1 ? 's' : ''} to library
             </button>
             <button onClick={analyzeScopedIngredients} disabled={bulkBusy || !scopedMissingNames.length}
@@ -519,14 +519,14 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
           </div>
         </div>
 
-        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--rule)', background: '#f4f0ea', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--rule)', background: 'var(--surface-2)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--muted)' }}>Categorize:</span>
           <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
             {selectedIngredientIds.size ? `${selectedIngredientIds.size} selected` : `all ${filtered.length} shown`}
           </span>
-          <button onClick={selectAllFiltered} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 12, border: '1px solid var(--rule)', background: '#fff', color: 'var(--muted)', cursor: 'pointer' }}>Select all shown</button>
+          <button onClick={selectAllFiltered} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 12, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--muted)', cursor: 'pointer' }}>Select all shown</button>
           {selectedIngredientIds.size > 0 && (
-            <button onClick={clearIngredientSelection} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 12, border: '1px solid var(--rule)', background: '#fff', color: 'var(--muted)', cursor: 'pointer' }}>Clear selection</button>
+            <button onClick={clearIngredientSelection} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 12, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--muted)', cursor: 'pointer' }}>Clear selection</button>
           )}
           {/* Own dropdown instead of <datalist>: the native popup is positioned by the browser
               and escapes the modal, rendering against the far edge of the window. */}
@@ -541,16 +541,16 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
                 if (e.key === 'Escape') setShowCatSuggest(false)
               }}
               placeholder="category to apply…"
-              style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 12, width: 160, boxSizing: 'border-box' }}
+              style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 12, width: 160, boxSizing: 'border-box' }}
             />
             {showCatSuggest && bulkCatSuggestions.length > 0 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 3, width: 160, maxHeight: 190, overflowY: 'auto', background: '#fff', border: '1px solid var(--rule)', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.13)', zIndex: 20 }}>
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 3, width: 160, maxHeight: 190, overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.13)', zIndex: 20 }}>
                 {bulkCatSuggestions.map((c) => (
                   <button
                     key={c}
                     onMouseDown={(e) => e.preventDefault()} // keep focus so onBlur doesn't beat the click
                     onClick={() => { setBulkCatInput(c); setShowCatSuggest(false) }}
-                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 9px', background: 'none', border: 'none', borderBottom: '1px solid #f0ece4', cursor: 'pointer', fontSize: 12, color: 'var(--ink)' }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 9px', background: 'none', border: 'none', borderBottom: '1px solid var(--rule)', cursor: 'pointer', fontSize: 12, color: 'var(--ink)' }}
                   >
                     {c}{categoryCounts.get(c) ? <span style={{ color: 'var(--muted)', fontSize: 10.5 }}> ({categoryCounts.get(c)})</span> : null}
                   </button>
@@ -559,7 +559,7 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
             )}
           </div>
           <button onClick={() => applyCategoryToTargets(bulkCatInput)} disabled={catBulkBusy || !bulkCatInput.trim() || !categorizeTargets.length}
-            style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid var(--rule)', background: '#fff', color: 'var(--ink)', fontSize: 12, fontWeight: 600, cursor: catBulkBusy || !bulkCatInput.trim() ? 'default' : 'pointer', opacity: catBulkBusy || !bulkCatInput.trim() ? 0.5 : 1 }}>
+            style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 12, fontWeight: 600, cursor: catBulkBusy || !bulkCatInput.trim() ? 'default' : 'pointer', opacity: catBulkBusy || !bulkCatInput.trim() ? 0.5 : 1 }}>
             + Apply to {categorizeTargets.length}
           </button>
           <button onClick={aiCategorizeTargets} disabled={catBulkBusy || !categorizeTargets.length}

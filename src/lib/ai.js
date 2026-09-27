@@ -8,7 +8,21 @@ function stripForApi(recipe) {
 
 async function invoke(body) {
   const { data, error } = await supabase.functions.invoke('extract-recipe', { body })
-  if (error) throw new Error(error.message)
+  if (error) {
+    // The function answers failures with {error: "..."}; surface that instead of the generic
+    // "Edge Function returned a non-2xx status code".
+    let msg = error.message
+    try {
+      const j = await error.context?.json?.()
+      if (j?.error) msg = j.error
+    } catch (_) {
+      const status = error.context?.status
+      if (status === 504 || status === 546) msg = 'The AI took too long to answer'
+    }
+    const err = new Error(msg)
+    err.status = error.context?.status
+    throw err
+  }
   if (data?.error) throw new Error(data.error)
   return data
 }
@@ -33,3 +47,4 @@ export const categorizeIngredients = (ingredients, knownCategories) =>
   invoke({ type: 'categorize_ingredients', ingredients, known_categories: knownCategories })
 export const describeIngredient = (name, ingredientType) =>
   invoke({ type: 'describe_ingredient', name, ingredient_type: ingredientType })
+export const extractPdfRecipes = (params) => invoke({ type: 'extract_pdf', ...params })

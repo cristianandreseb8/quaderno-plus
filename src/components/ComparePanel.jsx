@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { Columns2, Search, X } from 'lucide-react'
 import { calcMacros } from '../lib/macros.js'
 
-const COLORS = ['#1F3A4D', '#BC6C2C', '#2D6A4F', '#5B3A8C', '#1A6B6B']
+const COLORS = ['#3E7CB1', '#BC6C2C', '#2D6A4F', '#5B3A8C', '#1A6B6B']
 const PARAMS = [
   { k: 'fatP', label: 'Total fat %', max: 50 },
   { k: 'hydration', label: 'Hydration %', max: 100 },
@@ -12,6 +13,10 @@ const PARAMS = [
 
 export default function ComparePanel({ recipes, onClose }) {
   const [sel, setSel] = useState([])
+  const [q, setQ] = useState('')
+  const needle = q.trim().toLowerCase()
+  // Selected recipes stay visible even when the search no longer matches them.
+  const pickable = recipes.filter((r) => sel.includes(r.id) || !needle || [r.title, r.category].join(' ').toLowerCase().includes(needle)).slice(0, 60)
   const selected = recipes.filter((r) => sel.includes(r.id))
   const allMacros = selected.map((r) => ({ r, m: calcMacros(r.ingredients) }))
 
@@ -19,21 +24,24 @@ export default function ComparePanel({ recipes, onClose }) {
     <div className="Q-compare-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="Q-compare-panel">
         <div className="Q-compare-header">
-          <span style={{ fontFamily: 'var(--serif)', fontSize: 17, color: 'var(--navy)', flex: 1 }}>⚖ Recipe Comparison</span>
-          <button className="btn ghost xs" onClick={onClose}>✕ Close</button>
+          <span className="Q-app-ai-title"><Columns2 size={18} /> Compare recipes</span>
+          <button className="Q-icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
         <div className="Q-compare-body">
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.14em', color: 'var(--muted)', marginBottom: 7 }}>Select recipes to compare</div>
+            <div className="Q-search" style={{ marginBottom: 10 }}>
+              <Search size={15} className="Q-search-ico" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find recipes to compare" aria-label="Find recipes to compare" />
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {recipes.slice(0, 20).map((r) => (
+              {pickable.map((r) => (
                 <button
                   key={r.id}
                   onClick={() => setSel((p) => (p.includes(r.id) ? p.filter((x) => x !== r.id) : [...p, r.id]))}
                   style={{
-                    fontSize: 12, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', fontFamily: 'var(--mono)', transition: 'all .15s',
+                    fontSize: 12.5, padding: '5px 11px', borderRadius: 20, cursor: 'pointer', transition: 'all .15s',
                     border: `1.5px solid ${sel.includes(r.id) ? COLORS[sel.indexOf(r.id) % COLORS.length] : 'var(--rule)'}`,
-                    background: sel.includes(r.id) ? COLORS[sel.indexOf(r.id) % COLORS.length] + '22' : '#fff',
+                    background: sel.includes(r.id) ? COLORS[sel.indexOf(r.id) % COLORS.length] + '22' : 'var(--surface)',
                     color: sel.includes(r.id) ? COLORS[sel.indexOf(r.id) % COLORS.length] : 'var(--muted)',
                   }}
                 >

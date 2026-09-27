@@ -36,19 +36,19 @@ export default class ErrorBoundary extends Component {
     const err = this.state.error
     const detail = (err?.message || String(err)) + '\n' + String(err?.stack || '').split('\n').slice(0, 4).join('\n')
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24, textAlign: 'center', background: 'var(--paper, #faf6ef)', color: 'var(--ink, #2b2b2b)' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24, textAlign: 'center', background: 'var(--bg, #fff)', color: 'var(--ink, #2b2b2b)', fontFamily: 'var(--sans, system-ui)' }}>
         <div style={{ fontSize: 34 }}>😵</div>
         <div style={{ fontSize: 16, fontWeight: 700 }}>Something went wrong</div>
-        <div style={{ fontSize: 12.5, color: '#8a8378', maxWidth: 420 }}>
+        <div style={{ fontSize: 13, color: 'var(--muted, #8a8378)', maxWidth: 420, lineHeight: 1.5 }}>
           The error was recorded automatically. Reloading returns you to the recipe list — your recipes are safe.
         </div>
         <button
           onClick={this.handleReload}
-          style={{ padding: '9px 22px', borderRadius: 8, border: 'none', background: '#b7791f', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+          style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'var(--accent, #b7791f)', color: 'var(--accent-ink, #fff)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
         >
           ↻ Reload app
         </button>
-        <pre style={{ fontSize: 10, color: '#a8a094', maxWidth: '92vw', overflow: 'auto', whiteSpace: 'pre-wrap', textAlign: 'left', background: 'rgba(0,0,0,0.04)', borderRadius: 6, padding: 10, margin: 0 }}>{detail}</pre>
+        <pre style={{ fontSize: 10, color: 'var(--faint, #a8a094)', maxWidth: '92vw', overflow: 'auto', whiteSpace: 'pre-wrap', textAlign: 'left', background: 'rgba(0,0,0,0.04)', borderRadius: 6, padding: 10, margin: 0 }}>{detail}</pre>
       </div>
     )
   }

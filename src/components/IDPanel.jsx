@@ -323,7 +323,7 @@ export default function IDPanel({ recipe, onSave, allRecipes = [] }) {
           <div className="ID-section-body">
             <div className="Q-field" style={{ marginBottom: 12 }}>
               <label>Goal / target result</label>
-              <textarea rows={2} value={data.goal || ''} onChange={(e) => setGoal(e.target.value)} placeholder="Describe the final desired result: color, texture, flavor profile, volume…" style={{ width: '100%', border: '1px solid var(--rule)', borderRadius: 6, padding: '8px 10px', fontSize: 13, fontFamily: 'var(--sans)', color: 'var(--ink)', resize: 'vertical', background: '#fff' }} />
+              <textarea rows={2} value={data.goal || ''} onChange={(e) => setGoal(e.target.value)} placeholder="Describe the final desired result: color, texture, flavor profile, volume…" style={{ width: '100%', border: '1px solid var(--rule)', borderRadius: 6, padding: '8px 10px', fontSize: 13, fontFamily: 'var(--sans)', color: 'var(--ink)', resize: 'vertical', background: 'var(--surface)' }} />
             </div>
             {(data.versions || []).length === 0 && <div style={{ color: 'var(--muted)', fontSize: 12.5, marginBottom: 12 }}>No versions yet. Add one to start tracking your evolution.</div>}
             <div className="ID-timeline">
@@ -342,7 +342,7 @@ export default function IDPanel({ recipe, onSave, allRecipes = [] }) {
               ))}
             </div>
             {addingVersion ? (
-              <div style={{ background: '#F8FBFF', border: '1px solid #C8DFF0', borderRadius: 8, padding: 12, marginTop: 10 }}>
+              <div style={{ background: 'var(--id-soft)', border: '1px solid var(--id-line)', borderRadius: 8, padding: 12, marginTop: 10 }}>
                 <div className="Q-field"><label>Version name / description</label><input value={newVersion.title} onChange={(e) => setNewVersion((p) => ({ ...p, title: e.target.value }))} placeholder="v3 — reduced sugar 5%, added orange zest" /></div>
                 <div className="Q-field"><label>Notes</label><textarea rows={2} value={newVersion.notes} onChange={(e) => setNewVersion((p) => ({ ...p, notes: e.target.value }))} placeholder="What changed? Results?" /></div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer', marginBottom: 10 }}>
