@@ -141,6 +141,7 @@
   .Q[data-side="0"] .Q-side { display: none; }
 }
 .Q-back-btn { display: none; }
+.Q-guest-note { margin: 0; padding: 12px 14px; border-top: 1px solid var(--rule); font-size: 12px; line-height: 1.5; color: var(--muted); }
 
 .Q-hero { max-width: 440px; margin: 14vh auto 0; text-align: center; padding: 20px; }
 .Q-hero-ico { width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 18px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; }

@@ -7,7 +7,7 @@ import { VISIBILITY, createShare, inviteLink, listShares, mailInvite, recipeLink
 const LEVELS = [
   ['private', VISIBILITY.private, 'Only you can see this recipe.'],
   ['shared', VISIBILITY.shared, 'Only the people you invite. Each invite is a personal link for one person.'],
-  ['public', VISIBILITY.public, 'Anyone with the link can view it — no account needed.'],
+  ['public', VISIBILITY.public, 'Listed in public recipes: anyone can find and open it, even without an account.'],
 ]
 
 async function copy(text, what) {

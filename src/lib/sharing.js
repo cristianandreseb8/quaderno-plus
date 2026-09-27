@@ -36,13 +36,6 @@ export async function acceptInvite(token) {
   return data || null
 }
 
-// Anyone (even signed out) can open a public recipe by its link.
-export async function loadPublicRecipe(id) {
-  const { data, error } = await supabase.from('recipes').select('*, owner:profiles!recipes_owner_profile_fk(display_name)').eq('id', id).eq('visibility', 'public').maybeSingle()
-  if (error) throw new Error(error.message)
-  return data
-}
-
 export function mailInvite(to, recipeTitle, link, fromName) {
   const subject = `${fromName || 'A cook'} shared “${recipeTitle}” with you on Quaderno+`
   const body = `Hi,\n\nI'd like to share my recipe “${recipeTitle}” with you on Quaderno+.\n\nOpen this link and sign in (or create a free account) to see it:\n${link}\n\nThe link is just for you.`

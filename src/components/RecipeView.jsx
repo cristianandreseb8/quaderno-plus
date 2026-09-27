@@ -25,6 +25,7 @@ const TABS = [
 export default function RecipeView({
   recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant, inSession, onToggleSession,
   canEdit: canEditProp = true, ownerName = null, onShare = null, guest = false,
+  isFavorite = false, onToggleFavorite = null, liked = false, onToggleLike = null, collections = [], onToggleCollection = null,
 }) {
   const canEdit = canEditProp && !guest
   const { settings, update: updateSettings } = useSettings()
@@ -49,7 +50,7 @@ export default function RecipeView({
   const [translated, setTranslated] = useState(null)
   const [targetLang, setTargetLang] = useState(settings.translateLang || 'English')
   const [exporting, setExporting] = useState(false)
-  const [menuView, setMenuView] = useState('main') // main | translate | export | copy
+  const [menuView, setMenuView] = useState('main') // main | translate | export | copy | collections
   const [addingVideo, setAddingVideo] = useState(false)
   const exportNotes = settings.exportNotes
   const addNoteRef = useRef(null)
@@ -397,6 +398,7 @@ export default function RecipeView({
           )}
           {canEdit && onShare && <button className="Q-textbtn" onClick={onShare}>Share</button>}
           {canEdit && <button className="Q-textbtn" onClick={onEdit}>Edit</button>}
+          {!canEdit && !guest && onToggleLike && <button className={`Q-textbtn${liked ? ' on' : ''}`} onClick={onToggleLike} title={liked ? 'Remove from Recipes I like' : 'Keep it in Recipes I like'}>{liked ? 'Liked' : 'Like'}</button>}
           {guest && <button className="Q-textbtn" onClick={() => onCopy(recipe, null)}>Save a copy</button>}
           <Menu
             width={240}
@@ -418,6 +420,13 @@ export default function RecipeView({
                 <MenuItem checked={showPct} onClick={() => { setTab('recipe'); setShowPct(!showPct) }}>Baker's %</MenuItem>
                 {!guest && <MenuItem checked={!!translated} keepOpen hint={<>{translated ? targetLang : ''}<ChevronRight size={14} /></>} onClick={() => setMenuView('translate')}>Translate</MenuItem>}
                 <MenuItem checked={false} keepOpen hint={<ChevronRight size={14} />} onClick={() => setMenuView('export')}>Export</MenuItem>
+                {!guest && onToggleCollection && (
+                  <>
+                    <MenuSep />
+                    <MenuItem checked={isFavorite} onClick={onToggleFavorite}>Favorite</MenuItem>
+                    <MenuItem checked={collections.some((c) => c.has)} keepOpen hint={<ChevronRight size={14} />} onClick={() => setMenuView('collections')}>Add to collection</MenuItem>
+                  </>
+                )}
                 {!guest && (
                   <>
                     <MenuSep />
@@ -448,6 +457,18 @@ export default function RecipeView({
                 <MenuItem checked={false} disabled={exporting} onClick={() => runExport('xls')}>Excel</MenuItem>
                 <MenuSep />
                 <MenuToggle checked={exportNotes} onChange={(v) => updateSettings({ exportNotes: v })}>Include notes</MenuToggle>
+              </>
+            )}
+            {menuView === 'collections' && (
+              <>
+                <MenuItem icon={ChevronLeft} keepOpen onClick={() => setMenuView('main')}>Add to collection</MenuItem>
+                <MenuSep />
+                <div className="Q-menu-scroll">
+                  {collections.map((c) => <MenuItem key={c.id} checked={c.has} keepOpen onClick={() => onToggleCollection(c.id)}>{c.name}</MenuItem>)}
+                  {!collections.length && onToggleLike && <MenuItem checked={liked} keepOpen onClick={onToggleLike}>Recipes I like</MenuItem>}
+                </div>
+                <MenuSep />
+                <MenuItem checked={false} onClick={() => onToggleCollection(null)}>New collection…</MenuItem>
               </>
             )}
             {menuView === 'copy' && (

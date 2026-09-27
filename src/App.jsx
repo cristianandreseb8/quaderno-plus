@@ -1,11 +1,16 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowUpDown, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Star, X } from 'lucide-react'
-import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadOne } from './lib/db.js'
+import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadByIds, dbLoadOne, dbLoadPublic } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { SettingsContext, applySettings, loadSettings, saveSettings, useSettings } from './lib/settings.js'
 import { setNewPassword, signOut, useAuth } from './lib/auth.js'
-import { VISIBILITY, acceptInvite, loadPublicRecipe } from './lib/sharing.js'
+import { VISIBILITY, acceptInvite } from './lib/sharing.js'
+import {
+  LIKED_NAME, addToCollection, createCollection, deleteCollection, loadCollections, loadFavorites, removeFromCollection, renameCollection, setFavorite,
+} from './lib/collections.js'
 import AuthScreen from './components/AuthScreen.jsx'
+import GuestBrowser from './components/GuestBrowser.jsx'
+import Modal from './components/ui/Modal.jsx'
 import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
 import { addRecipe, buildShoppingList, removeRecipe, resetTicks, useSession } from './lib/session.js'
@@ -43,12 +48,18 @@ const RecipePicker = lazyRetry(() => import('./components/session/RecipePicker.j
 const ShareModal = lazyRetry(() => import('./components/ShareModal.jsx'))
 const isPhone = () => window.matchMedia('(max-width: 760px)').matches
 
+// What the recipe list shows. Other people's public recipes only appear in "Everyone's public
+// recipes"; collections ("col:<id>") and favorites come after, from broad to most personal.
 const SCOPES = [
   ['library', 'My library'],
   ['mine', 'My recipes'],
   ['shared', 'Shared with me'],
-  ['public', 'Public recipes'],
 ]
+const PUBLIC_SCOPES = [
+  ['my-public', 'My public recipes'],
+  ['public', 'Everyone’s public recipes'],
+]
+const byNewest = (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))
 
 const SORTS = [
   ['recent', 'Recently added'],
@@ -78,7 +89,14 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   const [categorizingAI, setCategorizingAI] = useState(false)
   const { settings, update: updateSettings } = useSettings()
   const uid = user.id
-  const [scope, setScope] = useState(() => localStorage.getItem('qdplus_scope') || 'library') // library | mine | shared | public
+  const [scope, setScope] = useState(() => localStorage.getItem('qdplus_scope') || 'library') // see SCOPES
+  const [collections, setCollections] = useState([]) // [{ id, name, items: [recipe ids, newest first] }]
+  const [favorites, setFavorites] = useState(() => new Set())
+  const [publicLoading, setPublicLoading] = useState(false)
+  const [nameModal, setNameModal] = useState(null) // { kind: 'new' | 'rename', id?, name?, addRecipe?, open? }
+  const recipesRef = useRef(recipes)
+  recipesRef.current = recipes
+  const requestedRef = useRef(new Set())
   const [shareFor, setShareFor] = useState(null)
   const [view, setView] = useState(() => localStorage.getItem('qdplus_view') || 'recipes') // 'recipes' | 'session'
   const [sessSel, setSessSel] = useState(() => (isPhone() ? null : 'shopping')) // 'shopping' | recipe id
@@ -101,9 +119,19 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
         try { sessionStorage.removeItem('qdplus_invite') } catch (_) { /* ignore */ }
       }
       if (invite || openId) window.history.replaceState(null, '', window.location.pathname)
-      const data = await dbLoad()
-      setRecipes(data)
-      if (target && data.some((r) => r.id === target)) { setSelId(target); return }
+      const [data, cols, favs] = await Promise.all([
+        dbLoad(uid),
+        loadCollections().catch(() => []),
+        loadFavorites().catch(() => new Set()),
+      ])
+      setCollections(cols); setFavorites(favs)
+      // Recipes kept in a collection or starred may belong to someone else: load those too.
+      const have = new Set(data.map((r) => r.id))
+      const extra = [...new Set([...cols.flatMap((c) => c.items), ...favs, ...(target ? [target] : [])])].filter((id) => !have.has(id))
+      extra.forEach((id) => requestedRef.current.add(id))
+      const all = extra.length ? [...data, ...(await dbLoadByIds(extra).catch(() => []))] : data
+      setRecipes(all)
+      if (target && all.some((r) => r.id === target)) { setSelId(target); return }
       const lastId = localStorage.getItem('qdplus_last_recipe')
       const restored = lastId && data.some((r) => r.id === lastId) ? lastId : data[0]?.id || null
       // On phones the list is the home screen; only auto-open a recipe on wide screens.
@@ -116,6 +144,29 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   useEffect(() => {
     if (mode === 'view' && selId) localStorage.setItem('qdplus_last_recipe', selId)
   }, [selId, mode])
+
+  // A session can hold someone else's public recipe that is not in the library.
+  useEffect(() => {
+    if (!loading && session?.recipes?.length) ensureLoaded(session.recipes.map((e) => e.id))
+  }, [session, loading])
+
+  // Everyone's public recipes load only when that view is open (and follow the search).
+  useEffect(() => {
+    if (scope !== 'public' || loading) return undefined
+    let cancelled = false
+    setPublicLoading(true)
+    const t = setTimeout(() => {
+      dbLoadPublic({ q })
+        .then((rows) => { if (!cancelled) mergeRecipes(rows) })
+        .catch((e) => { if (!cancelled) toast.error('Could not load public recipes: ' + e.message) })
+        .finally(() => { if (!cancelled) setPublicLoading(false) })
+    }, q ? 300 : 0)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [scope, q, loading])
+
+  useEffect(() => {
+    if (!loading && scope.startsWith('col:') && !collections.some((c) => 'col:' + c.id === scope)) pickScope('library')
+  }, [loading, scope, collections])
 
   // Shortcuts from the installed app's icon menu: /?new=blank|pdf, /?view=session
   useEffect(() => {
@@ -166,6 +217,67 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   function pickScope(v) { setScope(v); try { localStorage.setItem('qdplus_scope', v) } catch (_) { /* storage unavailable */ } }
   const isMine = (r) => !!r && r.owner_id === uid
   const ownerName = (r) => r?.owner?.display_name || 'another cook'
+
+  // ── Recipes that are not in the library (public, kept in a collection, in the session) ──
+  function mergeRecipes(rows) {
+    if (!rows.length) return
+    setRecipes((p) => { const have = new Set(p.map((r) => r.id)); const add = rows.filter((r) => !have.has(r.id)); return add.length ? [...p, ...add] : p })
+  }
+  async function ensureLoaded(ids) {
+    const have = new Set(recipesRef.current.map((r) => r.id))
+    const missing = [...new Set(ids)].filter((id) => id && !have.has(id) && !requestedRef.current.has(id))
+    if (!missing.length) return
+    missing.forEach((id) => requestedRef.current.add(id))
+    try { mergeRecipes(await dbLoadByIds(missing)) } catch (_) { /* a recipe that became private just stays hidden */ }
+  }
+
+  // ── Favorites and collections ──
+  async function toggleFavorite(id) {
+    const on = !favorites.has(id)
+    const flip = (want) => setFavorites((p) => { const n = new Set(p); if (want) n.add(id); else n.delete(id); return n })
+    flip(on)
+    try { await setFavorite(id, on) } catch (e) { flip(!on); toast.error('Could not update favorites: ' + e.message) }
+  }
+  async function toggleInCollection(col, recipeId, quiet = false) {
+    const on = !col.items.includes(recipeId)
+    const apply = (want) => setCollections((p) => p.map((c) => (c.id !== col.id ? c : { ...c, items: want ? [recipeId, ...c.items.filter((x) => x !== recipeId)] : c.items.filter((x) => x !== recipeId) })))
+    apply(on)
+    try {
+      if (on) await addToCollection(col.id, recipeId); else await removeFromCollection(col.id, recipeId)
+      if (!quiet) toast(on ? `Added to ${col.name}` : `Removed from ${col.name}`)
+    } catch (e) { apply(!on); toast.error('Could not update the collection: ' + e.message) }
+  }
+  // "Like" keeps a recipe in "Recipes I like", made the first time it is used.
+  async function toggleLike(recipeId) {
+    let col = collections.find((c) => c.name === LIKED_NAME)
+    try {
+      if (!col) { col = await createCollection(LIKED_NAME); setCollections((p) => [...p, col]) }
+      await toggleInCollection(col, recipeId)
+    } catch (e) { toast.error('Could not save it: ' + e.message) }
+  }
+  async function submitName(name) {
+    const m = nameModal
+    setNameModal(null)
+    try {
+      if (m.kind === 'rename') {
+        await renameCollection(m.id, name)
+        setCollections((p) => p.map((c) => (c.id === m.id ? { ...c, name: name.trim() } : c)))
+        return
+      }
+      const col = await createCollection(name)
+      setCollections((p) => [...p, col])
+      if (m.addRecipe) await toggleInCollection(col, m.addRecipe)
+      else pickScope('col:' + col.id)
+    } catch (e) { toast.error('Could not save the collection: ' + e.message) }
+  }
+  async function removeCollection(col) {
+    if (!window.confirm(`Delete the collection "${col.name}"? The recipes in it are not deleted.`)) return
+    try {
+      await deleteCollection(col.id)
+      setCollections((p) => p.filter((c) => c.id !== col.id))
+      if (scope === 'col:' + col.id) pickScope('library')
+    } catch (e) { toast.error('Could not delete the collection: ' + e.message) }
+  }
 
   async function saveRecipe(rec) {
     try {
@@ -309,35 +421,53 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   const onImportedRecipe = useCallback((saved) => { setRecipes((p) => [saved, ...p]) }, [])
   const onImportRemoved = useCallback((id) => { setRecipes((p) => p.filter((r) => r.id !== id)) }, [])
 
+  const activeCol = scope.startsWith('col:') ? collections.find((c) => 'col:' + c.id === scope) || null : null
+  const scopeLabel = activeCol ? activeCol.name : scope === 'favorites' ? 'Favorites'
+    : ([...SCOPES, ...PUBLIC_SCOPES].find(([k]) => k === scope) || SCOPES[0])[1]
+  // The recipes of the chosen view, before search, category and sorting.
+  const scoped = useMemo(() => {
+    const inCol = activeCol ? new Set(activeCol.items) : null
+    return recipes.filter((r) => {
+      const mine = r.owner_id === uid
+      if (scope === 'library') return mine || r.visibility === 'shared'
+      if (scope === 'mine') return mine
+      if (scope === 'shared') return !mine && r.visibility === 'shared'
+      if (scope === 'my-public') return mine && r.visibility === 'public'
+      if (scope === 'public') return r.visibility === 'public'
+      if (scope === 'favorites') return favorites.has(r.id)
+      if (inCol) return inCol.has(r.id)
+      return mine || r.visibility === 'shared'
+    })
+  }, [recipes, scope, uid, activeCol, favorites])
+
   const categories = useMemo(() => {
     const counts = new Map()
-    recipes.forEach((r) => { const c = (r.category || '').trim(); if (c) counts.set(c, (counts.get(c) || 0) + 1) })
+    scoped.forEach((r) => { const c = (r.category || '').trim(); if (c) counts.set(c, (counts.get(c) || 0) + 1) })
     return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-  }, [recipes])
+  }, [scoped])
 
   const sel = recipes.find((x) => x.id === selId) || null
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    let list = recipes.filter((r) => {
-      const mine = r.owner_id === uid
-      if (scope === 'library' && !(mine || r.visibility === 'shared')) return false
-      if (scope === 'mine' && !mine) return false
-      if (scope === 'shared' && (mine || r.visibility !== 'shared')) return false
-      if (scope === 'public' && r.visibility !== 'public') return false
+    let list = scoped.filter((r) => {
       if (catFilter && (r.category || '').trim() !== catFilter) return false
       if (!needle) return true
       return [r.title, r.category, r.source, ...(r.ingredients || [])].join(' ').toLowerCase().includes(needle)
     })
-    if (sortMode === 'az') list = [...list].sort((a, b) => a.title.localeCompare(b.title))
+    if (sortMode === 'recent') {
+      // In a collection "recently added" means added to the collection.
+      const at = activeCol ? new Map(activeCol.items.map((id, i) => [id, i])) : null
+      list = at ? [...list].sort((a, b) => at.get(a.id) - at.get(b.id)) : [...list].sort(byNewest)
+    } else if (sortMode === 'az') list = [...list].sort((a, b) => a.title.localeCompare(b.title))
     else if (sortMode === 'za') list = [...list].sort((a, b) => b.title.localeCompare(a.title))
     else if (sortMode === 'category') list = [...list].sort((a, b) => (a.category || '').localeCompare(b.category || ''))
-    else if (sortMode === 'favorites') list = [...list].sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0))
+    else if (sortMode === 'favorites') list = [...list].sort((a, b) => (favorites.has(b.id) ? 1 : 0) - (favorites.has(a.id) ? 1 : 0))
     else if (sortMode === 'opened') {
       const idx = (id) => recentlyOpened.indexOf(id)
       list = [...list].sort((a, b) => { const ia = idx(a.id), ib = idx(b.id); if (ia === -1 && ib === -1) return 0; if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib })
     }
     return list
-  }, [recipes, q, catFilter, sortMode, recentlyOpened, scope, uid])
+  }, [scoped, q, catFilter, sortMode, recentlyOpened, activeCol, favorites])
 
   function openRecipe(id) {
     setView('recipes'); setSelId(id); setMode('view')
@@ -489,7 +619,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                     {q && <button className="Q-search-x" onClick={() => setQ('')} aria-label="Clear search"><X size={14} /></button>}
                   </div>
                   <Menu
-                    width={230}
+                    width={250}
                     trigger={(p) => (
                       <button className={`Q-icon-btn${catFilter || sortMode !== 'recent' || scope !== 'library' ? ' on' : ''}`} onClick={p.toggle} title="Show, sort and filter" aria-label="Show, sort and filter">
                         <ArrowUpDown size={16} />
@@ -498,6 +628,17 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                   >
                     <MenuLabel>Show</MenuLabel>
                     {SCOPES.map(([k, l]) => <MenuItem key={k} checked={scope === k} onClick={() => pickScope(k)}>{l}</MenuItem>)}
+                    <MenuSep />
+                    <MenuLabel>Public</MenuLabel>
+                    {PUBLIC_SCOPES.map(([k, l]) => <MenuItem key={k} checked={scope === k} onClick={() => pickScope(k)}>{l}</MenuItem>)}
+                    <MenuSep />
+                    <MenuLabel>Collections</MenuLabel>
+                    {collections.map((c) => <MenuItem key={c.id} checked={scope === 'col:' + c.id} hint={c.items.length || ''} onClick={() => pickScope('col:' + c.id)}>{c.name}</MenuItem>)}
+                    <MenuItem checked={false} onClick={() => setNameModal({ kind: 'new' })}>New collection…</MenuItem>
+                    {activeCol && <MenuItem checked={false} onClick={() => setNameModal({ kind: 'rename', id: activeCol.id, name: activeCol.name })}>Rename this collection…</MenuItem>}
+                    {activeCol && <MenuItem checked={false} danger onClick={() => removeCollection(activeCol)}>Delete this collection</MenuItem>}
+                    <MenuSep />
+                    <MenuItem checked={scope === 'favorites'} hint={favorites.size || ''} onClick={() => pickScope('favorites')}>Favorites</MenuItem>
                     <MenuSep />
                     <MenuLabel>Sort by</MenuLabel>
                     {SORTS.map(([k, l]) => <MenuItem key={k} checked={sortMode === k} onClick={() => setSort(k)}>{l}</MenuItem>)}
@@ -516,12 +657,23 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                 <div className="Q-side-meta">
                   {catFilter
                     ? <button className="Q-chip-filter" onClick={() => setCatFilter('')}>{catFilter}<X size={12} /></button>
-                    : <span>{loading ? 'Loading…' : `${filtered.length} ${filtered.length === 1 ? 'recipe' : 'recipes'}${scope !== 'library' ? ' · ' + SCOPES.find(([k]) => k === scope)[1].toLowerCase() : ''}`}</span>}
+                    : <span>{loading ? 'Loading…' : `${filtered.length} ${filtered.length === 1 ? 'recipe' : 'recipes'}${scope !== 'library' ? ' · ' + scopeLabel : ''}`}</span>}
                   {catFilter && <span>{filtered.length}</span>}
                 </div>
                 <div className="Q-list">
                   {loading && Array.from({ length: 8 }).map((_, i) => <div key={i} className="Q-list-skel"><i /><div><b /><s /></div></div>)}
-                  {!loading && !filtered.length && <div className="Q-msg">{q || catFilter ? 'No recipes match.' : 'No recipes yet.'}</div>}
+                  {!loading && !filtered.length && (
+                    <div className="Q-msg">
+                      {scope === 'public' && publicLoading ? 'Loading public recipes…'
+                        : q || catFilter ? 'No recipes match.'
+                          : scope === 'public' ? 'No public recipes yet.'
+                            : scope === 'my-public' ? 'None of your recipes is public. Open one and choose Share → Public.'
+                              : scope === 'favorites' ? 'Star a recipe to keep it here.'
+                                : activeCol?.name === LIKED_NAME ? 'Tap Like on a recipe to keep it here.'
+                                  : activeCol ? 'Empty. Open a recipe and choose ⋯ → Add to collection.'
+                                    : 'No recipes yet.'}
+                    </div>
+                  )}
                   {filtered.map((r) => (
                     <div
                       key={r.id} className="Q-list-item" role="button" tabIndex={0} aria-selected={r.id === selId && mode === 'view'}
@@ -538,14 +690,12 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                         </span>
                       </div>
                       {sessionIds.has(r.id) && <span className="Q-dot" title="In the session" />}
-                      {isMine(r) && (
-                        <button
-                          className={`Q-fav${r.is_favorite ? ' on' : ''}`} title={r.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-                          onClick={(e) => { e.stopPropagation(); updateRecipe({ ...r, is_favorite: !r.is_favorite }) }}
-                        >
-                          <Star size={14} fill={r.is_favorite ? 'currentColor' : 'none'} />
-                        </button>
-                      )}
+                      <button
+                        className={`Q-fav${favorites.has(r.id) ? ' on' : ''}`} title={favorites.has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        onClick={(e) => { e.stopPropagation(); toggleFavorite(r.id) }}
+                      >
+                        <Star size={14} fill={favorites.has(r.id) ? 'currentColor' : 'none'} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -607,6 +757,14 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                         allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant}
                         inSession={sessionIds.has(sel.id)} onToggleSession={() => toggleFromRecipe(sel.id)}
                         canEdit={isMine(sel)} ownerName={isMine(sel) ? null : ownerName(sel)} onShare={() => setShareFor(sel)}
+                        isFavorite={favorites.has(sel.id)} onToggleFavorite={() => toggleFavorite(sel.id)}
+                        liked={collections.some((c) => c.name === LIKED_NAME && c.items.includes(sel.id))} onToggleLike={() => toggleLike(sel.id)}
+                        collections={collections.map((c) => ({ id: c.id, name: c.name, has: c.items.includes(sel.id) }))}
+                        onToggleCollection={(id) => {
+                          if (!id) { setNameModal({ kind: 'new', addRecipe: sel.id }); return }
+                          const col = collections.find((c) => c.id === id)
+                          if (col) toggleInCollection(col, sel.id)
+                        }}
                       />
                     )}
                   </>
@@ -668,7 +826,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
         {showSettings && (
           <Suspense fallback={null}>
             <SettingsModal
-              onClose={() => setShowSettings(false)} recipeCount={recipes.length}
+              onClose={() => setShowSettings(false)} recipeCount={recipes.filter(isMine).length}
               uncategorizedCount={uncategorizedCount} categorizing={categorizingAI} onAutoCategorize={handleAutoCategories}
               user={user} profile={profile} onProfile={setProfile}
             />
@@ -681,6 +839,13 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
               onVisibility={(v) => { setRecipes((p) => p.map((x) => (x.id === shareFor.id ? { ...x, visibility: v } : x))); setShareFor((p) => ({ ...p, visibility: v })) }}
             />
           </Suspense>
+        )}
+        {nameModal && (
+          <NameModal
+            title={nameModal.kind === 'rename' ? 'Rename collection' : 'New collection'}
+            initial={nameModal.name || ''} cta={nameModal.kind === 'rename' ? 'Save' : 'Create'}
+            onSubmit={submitName} onClose={() => setNameModal(null)}
+          />
         )}
         {showPicker && (
           <Suspense fallback={null}>
@@ -697,7 +862,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
               onRemoved={onImportRemoved}
               onOpenRecipe={(id) => { setImportOpen(false); openRecipe(id) }}
               onShowAll={(source) => { setImportOpen(false); switchView('recipes'); setCatFilter(''); setQ(source) }}
-              knownCategories={categories.map(([c]) => c)}
+              knownCategories={[...new Set(recipes.filter(isMine).map((r) => (r.category || '').trim()).filter(Boolean))]}
             />
           </Suspense>
         )}
@@ -707,34 +872,19 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
 }
 
 // Shown to anyone (signed in or not) who opens the link of a public recipe.
-function PublicRecipe({ id, onSignIn }) {
-  const [recipe, setRecipe] = useState(undefined)
-  useEffect(() => {
-    loadPublicRecipe(id).then((r) => setRecipe(r ? { ...r, time: r.time_estimate, videos: r.videos || [], source_photos: r.source_photos || [] } : null))
-      .catch(() => setRecipe(null))
-  }, [id])
-  if (recipe === undefined) return <div className="Q-splash">Quaderno<b>+</b></div>
-  if (recipe === null) return <AuthScreen reason="This recipe is private or no longer exists. Sign in to open recipes shared with you." />
-  const noop = () => {}
+function NameModal({ title, initial, cta, onSubmit, onClose }) {
+  const [name, setName] = useState(initial)
+  const ok = name.trim().length > 0 && name.trim().length <= 80
   return (
-    <div className="Q" data-open="1" data-side="0">
-      <header className="Q-top">
-        <div className="Q-brand">Quaderno<b>+</b></div>
-        <div className="Q-top-right"><button className="btn primary Q-new" onClick={onSignIn}><span className="lbl">Sign in</span></button></div>
-      </header>
-      <div className="Q-body">
-        <main className="Q-main">
-          <div className="Q-pane">
-            <Suspense fallback={<div className="Q-msg">Loading…</div>}>
-              <RecipeView
-                recipe={recipe} guest canEdit={false} ownerName={recipe.owner?.display_name}
-                onEdit={noop} onDelete={noop} onUpdate={noop} allRecipes={[]} onCopy={onSignIn} onSaveVariant={onSignIn}
-              />
-            </Suspense>
-          </div>
-        </main>
+    <Modal
+      title={title} onClose={onClose} width={420}
+      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!ok} onClick={() => onSubmit(name)}>{cta}</button></>}
+    >
+      <div className="Q-field">
+        <label>Name</label>
+        <input autoFocus value={name} maxLength={80} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && ok) onSubmit(name) }} placeholder="e.g. Christmas baking" />
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -776,16 +926,23 @@ export default function App() {
     const t = params.get('invite')
     try { if (t) sessionStorage.setItem('qdplus_invite', t); return t || sessionStorage.getItem('qdplus_invite') } catch (_) { return t }
   })
+  // Guests browse public recipes without an account; a public link opens straight into that.
+  const [guest, setGuestState] = useState(() => { try { return sessionStorage.getItem('qdplus_guest') === '1' } catch (_) { return false } })
+  const setGuest = (on) => { setGuestState(on); try { if (on) sessionStorage.setItem('qdplus_guest', '1'); else sessionStorage.removeItem('qdplus_guest') } catch (_) { /* ignore */ } }
   const [wantsAuth, setWantsAuth] = useState(false)
+  useEffect(() => { if (auth.user) { setGuest(false); setWantsAuth(false) } }, [auth.user])
 
   let content
   if (auth.loading) content = <div className="Q-splash">Quaderno<b>+</b></div>
-  else if (!auth.user && openId && !wantsAuth) content = <PublicRecipe id={openId} onSignIn={() => setWantsAuth(true)} />
-  else if (!auth.user) {
+  else if (!auth.user && (guest || (openId && !invite)) && !wantsAuth) {
+    content = <GuestBrowser openId={openId} onSignIn={() => setWantsAuth(true)} />
+  } else if (!auth.user) {
+    const browsing = guest || (openId && !invite)
     content = (
       <AuthScreen
         reason={invite ? 'Someone shared a recipe with you. Sign in, or create a free account, to open it.' : null}
-        onCancel={openId ? () => setWantsAuth(false) : null} cancelLabel="Back to the recipe"
+        onCancel={browsing ? () => setWantsAuth(false) : null} cancelLabel="Back to public recipes"
+        onGuest={browsing || invite ? null : () => { setGuest(true); setWantsAuth(false) }}
       />
     )
   } else {

@@ -3,8 +3,8 @@ import { Loader2 } from 'lucide-react'
 import { sendPasswordReset, signIn, signUp } from '../lib/auth.js'
 
 // Sign in / create account. `reason` explains why the screen appears (an invite, a private
-// recipe link); `onBrowsePublic` is offered when a public recipe can be opened without an account.
-export default function AuthScreen({ reason, onCancel, cancelLabel }) {
+// recipe link); `onGuest` offers browsing public recipes without an account.
+export default function AuthScreen({ reason, onCancel, cancelLabel, onGuest }) {
   const [mode, setMode] = useState('signin') // signin | signup | reset
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -62,6 +62,11 @@ export default function AuthScreen({ reason, onCancel, cancelLabel }) {
           {mode !== 'signin' && <>Have an account? <button type="button" className="Q-link" onClick={() => { setMode('signin'); setErr(''); setInfo('') }}>Sign in</button></>}
         </div>
         {onCancel && <button type="button" className="Q-auth-cancel" onClick={onCancel}>{cancelLabel || 'Back'}</button>}
+        {onGuest && mode === 'signin' && (
+          <button type="button" className="Q-auth-guest" onClick={onGuest}>
+            Continue as guest<span>Browse public recipes without an account</span>
+          </button>
+        )}
       </form>
     </div>
   )

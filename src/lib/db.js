@@ -73,8 +73,33 @@ async function withRetry(fn) {
   throw lastErr
 }
 
-export async function dbLoad() {
-  const data = await withRetry(() => supabase.from('recipes').select(`${LITE_COLUMNS},${OWNER}`).order('created_at', { ascending: false }))
+// The library: your own recipes and the ones shared with you. Other people's public recipes
+// are not part of it — they load on demand (dbLoadPublic) or when kept in a collection.
+export async function dbLoad(uid) {
+  const data = await withRetry(() => supabase.from('recipes').select(`${LITE_COLUMNS},${OWNER}`)
+    .or(`owner_id.eq.${uid},visibility.eq.shared`).order('created_at', { ascending: false }))
+  return (data || []).map((r) => fromDb(r, true))
+}
+
+// Specific recipes (kept in a collection, starred, in the session), in batches.
+export async function dbLoadByIds(ids) {
+  const out = []
+  for (let i = 0; i < ids.length; i += 80) {
+    const chunk = ids.slice(i, i + 80)
+    const data = await withRetry(() => supabase.from('recipes').select(`${LITE_COLUMNS},${OWNER}`).in('id', chunk))
+    out.push(...(data || []).map((r) => fromDb(r, true)))
+  }
+  return out
+}
+
+// Everyone's public recipes, newest first, optionally matching a title search. Works signed out.
+export async function dbLoadPublic({ q = '', limit = 60 } = {}) {
+  const data = await withRetry(() => {
+    let query = supabase.from('recipes').select(`${LITE_COLUMNS},${OWNER}`).eq('visibility', 'public')
+    const t = q.trim().replace(/[%_,()]/g, ' ').trim()
+    if (t) query = query.or(`title.ilike.%${t}%,category.ilike.%${t}%`)
+    return query.order('created_at', { ascending: false }).limit(limit)
+  })
   return (data || []).map((r) => fromDb(r, true))
 }
 
