@@ -6,9 +6,11 @@ import {
 import { parseTabs, serializeTabs } from '../lib/notesData.js'
 import { translateRecipe } from '../lib/ai.js'
 import { LANGS } from '../lib/constants.js'
-import { useSettings } from '../lib/settings.js'
+import { normalizeBlocks, useSettings } from '../lib/settings.js'
 import Menu, { MenuItem, MenuLabel, MenuSep, MenuToggle } from './ui/Menu.jsx'
 import { toast } from './ui/Toaster.jsx'
+import Blocks from './ui/Blocks.jsx'
+import VideoBlock from './VideoBlock.jsx'
 import NotesPanel from './NotesPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
 
@@ -41,12 +43,13 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
   const [translated, setTranslated] = useState(null)
   const [targetLang, setTargetLang] = useState(settings.translateLang || 'English')
   const [exporting, setExporting] = useState(false)
+  const [addingVideo, setAddingVideo] = useState(false)
   const exportNotes = settings.exportNotes
   const addNoteRef = useRef(null)
 
   useEffect(() => {
     setChecked(new Set()); setHighlightedSteps(new Set()); setAppliedScale(null); setTranslated(null)
-    setShowScale(false); setTab('recipe')
+    setShowScale(false); setTab('recipe'); setAddingVideo(false)
     setCustomBaseGrams('')
   }, [recipe.id])
 
@@ -266,12 +269,8 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
     </div>
   )
 
-  const ingredientsBlock = (
-    <section className="Q-rsec">
-      <div className="Q-rsec-h">
-        <span>Ingredients</span>
-        {checked.size > 0 && <button className="Q-link" onClick={() => { setChecked(new Set()); setHighlightedSteps(new Set()) }}>Clear {checked.size} ticked</button>}
-      </div>
+  const ingredientsContent = (
+    <>
       {sections.map((sec, si) => {
         const pctData = showPct ? calcPct(sec.items, pctMode, pctBase, customBaseGrams ? parseFloat(customBaseGrams) : null) : null
         const secG = sectionGrams(sec.items)
@@ -297,47 +296,55 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
         )
       })}
       {totalGrams > 0 && <div className="Q-grand-total"><span>Total</span>{totalGrams.toFixed(0)} g</div>}
-    </section>
+    </>
   )
 
-  const methodBlock = (viewR.steps?.length > 0 || viewR.notes) && (
-    <section className="Q-rsec">
-      {viewR.steps?.length > 0 && (
-        <>
-          <div className="Q-rsec-h">
-            <span>Method</span>
-            {highlightedSteps.size > 0 && <em className="Q-hl-note">{highlightedSteps.size === 1 ? '1 step uses' : `${highlightedSteps.size} steps use`} the ticked ingredients</em>}
-          </div>
-          <ol className="Q-steps">
-            {numberSteps(viewR.steps).map((st, i) => {
-              if (!st.text) return null
-              if (st.header) return <li key={i} className="Q-step-h">{st.text}</li>
-              return <li key={i} data-n={st.n} className={highlightedSteps.has(i) ? 'highlighted' : ''}>{st.text}</li>
-            })}
-          </ol>
-        </>
-      )}
-      {viewR.notes && <div className="Q-baker-note"><b>Notes</b>{viewR.notes}</div>}
-    </section>
-  )
+  const stepList = numberSteps(viewR.steps)
+  const videos = Array.isArray(recipe.videos) ? recipe.videos : []
+  const blocks = [
+    {
+      id: 'ingredients', title: 'Ingredients', content: ingredientsContent,
+      summary: totalGrams > 0 ? `${totalGrams.toFixed(0)} g` : '',
+      actions: checked.size > 0 && <button className="Q-link" onClick={() => { setChecked(new Set()); setHighlightedSteps(new Set()) }}>Clear {checked.size} ticked</button>,
+    },
+    stepList.some((st) => st.n) && {
+      id: 'method', title: 'Method', summary: `${stepList.filter((st) => st.n).length} steps`,
+      actions: highlightedSteps.size > 0 && <em className="Q-hl-note">{highlightedSteps.size === 1 ? '1 step uses' : `${highlightedSteps.size} steps use`} the ticked ingredients</em>,
+      content: (
+        <ol className="Q-steps">
+          {stepList.map((st, i) => {
+            if (!st.text) return null
+            if (st.header) return <li key={i} className="Q-step-h">{st.text}</li>
+            return <li key={i} data-n={st.n} className={highlightedSteps.has(i) ? 'highlighted' : ''}>{st.text}</li>
+          })}
+        </ol>
+      ),
+    },
+    (videos.length > 0 || addingVideo) && {
+      id: 'video', title: videos.length > 1 ? `Videos` : 'Video', summary: videos.length > 1 ? `${videos.length}` : '',
+      actions: videos.length > 0 && !addingVideo && <button className="Q-link" onClick={() => setAddingVideo(true)}>Add</button>,
+      content: <VideoBlock videos={videos} onChange={(v) => onUpdate({ ...recipe, videos: v })} adding={addingVideo} onAddingDone={() => setAddingVideo(false)} />,
+    },
+    viewR.notes && { id: 'notes', title: 'Notes', content: <div className="Q-baker-note">{viewR.notes}</div> },
+    recipe.source_photos?.length > 0 && {
+      id: 'photos', title: 'Source photos', summary: `${recipe.source_photos.length}`,
+      content: <div className="Q-src-photos">{recipe.source_photos.map((src, i) => <img key={i} src={src} onClick={() => setLightboxSrc(src)} alt="" />)}</div>,
+    },
+  ].filter(Boolean)
 
   const recipeContent = (
     <div>
       {toolbar}
       {scalePanel}
       {pctBar}
-      <div className={`Q-rbody${settings.layout === 'split' ? ' split' : ''}`}>
-        {ingredientsBlock}
-        {methodBlock}
-      </div>
-      {recipe.source_photos?.length > 0 && (
-        <section className="Q-rsec">
-          <div className="Q-rsec-h"><span>Source photos</span></div>
-          <div className="Q-src-photos">{recipe.source_photos.map((src, i) => <img key={i} src={src} onClick={() => setLightboxSrc(src)} alt="" />)}</div>
-        </section>
-      )}
+      <Blocks blocks={blocks} split={settings.layout === 'split'} />
     </div>
   )
+
+  function unfoldVideo() {
+    const b = normalizeBlocks(settings.blocks)
+    if (b.collapsed.video) updateSettings({ blocks: { ...b, collapsed: { ...b.collapsed, video: false } } })
+  }
 
   const meta = [viewR.time, viewR.servings, viewR.source].filter(Boolean)
   const origin = [recipe.fixed_lang && `${recipe.fixed_lang} version`, copiedFrom && `copy of ${copiedFrom.title}`].filter(Boolean).join(', ')
@@ -388,6 +395,7 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
             width={230}
             trigger={(p) => <button className="Q-icon-btn" onClick={p.toggle} aria-label="More actions" title="More actions"><MoreHorizontal size={18} /></button>}
           >
+            <MenuItem onClick={() => { setTab('recipe'); setAddingVideo(true); unfoldVideo() }}>Add video</MenuItem>
             <MenuItem onClick={() => onCopy(recipe, null)}>Duplicate</MenuItem>
             <MenuLabel>Duplicate translated</MenuLabel>
             <div className="Q-menu-scroll short">

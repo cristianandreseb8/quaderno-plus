@@ -133,7 +133,12 @@
 
 .Q-main { overflow: auto; min-width: 0; container-type: inline-size; container-name: main; scroll-behavior: smooth; }
 .Q-pane { max-width: 880px; margin: 0 auto; padding: 30px 40px 120px; }
-.Q-pane:has(.Q-rbody.split) { max-width: 1180px; }
+.Q-pane:has(.Q-blocks.split) { max-width: 1180px; }
+.Q-side-toggle { margin-left: -6px; }
+@media (min-width: 761px) {
+  .Q[data-side="0"] .Q-body { grid-template-columns: minmax(0, 1fr); }
+  .Q[data-side="0"] .Q-side { display: none; }
+}
 .Q-back-btn { display: none; }
 
 .Q-hero { max-width: 440px; margin: 14vh auto 0; text-align: center; padding: 20px; }

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowUpDown, MoreHorizontal, Plus, Search, Star, X } from 'lucide-react'
+import { ArrowLeft, ArrowUpDown, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Star, X } from 'lucide-react'
 import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadOne } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { SettingsContext, applySettings, loadSettings, saveSettings } from './lib/settings.js'
@@ -69,6 +69,7 @@ export default function App() {
   const [sessSel, setSessSel] = useState(() => (isPhone() ? null : 'shopping')) // 'shopping' | recipe id
   const [showPicker, setShowPicker] = useState(false)
   const searchRef = useRef(null)
+  const toggleSidebarRef = useRef(() => {})
   const { session, change: changeSession, finish: finishSession } = useSession(toast.error)
 
   const updateSettings = useCallback((patch) => {
@@ -112,7 +113,12 @@ export default function App() {
     const onKey = (e) => {
       const tag = (e.target.tagName || '').toLowerCase()
       if (e.key === '/' && !['input', 'textarea', 'select'].includes(tag) && !e.target.isContentEditable) {
-        e.preventDefault(); searchRef.current?.focus()
+        e.preventDefault()
+        updateSettings({ sidebar: true })
+        setTimeout(() => searchRef.current?.focus(), 0)
+      }
+      if (e.key === '\\' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault(); toggleSidebarRef.current()
       }
       if (e.key === 'Escape' && !document.querySelector('.Q-menu, .Q-modal-overlay:not([style*="none"])')) {
         setShowAppAI(false); setShowCompare(false)
@@ -349,6 +355,8 @@ export default function App() {
   }
 
   const isOpen = view === 'session' ? !!sessSel : (mode !== 'view' || !!sel)
+  const sidebarOpen = settings.sidebar !== false
+  toggleSidebarRef.current = () => updateSettings({ sidebar: !sidebarOpen })
   const uncategorizedCount = recipes.filter((r) => !r.category).length
   const importMounted = importOpen || !!importStatus
   const cookEntry = view === 'session' && sessSel && sessSel !== 'shopping' ? sessionEntries.find((e) => e.id === sessSel) : null
@@ -366,8 +374,14 @@ export default function App() {
 
   return (
     <SettingsContext.Provider value={settingsCtx}>
-      <div className="Q" data-open={isOpen ? '1' : '0'}>
+      <div className="Q" data-open={isOpen ? '1' : '0'} data-side={sidebarOpen ? '1' : '0'}>
         <header className="Q-top">
+          <button
+            className="Q-hbtn icon Q-side-toggle" onClick={() => toggleSidebarRef.current()}
+            title={sidebarOpen ? 'Hide the recipe list (⌘\\)' : 'Show the recipe list (⌘\\)'} aria-label={sidebarOpen ? 'Hide the recipe list' : 'Show the recipe list'}
+          >
+            {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+          </button>
           <div className="Q-brand">Quaderno<b>+</b></div>
           {importStatus && (
             <button className="Q-import-pill" onClick={() => setImportOpen(true)} title="Show PDF import">
@@ -543,6 +557,7 @@ export default function App() {
                   <CookView
                     key={cookRecipe.id} recipe={cookRecipe} entry={cookEntry} progress={session?.progress?.[cookRecipe.id]} change={changeSession}
                     onOpenRecipe={() => openRecipe(cookRecipe.id)} onRemove={() => toggleInSession(cookRecipe.id, false)}
+                    onVideos={(v) => updateRecipe({ ...cookRecipe, videos: v })}
                   />
                 )}
               </Suspense>

@@ -20,17 +20,34 @@ export const TEXT_SIZES = [
   { id: 'xl', label: 'XL' },
 ]
 
+// The boxes of a recipe page. Their order, column (side-by-side layout) and folded state are
+// a personal layout, so they are kept per device like the rest of these settings.
+export const BLOCK_IDS = ['ingredients', 'video', 'method', 'notes', 'photos']
+const DEFAULT_BLOCKS = {
+  order: BLOCK_IDS,
+  col: { ingredients: 'left', video: 'right', method: 'right', notes: 'right', photos: 'right' },
+  collapsed: {},
+}
+export function normalizeBlocks(b) {
+  const order = (Array.isArray(b?.order) ? b.order : []).filter((id) => BLOCK_IDS.includes(id))
+  BLOCK_IDS.forEach((id) => { if (!order.includes(id)) order.push(id) })
+  return { order, col: { ...DEFAULT_BLOCKS.col, ...(b?.col || {}) }, collapsed: { ...(b?.collapsed || {}) } }
+}
+
 export const DEFAULTS = {
   theme: 'clean',
   textSize: 'm',
   layout: 'stacked', // 'stacked' | 'split' (ingredients beside the method on wide screens)
   translateLang: 'English',
   exportNotes: false,
+  sidebar: true,
+  blocks: DEFAULT_BLOCKS,
 }
 
 export function loadSettings() {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }
+    const s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }
+    return { ...s, blocks: normalizeBlocks(s.blocks) }
   } catch (_) {
     return { ...DEFAULTS }
   }

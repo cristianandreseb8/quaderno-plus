@@ -6,7 +6,7 @@ import { supabase } from './supabase.js'
 const HEAVY = ['source_photos', 'media_library']
 const LITE_COLUMNS = [
   'id', 'created_at', 'updated_at', 'title', 'category', 'time_estimate', 'servings', 'notes', 'source',
-  'ingredients', 'steps', 'notes_pad', 'thumbnail', 'id_data', 'fixed_lang', 'copied_from', 'is_favorite',
+  'ingredients', 'steps', 'notes_pad', 'thumbnail', 'id_data', 'fixed_lang', 'copied_from', 'is_favorite', 'videos',
 ].join(',')
 
 function toDb(r) {
@@ -26,6 +26,7 @@ function toDb(r) {
     fixed_lang: r.fixed_lang || null,
     copied_from: r.copied_from || null,
     is_favorite: r.is_favorite || false,
+    videos: Array.isArray(r.videos) ? r.videos : [],
   }
   // Never write heavy columns for a list-only ("lite") row: their value was never loaded,
   // and writing the default would wipe the saved photos and media.
@@ -46,6 +47,7 @@ function fromDb(r, lite = false) {
     fixed_lang: r.fixed_lang || null,
     copied_from: r.copied_from || null,
     is_favorite: r.is_favorite || false,
+    videos: Array.isArray(r.videos) ? r.videos : [],
   }
   if (lite) {
     rec._lite = true

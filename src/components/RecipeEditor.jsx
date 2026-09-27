@@ -3,6 +3,7 @@ import { Camera, ClipboardPaste, FileUp, ImagePlus, Loader2, Sparkles, Trash2, X
 import { compressImage, compressThumbnail } from '../lib/media.js'
 import { extractWithClaude, structureText } from '../lib/ai.js'
 import DraggableIngList from './DraggableIngList.jsx'
+import { newVideo } from '../lib/video.js'
 
 const AUTOFILL = [
   ['text', 'Paste text', ClipboardPaste],
@@ -18,6 +19,7 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
     source_photos: initial?.source_photos || [], steps: initial?.steps || [], id_data: initial?.id_data || '', media_library: initial?.media_library || '',
     fixed_lang: initial?.fixed_lang || null, copied_from: initial?.copied_from || null,
   }))
+  const [videoText, setVideoText] = useState(() => (initial?.videos || []).map((v) => v.url).join('\n'))
   const [ingredientLines, setIngredientLines] = useState(() => (initIngs.length ? initIngs : ['']))
   const [tab, setTab] = useState(initial ? null : (startWith === 'text' || startWith === 'photo' ? startWith : null))
   const [images, setImages] = useState([])
@@ -102,6 +104,7 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
       notes: r.notes.trim(), source: r.source || 'Manual', notes_pad: r.notes_pad || '', thumbnail: r.thumbnail || '', source_photos: r.source_photos || [],
       ingredients: ingredientLines.map((l) => l.trim()).filter((l) => l && l !== '##'), steps: (r.steps || []).filter((s) => String(s).trim()), id_data: r.id_data || '', media_library: r.media_library || '',
       fixed_lang: r.fixed_lang || null, copied_from: r.copied_from || null, createdAt: initial?.createdAt || Date.now(),
+      videos: videoText.split('\n').map((l) => l.trim()).filter(Boolean).map((url) => (initial?.videos || []).find((v) => v.url === url) || newVideo(url)),
     })
   }
   function pickAutofill(k) {
@@ -204,6 +207,10 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
         <div className="hint">One step per line. A line starting with ## becomes a heading, e.g. "## Shaping".</div>
       </div>
       <div className="Q-field"><label>Notes</label><textarea className="Q-textarea" rows={3} value={r.notes} onChange={set('notes')} placeholder="Temperatures, flour specs, adjustments…" /></div>
+      <div className="Q-field">
+        <label>Videos</label>
+        <textarea className="Q-textarea" rows={2} value={videoText} onChange={(e) => setVideoText(e.target.value)} placeholder="One link per line — YouTube, Vimeo, Instagram, TikTok…" />
+      </div>
       {r.fixed_lang && <div className="Q-dim" style={{ marginBottom: 10 }}>Fixed language version: {r.fixed_lang}</div>}
       <div className="Q-ed-foot">
         <button className="btn primary" onClick={save}>Save recipe</button>

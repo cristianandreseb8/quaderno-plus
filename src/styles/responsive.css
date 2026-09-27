@@ -5,6 +5,7 @@
 @media (max-width: 760px) {
   .Q-top { padding: 0 8px 0 14px; gap: 6px; }
   .Q-top-right .Q-top-wide { display: none; }
+  .Q-side-toggle { display: none; }
   .Q-top-right .Q-top-narrow { display: inline-flex; }
   .Q-new .lbl { display: none; }
   .Q-new { width: 38px; padding: 0; }
