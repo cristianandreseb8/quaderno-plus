@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Loader2, MoreHorizontal } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Loader2, MoreHorizontal } from 'lucide-react'
 import {
   calcPct, findStepsForIng, getTotalGrams, numberSteps, parseIng, parseSections, scaleRecipe, sectionGrams, splitIngLine, toGrams,
 } from '../lib/recipeCalc.js'
@@ -8,7 +8,7 @@ import { parseMediaLibrary } from '../lib/media.js'
 import { translateRecipe } from '../lib/ai.js'
 import { LANGS } from '../lib/constants.js'
 import { normalizeBlocks, useSettings } from '../lib/settings.js'
-import Menu, { MenuItem, MenuLabel, MenuSep, MenuToggle } from './ui/Menu.jsx'
+import Menu, { MenuItem, MenuSep, MenuToggle } from './ui/Menu.jsx'
 import { toast } from './ui/Toaster.jsx'
 import Blocks from './ui/Blocks.jsx'
 import VideoBlock from './VideoBlock.jsx'
@@ -48,6 +48,7 @@ export default function RecipeView({
   const [translated, setTranslated] = useState(null)
   const [targetLang, setTargetLang] = useState(settings.translateLang || 'English')
   const [exporting, setExporting] = useState(false)
+  const [menuView, setMenuView] = useState('main') // main | translate | export | copy
   const [addingVideo, setAddingVideo] = useState(false)
   const exportNotes = settings.exportNotes
   const addNoteRef = useRef(null)
@@ -181,39 +182,6 @@ export default function RecipeView({
   )
   const copiedFrom = recipe.copied_from ? allRecipes.find((r) => r.id === recipe.copied_from) : null
 
-  const toolbar = (
-    <div className="Q-rtools">
-      {!appliedScale && <button className={`Q-tool${showScale ? ' on' : ''}`} onClick={() => setShowScale(!showScale)}>Scale</button>}
-      <button className={`Q-tool${showPct ? ' on' : ''}`} onClick={() => setShowPct(!showPct)}>Baker's %</button>
-      <Menu
-        align="start" width={200}
-        trigger={(p) => (
-          <button className={`Q-tool${translated ? ' on' : ''}`} onClick={p.toggle} disabled={translating}>
-            {translating ? <><Loader2 size={13} className="spin" /> Translating</> : 'Translate'}
-          </button>
-        )}
-      >
-        <MenuLabel>Show in</MenuLabel>
-        {langsOrdered.map((l) => <MenuItem key={l} checked={!!translated && targetLang === l} onClick={() => translateTo(l)}>{l}</MenuItem>)}
-        {translated && (<><MenuSep /><MenuItem onClick={() => setTranslated(null)}>Show original</MenuItem></>)}
-      </Menu>
-      <Menu
-        align="start" width={210}
-        trigger={(p) => (
-          <button className="Q-tool" onClick={p.toggle} disabled={exporting}>
-            {exporting ? <><Loader2 size={13} className="spin" /> Exporting</> : 'Export'}
-          </button>
-        )}
-      >
-        <MenuItem onClick={() => runExport('pdf')}>PDF</MenuItem>
-        <MenuItem onClick={() => runExport('img')}>Image</MenuItem>
-        <MenuItem onClick={() => runExport('xls')}>Excel</MenuItem>
-        <MenuSep />
-        <MenuToggle checked={exportNotes} onChange={(v) => updateSettings({ exportNotes: v })}>Include notes</MenuToggle>
-      </Menu>
-    </div>
-  )
-
   const scalePanel = showScale && (
     <div className="Q-panel-card">
       <div className="Q-panel-card-h">Scale recipe</div>
@@ -279,6 +247,8 @@ export default function RecipeView({
           )}
         </>
       )}
+      <span className="sp" />
+      <button className="Q-link" onClick={() => setShowPct(false)}>Hide</button>
     </div>
   )
 
@@ -347,7 +317,6 @@ export default function RecipeView({
 
   const recipeContent = (
     <div>
-      {toolbar}
       {scalePanel}
       {pctBar}
       <Blocks blocks={blocks} split={settings.layout === 'split'} />
@@ -396,11 +365,17 @@ export default function RecipeView({
         </div>
       )}
 
+      {translating && <div className="Q-banner"><Loader2 size={13} className="spin" /><span>Translating to {targetLang}…</span></div>}
+      {exporting && <div className="Q-banner"><Loader2 size={13} className="spin" /><span>Preparing the export…</span></div>}
+
       <div className="Q-tabbar">
-        <div className="Q-tabs" role="tablist">
-          {tabs.map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={tab === k} className={`Q-tab-btn${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{l}</button>
-          ))}
+        <div className="Q-tabbar-view">
+          {tab !== 'recipe' && (
+            <>
+              <button className="Q-textbtn Q-back" onClick={() => setTab('recipe')}><ChevronLeft size={15} /> Recipe</button>
+              <span className="Q-tabbar-title">{tabs.find(([k]) => k === tab)?.[1]}</span>
+            </>
+          )}
         </div>
         <div className="Q-tabbar-actions">
           {onToggleSession && (
@@ -410,22 +385,69 @@ export default function RecipeView({
           )}
           {canEdit && onShare && <button className={`Q-textbtn${recipe.visibility && recipe.visibility !== 'private' ? ' on' : ''}`} onClick={onShare}>{shareLabel}</button>}
           {canEdit && <button className="Q-textbtn" onClick={onEdit}>Edit</button>}
-          {guest ? (
-            <button className="Q-textbtn" onClick={() => onCopy(recipe, null)}>Save a copy</button>
-          ) : (
-            <Menu
-              width={240}
-              trigger={(p) => <button className="Q-icon-btn" onClick={p.toggle} aria-label="More actions" title="More actions"><MoreHorizontal size={18} /></button>}
-            >
-              {canEdit && <MenuItem onClick={() => { setTab('recipe'); setAddingVideo(true); unfoldVideo() }}>Add video</MenuItem>}
-              <MenuItem onClick={() => onCopy(recipe, null)}>{canEdit ? 'Duplicate' : 'Save a copy to my recipes'}</MenuItem>
-              <MenuLabel>{canEdit ? 'Duplicate translated' : 'Save a translated copy'}</MenuLabel>
-              <div className="Q-menu-scroll short">
-                {langsOrdered.map((l) => <MenuItem key={l} onClick={() => onCopy(recipe, l)}>{l}</MenuItem>)}
-              </div>
-              {canEdit && (<><MenuSep /><MenuItem danger onClick={onDelete}>Delete recipe</MenuItem></>)}
-            </Menu>
-          )}
+          {guest && <button className="Q-textbtn" onClick={() => onCopy(recipe, null)}>Save a copy</button>}
+          <Menu
+            width={240}
+            trigger={(p) => (
+              <button className="Q-icon-btn" onClick={() => { if (!p.open) setMenuView('main'); p.toggle() }} aria-label="Views and tools" title="Views and tools">
+                <MoreHorizontal size={18} />
+              </button>
+            )}
+          >
+            {menuView === 'main' && (
+              <>
+                {tabs.length > 1 && (
+                  <>
+                    {tabs.map(([k, l]) => <MenuItem key={k} checked={tab === k} onClick={() => setTab(k)}>{l}</MenuItem>)}
+                    <MenuSep />
+                  </>
+                )}
+                <MenuItem checked={!!appliedScale} hint={appliedScale?.label} onClick={() => { setTab('recipe'); setShowScale(true) }}>Scale</MenuItem>
+                <MenuItem checked={showPct} onClick={() => { setTab('recipe'); setShowPct(!showPct) }}>Baker's %</MenuItem>
+                {!guest && <MenuItem checked={!!translated} keepOpen hint={<>{translated ? targetLang : ''}<ChevronRight size={14} /></>} onClick={() => setMenuView('translate')}>Translate</MenuItem>}
+                <MenuItem checked={false} keepOpen hint={<ChevronRight size={14} />} onClick={() => setMenuView('export')}>Export</MenuItem>
+                {!guest && (
+                  <>
+                    <MenuSep />
+                    {canEdit && <MenuItem checked={false} onClick={() => { setTab('recipe'); setAddingVideo(true); unfoldVideo() }}>Add video</MenuItem>}
+                    <MenuItem checked={false} onClick={() => onCopy(recipe, null)}>{canEdit ? 'Duplicate' : 'Save a copy to my recipes'}</MenuItem>
+                    <MenuItem checked={false} keepOpen hint={<ChevronRight size={14} />} onClick={() => setMenuView('copy')}>{canEdit ? 'Duplicate translated' : 'Save a translated copy'}</MenuItem>
+                  </>
+                )}
+                {canEdit && (<><MenuSep /><MenuItem danger checked={false} onClick={onDelete}>Delete recipe</MenuItem></>)}
+              </>
+            )}
+            {menuView === 'translate' && (
+              <>
+                <MenuItem icon={ChevronLeft} keepOpen onClick={() => setMenuView('main')}>Translate</MenuItem>
+                <MenuSep />
+                <div className="Q-menu-scroll">
+                  {langsOrdered.map((l) => <MenuItem key={l} checked={!!translated && targetLang === l} disabled={translating} onClick={() => { setTab('recipe'); translateTo(l) }}>{l}</MenuItem>)}
+                </div>
+                {translated && (<><MenuSep /><MenuItem checked={false} onClick={() => setTranslated(null)}>Show original</MenuItem></>)}
+              </>
+            )}
+            {menuView === 'export' && (
+              <>
+                <MenuItem icon={ChevronLeft} keepOpen onClick={() => setMenuView('main')}>Export</MenuItem>
+                <MenuSep />
+                <MenuItem checked={false} disabled={exporting} onClick={() => runExport('pdf')}>PDF</MenuItem>
+                <MenuItem checked={false} disabled={exporting} onClick={() => runExport('img')}>Image</MenuItem>
+                <MenuItem checked={false} disabled={exporting} onClick={() => runExport('xls')}>Excel</MenuItem>
+                <MenuSep />
+                <MenuToggle checked={exportNotes} onChange={(v) => updateSettings({ exportNotes: v })}>Include notes</MenuToggle>
+              </>
+            )}
+            {menuView === 'copy' && (
+              <>
+                <MenuItem icon={ChevronLeft} keepOpen onClick={() => setMenuView('main')}>{canEdit ? 'Duplicate translated' : 'Save a translated copy'}</MenuItem>
+                <MenuSep />
+                <div className="Q-menu-scroll">
+                  {langsOrdered.map((l) => <MenuItem key={l} checked={false} onClick={() => onCopy(recipe, l)}>{l}</MenuItem>)}
+                </div>
+              </>
+            )}
+          </Menu>
         </div>
       </div>
 

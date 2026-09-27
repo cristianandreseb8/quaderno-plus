@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowUpDown, MoreHorizontal, PanelLeftClose, PanelLeftOpen, 
 import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadOne } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { SettingsContext, applySettings, loadSettings, saveSettings, useSettings } from './lib/settings.js'
-import { setNewPassword, useAuth } from './lib/auth.js'
+import { setNewPassword, signOut, useAuth } from './lib/auth.js'
 import { acceptInvite, loadPublicRecipe } from './lib/sharing.js'
 import AuthScreen from './components/AuthScreen.jsx'
 import Toaster, { toast } from './components/ui/Toaster.jsx'
@@ -421,6 +421,12 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
       <MenuSep />
       {!install.installed && <MenuItem onClick={installApp}>Install app</MenuItem>}
       <MenuItem onClick={() => setShowSettings(true)}>Settings</MenuItem>
+      <MenuSep />
+      <div className="Q-menu-account">
+        {profile?.display_name && <b>{profile.display_name}</b>}
+        <span>{user.email}</span>
+      </div>
+      <MenuItem onClick={() => signOut()}>Sign out</MenuItem>
     </>
   )
 

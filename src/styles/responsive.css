@@ -19,13 +19,10 @@
   .Q-pane { padding: 18px 16px 100px; }
   .Q-view-header { gap: 14px; }
   .Q-recipe-thumb { width: 76px; height: 76px; border-radius: 12px; }
-  .Q-tabbar { flex-wrap: wrap-reverse; border-bottom: none; gap: 6px; }
-  .Q-tabs { border-bottom: 1px solid var(--rule); width: 100%; gap: 18px; }
+  .Q-tabbar { flex-wrap: wrap; gap: 6px; }
+  .Q-tabbar-view { width: 100%; }
   .Q-tabbar-actions { width: 100%; }
-  .Q-tabbar-actions .Q-icon-btn { margin-left: auto; }
-  .Q-rtools { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: -16px; margin-right: -16px; padding: 0 16px 2px; }
-  .Q-rtools::-webkit-scrollbar { display: none; }
-  .Q-rtools > * { flex-shrink: 0; }
+  .Q-tabbar-actions > .Q-menu-wrap:last-child { margin-left: auto; }
   .Q-ing-qty { min-width: 4.6em; }
   .Q-ed-top { grid-template-columns: 1fr; }
   .Q-ed-photo img, .Q-ed-photo-ph { width: 100%; height: 150px; }
