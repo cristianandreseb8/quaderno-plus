@@ -28,14 +28,27 @@ const DEFAULT_BLOCKS = {
   col: { ingredients: 'left', video: 'right', method: 'right', notes: 'right', photos: 'right' },
   collapsed: {},
 }
+// Phones show one column in this order; there the video opens first, above everything.
+export const isPhoneDevice = () => typeof window !== 'undefined'
+  && (window.matchMedia?.('(max-width: 760px)').matches || /Android|iPhone|iPod/i.test(navigator.userAgent))
+const videoFirst = (b) => ({
+  ...b,
+  order: ['video', ...(b.order || BLOCK_IDS).filter((id) => id !== 'video')],
+  collapsed: { ...(b.collapsed || {}), video: false },
+})
+const defaultBlocks = () => (isPhoneDevice() ? videoFirst(DEFAULT_BLOCKS) : DEFAULT_BLOCKS)
 export function normalizeBlocks(b) {
   const order = (Array.isArray(b?.order) ? b.order : []).filter((id) => BLOCK_IDS.includes(id))
   BLOCK_IDS.forEach((id) => { if (!order.includes(id)) order.push(id) })
   return { order, col: { ...DEFAULT_BLOCKS.col, ...(b?.col || {}) }, collapsed: { ...(b?.collapsed || {}) } }
 }
 
+// Bumped when a default changes in a way saved settings should pick up once.
+const VERSION = 2
+
 export const DEFAULTS = {
-  theme: 'clean',
+  v: VERSION,
+  theme: 'slate',
   textSize: 'm',
   layout: 'stacked', // 'stacked' | 'split' (ingredients beside the method on wide screens)
   translateLang: 'English',
@@ -46,10 +59,18 @@ export const DEFAULTS = {
 
 export function loadSettings() {
   try {
-    const s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }
+    const raw = JSON.parse(localStorage.getItem(KEY) || 'null')
+    if (!raw) return { ...DEFAULTS, blocks: normalizeBlocks(defaultBlocks()) }
+    let s = { ...DEFAULTS, ...raw }
+    if ((raw.v || 1) < 2) {
+      // 2026-09-27: the dark template (Slate) became the default, and phones open recipes
+      // with the video first. Applied once; a template picked afterwards is kept.
+      s = { ...s, v: 2, theme: 'slate', blocks: isPhoneDevice() ? videoFirst(normalizeBlocks(s.blocks)) : s.blocks }
+      saveSettings(s)
+    }
     return { ...s, blocks: normalizeBlocks(s.blocks) }
   } catch (_) {
-    return { ...DEFAULTS }
+    return { ...DEFAULTS, blocks: normalizeBlocks(defaultBlocks()) }
   }
 }
 

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, GripVertical } from 'lucide-react'
 import { normalizeBlocks, useSettings } from '../../lib/settings.js'
 
@@ -6,8 +6,22 @@ import { normalizeBlocks, useSettings } from '../../lib/settings.js'
 // can be dragged by its handle to another place — or, side by side, to the other column.
 // The arrangement is a personal preference saved with the settings, so every recipe opens
 // the same way. Pointer events (not HTML drag-and-drop) so it also works with a finger.
-export default function Blocks({ blocks, split = false }) {
+const PHONE = '(max-width: 760px)'
+function usePhone() {
+  const [phone, setPhone] = useState(() => window.matchMedia(PHONE).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE)
+    const on = () => setPhone(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return phone
+}
+
+export default function Blocks({ blocks, split: splitWanted = false }) {
   const { settings, update } = useSettings()
+  // A phone always shows one column, in the saved order — so a box moved to the top stays there.
+  const split = splitWanted && !usePhone()
   const saved = normalizeBlocks(settings.blocks)
   const [live, setLive] = useState(null) // layout while a drag is in progress
   const [dragId, setDragId] = useState(null)
