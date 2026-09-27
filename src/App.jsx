@@ -7,6 +7,7 @@ import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
 import { addRecipe, buildShoppingList, removeRecipe, resetTicks, useSession } from './lib/session.js'
 import { numberSteps } from './lib/recipeCalc.js'
+import { INSTALL_HELP, useInstall } from './lib/install.js'
 
 // After a redeploy, chunk filenames change and a client that loaded the old index.html
 // gets a 404 when it lazy-loads a panel — which used to unmount the app to a blank screen.
@@ -71,6 +72,7 @@ export default function App() {
   const searchRef = useRef(null)
   const toggleSidebarRef = useRef(() => {})
   const { session, change: changeSession, finish: finishSession } = useSession(toast.error)
+  const install = useInstall()
 
   const updateSettings = useCallback((patch) => {
     setSettings((prev) => { const next = { ...prev, ...patch }; saveSettings(next); return next })
@@ -93,6 +95,17 @@ export default function App() {
   useEffect(() => {
     if (mode === 'view' && selId) localStorage.setItem('qdplus_last_recipe', selId)
   }, [selId, mode])
+
+  // Shortcuts from the installed app's icon menu: /?new=blank|pdf, /?view=session
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const next = params.get('new'), v = params.get('view')
+    if (!next && !v) return
+    if (v === 'session') { setView('session'); if (!isPhone()) setSessSel('shopping') }
+    if (next === 'pdf') setImportOpen(true)
+    else if (next) { setView('recipes'); setEditorStart(next === 'blank' ? 'blank' : next); setMode('new'); setSelId(null) }
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [])
 
   // The list holds "lite" rows; fetch the full recipe (photos, media) when one is opened.
   const selLite = recipes.find((x) => x.id === selId)?._lite
@@ -362,12 +375,22 @@ export default function App() {
   const cookEntry = view === 'session' && sessSel && sessSel !== 'shopping' ? sessionEntries.find((e) => e.id === sessSel) : null
   const cookRecipe = cookEntry ? recipesById.get(cookEntry.id) : null
 
+  async function installApp() {
+    if (install.canPrompt) {
+      const ok = await install.prompt()
+      if (ok) toast.success('Quaderno+ is installed')
+      return
+    }
+    toast(INSTALL_HELP[install.platform], { duration: 9000 })
+  }
+
   const moreItems = (phone) => (
     <>
       {phone && <MenuItem onClick={() => setShowAppAI(true)}>Assistant</MenuItem>}
       <MenuItem onClick={() => setShowLibrary(true)}>Ingredients</MenuItem>
       <MenuItem onClick={() => setShowCompare(true)}>Compare recipes</MenuItem>
       <MenuSep />
+      {!install.installed && <MenuItem onClick={installApp}>Install app</MenuItem>}
       <MenuItem onClick={() => setShowSettings(true)}>Settings</MenuItem>
     </>
   )

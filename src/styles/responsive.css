@@ -40,3 +40,12 @@
 @media (prefers-reduced-motion: reduce) {
   .Q *, .Q *::before, .Q *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Installed app on phones with a home indicator / notch */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .Q-toasts { bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .Q-list { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .Q-pane { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+  .Q-modal-foot { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .Q-top { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+}

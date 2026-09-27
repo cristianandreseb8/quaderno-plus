@@ -1,6 +1,7 @@
 import Modal from './ui/Modal.jsx'
 import { THEMES, TEXT_SIZES, useSettings } from '../lib/settings.js'
 import { LANGS } from '../lib/constants.js'
+import { INSTALL_HELP, useInstall } from '../lib/install.js'
 
 function ThemeCard({ theme, active, onPick }) {
   const [bg, surface, accent, ink] = theme.colors
@@ -25,6 +26,7 @@ function ThemeCard({ theme, active, onPick }) {
 
 export default function SettingsModal({ onClose, uncategorizedCount, categorizing, onAutoCategorize, recipeCount }) {
   const { settings, update } = useSettings()
+  const install = useInstall()
 
   return (
     <Modal title="Settings" onClose={onClose} width={760}>
@@ -79,6 +81,23 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
           </div>
           <input type="checkbox" className="Q-switch" checked={settings.exportNotes} onChange={(e) => update({ exportNotes: e.target.checked })} />
         </label>
+      </section>
+
+      <section className="Q-set-sec">
+        <h3>App</h3>
+        <div className="Q-set-row">
+          <div>
+            <div className="Q-set-label">{install.installed ? 'Installed' : 'Install Quaderno+'}</div>
+            <div className="Q-set-help">
+              {install.installed
+                ? 'You are using the installed app. It opens from its own icon and works with a weak connection.'
+                : install.canPrompt
+                  ? 'Add it to this device as an app: its own icon and window, and it opens even with a weak connection.'
+                  : INSTALL_HELP[install.platform]}
+            </div>
+          </div>
+          {!install.installed && install.canPrompt && <button className="btn primary sm" onClick={() => install.prompt()}>Install</button>}
+        </div>
       </section>
 
       <section className="Q-set-sec">
