@@ -1,17 +1,13 @@
-@media (max-width: 1180px) {
-  .Q-hbtn .lbl { display: none; }
-  .Q-hbtn { padding: 0 9px; }
-}
 @media (max-width: 1020px) {
   .Q-body { grid-template-columns: 264px minmax(0, 1fr); }
   .Q-pane { padding: 24px 26px 110px; }
 }
 @media (max-width: 760px) {
   .Q-top { padding: 0 8px 0 14px; gap: 6px; }
-  .Q-top-wide { display: none; }
+  .Q-top-right .Q-top-wide { display: none; }
   .Q-top-right .Q-top-narrow { display: inline-flex; }
-  .Q-top-right > .Q-menu-wrap:last-child .lbl { display: none; }
-  .Q-top-right > .Q-menu-wrap:last-child .btn { width: 38px; padding: 0; }
+  .Q-new .lbl { display: none; }
+  .Q-new { width: 38px; padding: 0; }
   .Q-import-pill { font-size: 11px; padding: 0 9px; }
   .Q-body { grid-template-columns: minmax(0, 1fr); }
   .Q-side { border-right: none; }
@@ -22,12 +18,10 @@
   .Q-pane { padding: 18px 16px 100px; }
   .Q-view-header { gap: 14px; }
   .Q-recipe-thumb { width: 76px; height: 76px; border-radius: 12px; }
-  .Q-tabbar-actions .lbl { display: none; }
-  .Q-tabbar-actions .btn { width: 34px; padding: 0; }
-  .Q-tab-btn { padding: 10px 9px 11px; font-size: 13px; }
-  .Q-tab-btn svg { display: none; }
-  .Q-tab-btn .full { display: none; }
-  .Q-tab-btn .short { display: inline; }
+  .Q-tabbar { flex-wrap: wrap-reverse; border-bottom: none; gap: 6px; }
+  .Q-tabs { border-bottom: 1px solid var(--rule); width: 100%; gap: 18px; }
+  .Q-tabbar-actions { width: 100%; }
+  .Q-tabbar-actions .Q-icon-btn { margin-left: auto; }
   .Q-rtools { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: -16px; margin-right: -16px; padding: 0 16px 2px; }
   .Q-rtools::-webkit-scrollbar { display: none; }
   .Q-rtools > * { flex-shrink: 0; }
@@ -40,7 +34,6 @@
   .Q-drawer, .Q-compare-panel { width: 100vw; }
   .Q-set-row { flex-wrap: wrap; }
   .Q-theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ID-param-grid { grid-template-columns: 1fr 1fr; }
   .Q-toasts { bottom: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {

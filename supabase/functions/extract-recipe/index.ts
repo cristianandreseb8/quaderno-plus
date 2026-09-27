@@ -34,14 +34,6 @@ async function claudeJson(messages: object[], system?: string, maxTokens = 2000,
   return JSON.parse(t)
 }
 
-const EXTRACT_PROMPT = `You are an assistant to a professional baker. Extract ALL recipe content from ALL images.
-
-Return ONLY valid JSON, no markdown:
-
-{"title":"","category":"","time":"","servings":"","ingredients":["..."],"steps":["..."],"notes":""}
-
-RULES: Keep original language. For multi-dough recipes prefix each section with "## Section Name". Ingredient format: "500 g bread flour" (quantity, unit, 2 spaces, name). One complete step per element.`
-
 const RECIPE_ASSISTANT_SYSTEM = (recipe: unknown, language: string) =>
 `You are an AI assistant for Quaderno+, a professional recipe management app for bakers.
 
@@ -73,67 +65,93 @@ You can perform actions with these tags:
 <APP_ACTION>{"type":"select_recipe","id":"recipe_id"}</APP_ACTION>
 <APP_ACTION>{"type":"search","query":"search term"}</APP_ACTION>
 
-When creating recipes be complete and professional. For multi-dough use ## section headers.
+When creating recipes be complete and professional. For multi-dough use ## section headers; an ingredient made earlier in the same recipe (starter, first dough) is written as a reference line starting with "→ ". Never include totals as ingredients.
 
 For batch creation generate complete recipes, not just stubs. Be generous with ingredients and steps.`
 
-// ── PDF / cookbook import ─────────────────────────────────────────────────────
-// The client splits a PDF into small page batches (plus one look-ahead page) and sends
-// them one at a time, so each request stays well inside the function's time limit.
-const PDF_MODEL = "claude-opus-5"
+// ── Recipe extraction (photos, pasted text, PDF) ─────────────────────────────
+// Every extraction path shares one set of rules so the model reads a recipe the way a chef
+// would — interpreting tables, totals, sub-preparations and redundancies — instead of
+// transcribing lines. Structured outputs guarantee the JSON shape.
+const RECIPE_MODEL = "claude-opus-5"
 
+const RECIPE_PROPS = {
+  title: { type: "string" },
+  category: { type: "string" },
+  time: { type: "string" },
+  servings: { type: "string" },
+  ingredients: { type: "array", items: { type: "string" } },
+  steps: { type: "array", items: { type: "string" } },
+  notes: { type: "string" },
+}
+const RECIPE_KEYS = ["title", "category", "time", "servings", "ingredients", "steps", "notes"]
+const RECIPE_SCHEMA = { type: "object", additionalProperties: false, required: RECIPE_KEYS, properties: RECIPE_PROPS }
 const RECIPE_LIST_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["recipes"],
+  type: "object", additionalProperties: false, required: ["recipes"],
   properties: {
     recipes: {
       type: "array",
       items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["title", "category", "time", "servings", "ingredients", "steps", "notes", "page", "complete"],
+        type: "object", additionalProperties: false,
+        required: [...RECIPE_KEYS, "page", "complete"],
+        properties: { ...RECIPE_PROPS, page: { type: "integer" }, complete: { type: "boolean" } },
+      },
+    },
+  },
+}
+const OUTLINE_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["recipes"],
+  properties: {
+    recipes: {
+      type: "array",
+      items: {
+        type: "object", additionalProperties: false,
+        required: ["title", "start_page", "end_page", "continues", "continued_from_before"],
         properties: {
           title: { type: "string" },
-          category: { type: "string" },
-          time: { type: "string" },
-          servings: { type: "string" },
-          ingredients: { type: "array", items: { type: "string" } },
-          steps: { type: "array", items: { type: "string" } },
-          notes: { type: "string" },
-          page: { type: "integer" },
-          complete: { type: "boolean" },
+          start_page: { type: "integer" },
+          end_page: { type: "integer" },
+          continues: { type: "boolean" },
+          continued_from_before: { type: "boolean" },
         },
       },
     },
   },
 }
 
-const PDF_SYSTEM = `You extract recipes from document pages for a professional kitchen's recipe database. You are precise with numbers: quantities, units, temperatures and times are copied exactly as printed, never converted or rounded.`
+const RECIPE_SYSTEM = `You are an experienced pastry chef and recipe editor preparing recipes for a professional kitchen's recipe database. You understand baking formulas, multi-stage doughs, starters, baker's percentages and production sheets. You read a recipe completely, understand what it means, and write a clean, coherent version that a cook can follow — you never transcribe blindly. Numbers (quantities, units, temperatures, times, pH) are copied exactly as printed, never converted or rounded.`
 
-function pdfPrompt(b: Record<string, unknown>): string {
-  const first = Number(b.first_page), last = Number(b.last_page)
-  const ctx = b.context_page ? Number(b.context_page) : null
-  const known = ((b.known_categories as string[]) || []).slice(0, 60).join(", ")
-  const pages = first === last ? `page ${first}` : `pages ${first}–${last}`
-  const method = b.mode === "own"
-    ? `- steps: copy each method step as written. notes: tips printed with the recipe, as written, or "".`
-    : `- steps: clear, concise method steps written in your own words, in the language of the document. Keep every quantity, temperature, time, speed and visual cue; leave out stories and anecdotes. notes: at most two short technical tips in your own words, or "".`
-  return `The attached PDF contains ${pages} of "${b.source || "a document"}"${ctx ? `, followed by page ${ctx} as look-ahead only` : ""}. Page 1 of the attachment is page ${first} of the original.
+function recipeRules(mode: string): string {
+  const method = mode === "book"
+    ? "- Write the steps in your own words, concise and clear, in the language of the document. Keep every quantity, temperature, time, speed, pH and visual cue; leave out anecdotes."
+    : "- Keep the author's wording for each step. You may split, order and tidy the steps, but do not rephrase their content."
+  return `How to read and write the recipe:
 
-Extract every recipe that STARTS on ${pages}.
-- If such a recipe continues onto ${ctx ? `the look-ahead page ${ctx}` : "a later page"}, ${ctx ? "finish it from that page" : "extract what is shown and set complete to false"}.
-- Skip recipes that start on the look-ahead page (they are processed with the next batch) and skip text at the top of page ${first} that continues a recipe from an earlier page.
-- A dish built from several components (a dough and its filling, a cake with its glaze) is ONE recipe: put each component's ingredients after a header line "## Component name".
-- ingredients: one per line as quantity, unit, two spaces, name — e.g. "500 g  bread flour", "2  eggs", "1 tsp  fine salt". Keep preparation notes after the name ("cold, diced"). Lines with no quantity are just the name.
+INGREDIENTS
+- One line per real ingredient: quantity, unit, two spaces, name — e.g. "500 g  bread flour", "2  eggs", "1 tsp  fine salt". A line without a quantity is just the name ("pearl sugar, to finish").
+- Group the parts of the dish with header lines "## Name" in the order they are made (e.g. "## Starter refresh", "## First dough", "## Second dough", "## Glaze").
+- Leave out anything that is not an ingredient: totals and subtotals ("Total", "Total dough", "Totale", "Summe", "Gesamt"), column headings, and percentage columns. Baker's percentages are never part of an ingredient line — the app calculates them itself.
+- A preparation made earlier in this same recipe and added to a later part (refreshed starter, levain, poolish, the first dough, a cream used for assembly) is not a new ingredient. Write it as a reference line that starts with "→ ", with its quantity if one is given: "→ 117 g  lievito madre (refreshed)", "→ first dough (all of it)". Do not repeat its sub-ingredients and do not add its weight as a purchase.
+- When the same ingredient is added at two different moments in one part, keep two lines and make the difference clear ("15 g  acacia honey, mixed with the zest" / "23 g  acacia honey").
+- If the document has already applied a substitution, list the ingredients actually used and mention the original in the notes. Genuine alternatives ("or use licoli") go in the notes, not in the ingredient list.
+- Keep the document's language and its names for ingredients (brands, flour strength and similar specs belong in the name).
+
+METHOD
+- Always include the method, wherever it is printed — often on later pages, in a separate "Method" section, or under numbered lettered parts. One action per step, in order.
 ${method}
-- title, time and servings (yield: pieces, weight or portions) as printed; "" when absent. Keep the document's language.
-- category: 1–3 words, consistent across the book.${known ? ` Reuse one of these when it fits: ${known}.` : ""}
-- page: the original page number where the recipe starts. complete: false when the recipe is cut off within these pages.
-- Pages without recipes (introductions, essays, photos, indexes, tables of contents) produce nothing. Return {"recipes": []} if there are none.`
+- For recipes in several parts, add header steps "## Name" before each part (e.g. "## Starter", "## First dough", "## Second dough", "## Shaping", "## Glaze", "## Baking").
+- Turn tables inside the method (fermentation times by temperature, baking stages) into clear sentences that keep every number.
+- Merge duplicated or redundant text, fix obvious typos and broken words, and keep every critical point (target dough temperature, pH, volume increase, core temperature, proof point).
+
+OTHER FIELDS
+- title: the recipe's own name (without labels such as "production sheet").
+- servings: the yield, e.g. "3 × 550 g (1800 g dough)".
+- time: total time if stated or clearly derivable from the method, otherwise "".
+- category: 1–3 words.
+- notes: short, useful technical notes only — substitutions and alternatives, holding and storage, key formula figures if given (hydration, sugars, fat, inclusions). Leave out nutrition tables, marketing text and anything already said in the method.`
 }
 
-async function claudePdfRecipes(b: Record<string, unknown>) {
+async function claudeStructured(opts: { content: unknown[]; schema: object; effort?: string; maxTokens?: number }) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -141,28 +159,60 @@ async function claudePdfRecipes(b: Record<string, unknown>) {
       "anthropic-beta": "server-side-fallback-2026-07-01",
     },
     body: JSON.stringify({
-      model: PDF_MODEL,
-      max_tokens: 16000,
+      model: RECIPE_MODEL,
+      max_tokens: opts.maxTokens || 16000,
       fallbacks: "default",
-      output_config: { effort: "low", format: { type: "json_schema", schema: RECIPE_LIST_SCHEMA } },
-      system: PDF_SYSTEM,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "document", source: { type: "base64", media_type: "application/pdf", data: b.pdf } },
-          { type: "text", text: pdfPrompt(b) },
-        ],
-      }],
+      output_config: { effort: opts.effort || "medium", format: { type: "json_schema", schema: opts.schema } },
+      system: RECIPE_SYSTEM,
+      messages: [{ role: "user", content: opts.content }],
     }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data?.error?.message || `AI request failed (${res.status})`)
-  if (data.stop_reason === "refusal") throw new Error("The AI declined to read these pages.")
-  // A truncated structured response is not valid JSON; the client retries the batch page by page.
+  if (data.stop_reason === "refusal") throw new Error("The AI declined to read this content.")
+  // A truncated structured response is not valid JSON; the client retries with less content.
   if (data.stop_reason === "max_tokens") throw new Error("TOO_MUCH_CONTENT")
   const text = (data.content || []).filter((c: { type: string }) => c.type === "text").map((c: { text: string }) => c.text).join("")
-  const parsed = JSON.parse(text)
-  return { recipes: parsed.recipes || [], usage: data.usage || null }
+  return JSON.parse(text)
+}
+
+const pdfBlock = (b64: unknown) => ({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } })
+const pageLabel = (a: number, b: number) => (a === b ? `page ${a}` : `pages ${a}–${b}`)
+
+// Several recipes from a page range (short documents, or legacy page batches).
+function pdfRecipesPrompt(b: Record<string, unknown>): string {
+  const first = Number(b.first_page), last = Number(b.last_page)
+  const ctx = b.context_page ? Number(b.context_page) : null
+  const known = ((b.known_categories as string[]) || []).slice(0, 60).join(", ")
+  return `The attached PDF contains ${pageLabel(first, last)} of "${b.source || "a document"}"${ctx ? `, followed by page ${ctx} as look-ahead only` : ""}. Page 1 of the attachment is page ${first} of the original.
+
+Extract every recipe that starts on ${pageLabel(first, last)}. A recipe includes all of its parts even when they are printed on different pages (title and ingredient tables on one page, the method several pages later). ${ctx ? `Finish a recipe from the look-ahead page ${ctx} if it continues there, but skip recipes that start on it.` : ""} Skip text at the top of page ${first} that clearly continues a recipe from an earlier page. Pages with no recipe content (introductions, indexes, nutrition-only or photo pages) produce nothing; return {"recipes": []} if there are none.
+
+page = the original page number where the recipe starts. complete = false only if part of the recipe is clearly missing from these pages.
+${known ? `category: reuse one of these when it fits: ${known}.\n` : ""}
+${recipeRules(String(b.mode || "book"))}`
+}
+
+// Map of where each recipe lives in a batch of pages (long documents, first pass).
+function outlinePrompt(b: Record<string, unknown>): string {
+  const first = Number(b.first_page), last = Number(b.last_page), total = Number(b.total_pages || last)
+  return `The attached PDF contains ${pageLabel(first, last)} (of ${total}) of "${b.source || "a document"}". Page 1 of the attachment is page ${first} of the original.
+
+List every recipe in these pages with the range of pages that holds its content. A recipe's content includes its title, ingredient tables, sub-recipes, method, and notes — even when the method is printed on later pages or in a separate "Method" section. Use original page numbers.
+- start_page: first page with this recipe's content. end_page: last page with its content within ${pageLabel(first, last)}.
+- continues: true if its content probably goes on after page ${last}.
+- continued_from_before: true (with title "") if page ${first} opens in the middle of a recipe that started before this batch; its end_page is where that recipe ends here.
+- Ignore tables of contents, indexes and pages that only mention recipes.
+Return {"recipes": []} if there are none.`
+}
+
+// One recipe, with every page that holds it.
+function pdfRecipePrompt(b: Record<string, unknown>): string {
+  const first = Number(b.first_page), last = Number(b.last_page)
+  const known = ((b.known_categories as string[]) || []).slice(0, 60).join(", ")
+  return `The attached PDF contains ${pageLabel(first, last)} of "${b.source || "a document"}" (page 1 of the attachment is page ${first}). They hold the recipe "${b.title || "(untitled)"}" — its ingredients, sub-recipes and method may be spread over all of these pages. Extract that one recipe completely. Ignore other recipes that may share these pages.
+${known ? `category: reuse one of these when it fits: ${known}.\n` : ""}
+${recipeRules(String(b.mode || "book"))}`
 }
 
 Deno.serve(async (req) => {
@@ -174,9 +224,12 @@ Deno.serve(async (req) => {
     let result: unknown
 
     if (body.type === "translate") {
-      result = await claudeJson([{ role: "user", content: `Translate this recipe JSON to ${body.targetLang}. Keep quantities, units, technical baking terms, and ## section headers. Return ONLY valid JSON, same structure:\n\n${JSON.stringify(body.recipe)}` }])
+      result = await claudeJson([{ role: "user", content: `Translate this recipe JSON to ${body.targetLang}. Keep quantities, units, technical baking terms, "## " section headers and "→ " reference markers at the start of lines. Return ONLY valid JSON, same structure:\n\n${JSON.stringify(body.recipe)}` }])
     } else if (body.type === "structure") {
-      result = await claudeJson([{ role: "user", content: `Structure this recipe text as JSON. Return ONLY valid JSON:\n{"title":"","category":"","time":"","servings":"","ingredients":["..."],"steps":["..."],"notes":""}\nFor multi-dough use ## Section Name headers. Two spaces between unit and name.\n\nText:\n${body.text}` }])
+      result = await claudeStructured({
+        schema: RECIPE_SCHEMA,
+        content: [{ type: "text", text: `Here is a recipe as text:\n\n<recipe>\n${body.text}\n</recipe>\n\n${recipeRules("own")}` }],
+      })
     } else if (body.type === "assistant") {
       const sys = RECIPE_ASSISTANT_SYSTEM(body.recipe, body.language || "English")
       const msgs = (body.messages || []).map((m: { role: string; content: string }) => ({ role: m.role, content: m.content }))
@@ -269,18 +322,26 @@ Return ONLY valid JSON, no markdown: {"categories": {"<ingredient name exactly a
       result = { text: text.trim() }
     } else if (body.type === "extract_pdf") {
       if (!body.pdf) throw new Error("No PDF data received")
-      result = await claudePdfRecipes(body)
+      const out = await claudeStructured({ schema: RECIPE_LIST_SCHEMA, content: [pdfBlock(body.pdf), { type: "text", text: pdfRecipesPrompt(body) }] })
+      result = { recipes: out.recipes || [] }
+    } else if (body.type === "pdf_outline") {
+      if (!body.pdf) throw new Error("No PDF data received")
+      const out = await claudeStructured({ schema: OUTLINE_SCHEMA, effort: "low", maxTokens: 8000, content: [pdfBlock(body.pdf), { type: "text", text: outlinePrompt(body) }] })
+      result = { recipes: out.recipes || [] }
+    } else if (body.type === "pdf_recipe") {
+      if (!body.pdf) throw new Error("No PDF data received")
+      result = { recipe: await claudeStructured({ schema: RECIPE_SCHEMA, content: [pdfBlock(body.pdf), { type: "text", text: pdfRecipePrompt(body) }] }) }
     } else if (body.type === "auto_categorize") {
       const list = (body.recipes || []).map((r: { id: string; title: string; ingredients: string[] }) => `id:${r.id} title:"${r.title}" ingredients:${(r.ingredients || []).slice(0, 8).join(', ')}`).join('\n')
       const systemPrompt3 = `You are a professional baker. Assign a short, consistent category (2-4 words, e.g. "Grandi Lievitati", "Pan Bread", "Pastry", "Viennoiserie") to each recipe based on its title and ingredients.
 Return ONLY valid JSON: {"updates": [{"id": "...", "category": "..."}, ...]}`
       result = await claudeJson([{ role: "user", content: `Recipes:\n${list}` }], systemPrompt3, 2000)
     } else {
-      const content = (body.images || []).map((im: { media_type: string; data: string }) => ({
+      const content: unknown[] = (body.images || []).map((im: { media_type: string; data: string }) => ({
         type: "image", source: { type: "base64", media_type: im.media_type, data: im.data },
       }))
-      content.push({ type: "text", text: EXTRACT_PROMPT })
-      result = await claudeJson([{ role: "user", content }])
+      content.push({ type: "text", text: `These photos show one recipe (possibly over several pages). Extract it completely.\n\n${recipeRules("own")}` })
+      result = await claudeStructured({ schema: RECIPE_SCHEMA, content })
     }
 
     return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json", ...CORS } })

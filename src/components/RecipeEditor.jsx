@@ -196,11 +196,12 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
       <div className="Q-field">
         <label>Ingredients</label>
         <DraggableIngList lines={ingredientLines} onChange={setIngredientLines} />
-        <div className="hint">Write quantity, unit, then the name — "500 g bread flour". Drag the handle to reorder. Add a section for multi-part recipes.</div>
+        <div className="hint">Quantity, unit, then the name — "500 g bread flour". Start a line with → for something made earlier in the recipe ("→ first dough"): it is shown but not added to totals or shopping.</div>
       </div>
       <div className="Q-field">
         <label>Method</label>
         <textarea className="Q-textarea" rows={8} value={(r.steps || []).join('\n')} onChange={(e) => setR((p) => ({ ...p, steps: e.target.value.split('\n') }))} placeholder="One step per line" />
+        <div className="hint">One step per line. A line starting with ## becomes a heading, e.g. "## Shaping".</div>
       </div>
       <div className="Q-field"><label>Notes</label><textarea className="Q-textarea" rows={3} value={r.notes} onChange={set('notes')} placeholder="Temperatures, flour specs, adjustments…" /></div>
       {r.fixed_lang && <div className="Q-dim" style={{ marginBottom: 10 }}>Fixed language version: {r.fixed_lang}</div>}

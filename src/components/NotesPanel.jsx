@@ -70,7 +70,7 @@ export default function NotesPanel({ recipe, onSave, onSaveMedia, onAddNote }) {
     try {
       const r = await aiSuggestNotes(recipe, tabs[activeIdx]?.content || '')
       const t = r?.text || ''
-      appendNote('✨ AI Suggestions:\n' + t)
+      appendNote('AI suggestions:\n' + t)
     } catch (e) {
       alert('AI suggest failed: ' + e.message)
     } finally {
@@ -83,7 +83,7 @@ export default function NotesPanel({ recipe, onSave, onSaveMedia, onAddNote }) {
   return (
     <div className="Q-notes-panel">
       <div style={{ display: 'flex', gap: 0, marginBottom: 12, borderBottom: '2px solid var(--rule)' }}>
-        {[['notes', '📝 Notes'], ['media', '🖼 Media']].map(([k, l]) => (
+        {[['notes', 'Notes'], ['media', 'Media']].map(([k, l]) => (
           <button
             key={k}
             onClick={() => setActiveSection(k)}
@@ -111,24 +111,24 @@ export default function NotesPanel({ recipe, onSave, onSaveMedia, onAddNote }) {
             <button className="Q-notes-tab-add" onClick={addTab} title="Add tab">＋</button>
           </div>
           <div className="Q-notes-toolbar">
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.18em', color: 'var(--navy)' }}>📝 {activeTab?.name}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--faint)' }}>{activeTab?.name}</span>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {saving && <span style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>saving…</span>}
-              {voice.recording && <span className="Q-recording-pill">🔴 Recording…</span>}
+              {voice.recording && <span className="Q-recording-pill">Recording…</span>}
               {tabs.length > 1 && <button className="btn danger xs" onClick={() => removeTab(activeIdx)}>Remove tab</button>}
               <select value={voice.lang} onChange={(e) => voice.setLang(e.target.value)} style={{ border: '1px solid var(--rule)', borderRadius: 5, padding: '2px 5px', fontSize: 10, fontFamily: 'var(--mono)', background: 'var(--surface)', color: 'var(--ink)' }}>
                 {voice.VOICE_LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
               </select>
               <button className={`Q-voice-btn${voice.recording ? ' recording' : ''}`} onClick={voice.recording ? voice.stop : voice.start} title="Voice note">{voice.recording ? '⏹' : '🎙'}</button>
-              <button className="btn xs ai" onClick={aiSuggest} disabled={aiLoading}>{aiLoading ? '…' : '✨ AI'}</button>
+              <button className="btn xs ai" onClick={aiSuggest} disabled={aiLoading}>{aiLoading ? '…' : 'AI tips'}</button>
             </div>
           </div>
-          {voice.recording && <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>🔴 Recording… tap ⏹ to stop. Transcribed + timestamp added.</div>}
+          {voice.recording && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Recording — tap stop when done. The text is added with a timestamp.</div>}
           <textarea
             className="Q-notes-textarea"
             value={activeTab?.content || ''}
             onChange={(e) => updateContent(e.target.value)}
-            placeholder={`${activeTab?.name} for ${recipe.title}…\n\n🎙 Mic → transcribes with smart baking term correction + timestamp\n✨ AI → suggestions based on this recipe`}
+            placeholder={`${activeTab?.name} for ${recipe.title}…`}
           />
         </>
       )}

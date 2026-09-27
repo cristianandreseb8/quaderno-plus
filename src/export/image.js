@@ -1,4 +1,4 @@
-import { calcPct, getTotalGrams, parseIng, parseSections, toGrams } from '../lib/recipeCalc.js'
+import { calcPct, getTotalGrams, numberSteps, parseIng, sectionGrams, parseSections, toGrams } from '../lib/recipeCalc.js'
 import { loadImage } from '../lib/media.js'
 import { parseTabs } from '../lib/notesData.js'
 
@@ -62,16 +62,18 @@ export async function exportImage(recipe, pctOpts = null, exportNotes = false, o
         ctx.font = '17px -apple-system,sans-serif'; ctx.fillStyle = '#221C18'; y += dt(`· ${ing}`, M + 10, y, CW - 10, 27) + 3
       }
     })
-    const sg = sec.items.reduce((s, i) => { const p = parseIng(i); return s + toGrams(p.qty, p.unit) }, 0)
+    const sg = sectionGrams(sec.items)
     if (sec.name && sg > 0) { ctx.font = '12px ui-monospace,monospace'; ctx.fillStyle = '#BC6C2C'; ctx.textAlign = 'right'; ctx.fillText(`Subtotal: ${sg.toFixed(0)} g`, W - M, y); ctx.textAlign = 'left'; y += 18 }
   })
   const tg = getTotalGrams(recipe.ingredients || [])
   if (tg > 0) { ctx.font = 'bold 13px ui-monospace,monospace'; ctx.fillStyle = '#1F3A4D'; ctx.textAlign = 'right'; ctx.fillText(`Total: ${tg.toFixed(0)} g`, W - M, y); ctx.textAlign = 'left'; y += 26 }
   if (recipe.steps?.length) {
     secLbl('METHOD', 76)
-    recipe.steps.forEach((step, i) => {
-      ctx.font = 'bold 17px -apple-system,sans-serif'; ctx.fillStyle = '#BC6C2C'; ctx.fillText(String(i + 1).padStart(2, '0') + '.', M, y)
-      ctx.font = '17px -apple-system,sans-serif'; ctx.fillStyle = '#221C18'; y += Math.max(27, dt(step, M + 46, y, CW - 46, 27)) + 7
+    numberSteps(recipe.steps).forEach((st) => {
+      if (!st.text) return
+      if (st.header) { y += 6; ctx.font = 'bold 13px -apple-system,sans-serif'; ctx.fillStyle = '#BC6C2C'; ctx.fillText(st.text.toUpperCase(), M, y); y += 26; return }
+      ctx.font = 'bold 17px -apple-system,sans-serif'; ctx.fillStyle = '#BC6C2C'; ctx.fillText(String(st.n).padStart(2, '0') + '.', M, y)
+      ctx.font = '17px -apple-system,sans-serif'; ctx.fillStyle = '#221C18'; y += Math.max(27, dt(st.text, M + 46, y, CW - 46, 27)) + 7
     })
   }
   if (recipe.notes) {

@@ -75,7 +75,7 @@ export function MenuItem({ icon: Icon, children, hint, onClick, danger, checked,
       className={`Q-menu-item${danger ? ' danger' : ''}`}
       onClick={() => { if (!keepOpen) close(); onClick?.() }}
     >
-      <span className="Q-menu-ico">{checked ? <Check size={15} /> : Icon ? <Icon size={15} /> : null}</span>
+      {(Icon || checked !== undefined) && <span className="Q-menu-ico">{checked ? <Check size={15} /> : Icon ? <Icon size={15} /> : null}</span>}
       <span className="Q-menu-txt">{children}</span>
       {hint && <span className="Q-menu-hint">{hint}</span>}
     </button>

@@ -107,7 +107,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 }
 .Q * { box-sizing: border-box; }
 .Q ::selection { background: var(--accent-soft); }
-.Q input, .Q select, .Q textarea, .Q button { font: inherit; color: inherit; }
+:where(.Q) :where(input, select, textarea, button) { font: inherit; color: inherit; }
 .Q input::placeholder, .Q textarea::placeholder { color: var(--faint); }
 
 /* aliases referenced by the R&D panel */

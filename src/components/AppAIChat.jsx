@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Sparkles, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { askAppAssistant } from '../lib/ai.js'
 import { useVoiceInput } from '../lib/voice.js'
 
@@ -62,13 +62,12 @@ export default function AppAIChat({ recipes, onAction, onClose }) {
   return (
     <>
       <div className="Q-app-ai-header">
-        <div className="Q-app-ai-title"><Sparkles size={18} /> Assistant</div>
+        <div className="Q-app-ai-title">Assistant</div>
         <button className="Q-icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
       </div>
       <div className="Q-app-ai-msgs">
         {messages.length === 0 && (
           <div style={{ padding: '16px 0', textAlign: 'center' }}>
-            <div style={{ width: 52, height: 52, borderRadius: 16, background: 'var(--ai-soft)', color: 'var(--ai)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}><Sparkles size={24} /></div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)', marginBottom: 5 }}>What should we cook up?</div>
             <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 14 }}>Ask in your own words: create recipes, find them, or tidy up your library.</div>
             <div className="Q-quick-chips" style={{ justifyContent: 'center' }}>{CHIPS.map((c) => <button key={c} className="Q-chip" onClick={() => setInput(c)}>{c}</button>)}</div>

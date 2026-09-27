@@ -1,4 +1,4 @@
-import { calcPct, getTotalGrams, isFlour, parseIng, parseSections, toGrams } from '../lib/recipeCalc.js'
+import { calcPct, getTotalGrams, isFlour, numberSteps, parseIng, sectionGrams, parseSections, toGrams } from '../lib/recipeCalc.js'
 import { parseTabs } from '../lib/notesData.js'
 
 export async function exportPDF(recipe, pctOpts = null, exportNotes = false, originalThumbnail = null) {
@@ -46,17 +46,19 @@ export async function exportPDF(recipe, pctOpts = null, exportNotes = false, ori
         const ls = doc.splitTextToSize(`· ${ing}`, CW); doc.text(ls, M, y); y += ls.length * 5 + 1
       }
     })
-    const sg = sec.items.reduce((s, i) => { const p = parseIng(i); return s + toGrams(p.qty, p.unit) }, 0)
+    const sg = sectionGrams(sec.items)
     if (sec.name && sg > 0) { doc.setFont('courier', 'normal'); doc.setFontSize(8.5); doc.setTextColor(110, 100, 92); doc.text(`Subtotal: ${sg.toFixed(0)} g`, PW - M, y, { align: 'right' }); y += 6 }
   })
   const tg = getTotalGrams(recipe.ingredients || [])
   if (tg > 0) { doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(31, 58, 77); doc.text(`Total: ${tg.toFixed(0)} g`, PW - M, y, { align: 'right' }); y += 8 }
   if (recipe.steps?.length) {
     ck(12); y += 3; doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(31, 58, 77); doc.text('METHOD', M, y); y += 6
-    recipe.steps.forEach((step, i) => {
+    numberSteps(recipe.steps).forEach((st) => {
+      if (!st.text) return
       ck(10)
-      const ls = doc.splitTextToSize(step, CW - 14)
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(188, 108, 44); doc.text(String(i + 1).padStart(2, '0') + '.', M, y)
+      if (st.header) { y += 2; doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(188, 108, 44); doc.text(st.text.toUpperCase(), M, y); y += 6; return }
+      const ls = doc.splitTextToSize(st.text, CW - 14)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(188, 108, 44); doc.text(String(st.n).padStart(2, '0') + '.', M, y)
       doc.setFont('helvetica', 'normal'); doc.setTextColor(34, 28, 24); doc.text(ls, M + 14, y); y += ls.length * 5.5 + 3
     })
   }

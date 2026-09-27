@@ -1,21 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
+import { MoreHorizontal, Search, Star, X } from 'lucide-react'
 import {
   INGREDIENT_TYPES, collectAllIngredientNames, defaultCategoryForType, expandSearchQuery,
   findRecipesForIngredient, getAllCategories, libDelete, libFindMatch, libLoad, libUpsert,
 } from '../lib/ingredientLibrary.js'
 import { analyzeMacros, categorizeIngredients, describeIngredient } from '../lib/ai.js'
+import Modal from './ui/Modal.jsx'
+import Menu, { MenuItem, MenuLabel, MenuSep } from './ui/Menu.jsx'
+import { toast } from './ui/Toaster.jsx'
 
 const STD_PARAMS = ['fat_pct', 'water_pct', 'free_water_pct', 'sugar_pct', 'protein_pct', 'carbs_pct', 'cal_per100', 'flour_equivalent_pct']
-const STD_LABELS = { fat_pct: 'Fat %', water_pct: 'Water %', free_water_pct: 'Free water %', sugar_pct: 'Sugar %', protein_pct: 'Protein %', carbs_pct: 'Carbs %', cal_per100: 'Cal/100g', flour_equivalent_pct: 'Flour equiv %' }
+const STD_LABELS = { fat_pct: 'Fat %', water_pct: 'Water %', free_water_pct: 'Free water %', sugar_pct: 'Sugar %', protein_pct: 'Protein %', carbs_pct: 'Carbs %', cal_per100: 'kcal / 100 g', flour_equivalent_pct: 'Flour equiv. %' }
 const BLANK_ITEM = { name: '', canonical_name: '', ingredient_type: 'other', categories: [], aliases: [], params: {}, ai_notes: '', descriptor: '', is_favorite: false }
 const BATCH_SIZE = 25
 
 function applyAiResult(item, vals) {
   const type = vals.ingredient_type || item.ingredient_type
   const seeded = defaultCategoryForType(type)
-  const categories = (item.categories || []).length
-    ? item.categories
-    : (seeded ? [seeded] : [])
+  const categories = (item.categories || []).length ? item.categories : (seeded ? [seeded] : [])
   return {
     ...item,
     ingredient_type: type,
@@ -31,43 +33,27 @@ function applyAiResult(item, vals) {
 
 function CategoryEditor({ categories, setCategories, allCategories }) {
   const [input, setInput] = useState('')
-  function addCategory(raw) {
+  const add = (raw) => {
     const c = raw.trim().toLowerCase()
     if (!c) return
     setCategories((prev) => (prev.includes(c) ? prev : [...prev, c]))
     setInput('')
   }
-  function removeCategory(c) {
-    setCategories((prev) => prev.filter((x) => x !== c))
-  }
   const suggestions = allCategories.filter((c) => !categories.includes(c) && (!input || c.includes(input.toLowerCase()))).slice(0, 8)
   return (
-    <div style={{ marginBottom: 10 }}>
-      <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Categories (an ingredient can belong to several)</label>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+    <div className="Q-field">
+      <label>Categories</label>
+      <div className="Q-tags">
         {categories.map((c) => (
-          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, padding: '3px 4px 3px 10px', borderRadius: 14, background: 'var(--id-soft)', color: 'var(--id)', border: '1px solid var(--id-line)' }}>
-            {c}
-            <button onClick={() => removeCategory(c)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--id)', fontSize: 12, padding: '0 3px', lineHeight: 1 }}>×</button>
-          </span>
+          <span key={c} className="Q-tag">{c}<button type="button" onClick={() => setCategories((p) => p.filter((x) => x !== c))} aria-label={`Remove ${c}`}><X size={11} /></button></span>
         ))}
-        {categories.length === 0 && <span style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic' }}>none yet</span>}
-      </div>
-      <div style={{ display: 'flex', gap: 6 }}>
         <input
-          value={input} onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCategory(input) } }}
-          placeholder="Type to add or create a category…"
-          style={{ flex: 1, padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12.5 }}
+          className="Q-tag-input" value={input} onChange={(e) => setInput(e.target.value)} placeholder={categories.length ? 'Add…' : 'Add a category…'}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(input) } }}
         />
-        <button onClick={() => addCategory(input)} disabled={!input.trim()} style={{ padding: '5px 12px', borderRadius: 5, border: '1px dashed var(--id)', background: 'none', color: 'var(--id)', cursor: input.trim() ? 'pointer' : 'default', fontSize: 12, opacity: input.trim() ? 1 : 0.5 }}>+ Add</button>
       </div>
       {suggestions.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-          {suggestions.map((c) => (
-            <button key={c} onClick={() => addCategory(c)} style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 12, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--muted)', cursor: 'pointer' }}>+ {c}</button>
-          ))}
-        </div>
+        <div className="Q-tag-suggest">{suggestions.map((c) => <button key={c} type="button" onClick={() => add(c)}>{c}</button>)}</div>
       )}
     </div>
   )
@@ -77,152 +63,76 @@ function IngredientForm({ item, setItem, onSave, onCancel, saveLabel, allCategor
   const [newParamKey, setNewParamKey] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const [descBusy, setDescBusy] = useState(false)
+  const set = (k) => (e) => setItem((p) => ({ ...p, [k]: e.target.value }))
 
-  async function aiGenerateDescriptor() {
-    if (!item.name.trim()) { alert('Enter a name first.'); return }
+  async function aiDescriptor() {
+    if (!item.name.trim()) { toast.error('Enter a name first.'); return }
     setDescBusy(true)
     try {
       const { text } = await describeIngredient(item.name.trim(), item.ingredient_type)
-      setItem((prev) => ({ ...prev, descriptor: text || prev.descriptor }))
-    } catch (e) {
-      alert('AI descriptor generation failed: ' + e.message)
-    } finally {
-      setDescBusy(false)
-    }
+      setItem((p) => ({ ...p, descriptor: text || p.descriptor }))
+    } catch (e) { toast.error('Could not write a description: ' + e.message) } finally { setDescBusy(false) }
   }
-  function addCustomParam() {
-    if (!newParamKey.trim()) return
-    const key = newParamKey.trim().toLowerCase().split(' ').join('_')
-    setItem((prev) => ({ ...prev, params: { ...prev.params, [key]: 0 } })); setNewParamKey('')
-  }
-  function removeCustomParam(key) { const p = { ...item.params }; delete p[key]; setItem((prev) => ({ ...prev, params: p })) }
-
-  async function aiFillThis() {
-    if (!item.name.trim()) { alert('Enter a name first.'); return }
+  async function aiFill() {
+    if (!item.name.trim()) { toast.error('Enter a name first.'); return }
     setAiBusy(true)
     try {
       const json = await analyzeMacros('Single ingredient lookup', [{ name: item.name.trim(), qty: 100, unit: 'g' }])
       const vals = Object.values(json.cache || {})[0]
-      if (!vals) { alert('AI could not analyze this ingredient.'); return }
-      setItem((prev) => applyAiResult(prev, vals))
-    } catch (e) {
-      alert('AI analysis failed: ' + e.message)
-    } finally {
-      setAiBusy(false)
-    }
+      if (!vals) { toast.error('AI could not analyze this ingredient.'); return }
+      setItem((p) => applyAiResult(p, vals))
+    } catch (e) { toast.error('AI analysis failed: ' + e.message) } finally { setAiBusy(false) }
   }
+  function addParam() {
+    const key = newParamKey.trim().toLowerCase().split(' ').join('_')
+    if (!key) return
+    setItem((p) => ({ ...p, params: { ...p.params, [key]: 0 } })); setNewParamKey('')
+  }
+  const setParam = (key, v) => setItem((p) => ({ ...p, params: { ...p.params, [key]: parseFloat(v) || 0 } }))
+  const customKeys = Object.keys(item.params || {}).filter((k) => !STD_PARAMS.includes(k))
 
   return (
-    <div style={{ padding: 14, background: 'var(--surface-2)' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 10 }}>
-        <div>
-          <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>Name</label>
-          <input autoFocus value={item.name} onChange={(e) => setItem((p) => ({ ...p, name: e.target.value }))} style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 13, boxSizing: 'border-box' }} />
-        </div>
-        <div>
-          <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>Nutrition type <span style={{ opacity: 0.7 }}>(used for macro estimates)</span></label>
-          <select value={item.ingredient_type} onChange={(e) => setItem((p) => ({ ...p, ingredient_type: e.target.value }))} style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 13 }}>
-            {INGREDIENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-          <button onClick={onSave} style={{ padding: '5px 12px', borderRadius: 5, border: 'none', background: 'var(--id)', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{saveLabel}</button>
-          <button onClick={onCancel} style={{ padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'none', color: 'var(--ink)', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
-        </div>
+    <div className="Q-ingform">
+      <div className="Q-grid2">
+        <div className="Q-field"><label>Name</label><input autoFocus value={item.name} onChange={set('name')} /></div>
+        <div className="Q-field"><label>Also known as</label><input value={(item.aliases || []).join(', ')} placeholder="Comma separated" onChange={(e) => setItem((p) => ({ ...p, aliases: e.target.value.split(',').map((a) => a.trim()).filter(Boolean) }))} /></div>
       </div>
-      <CategoryEditor categories={item.categories || []} setCategories={(updater) => setItem((p) => ({ ...p, categories: updater(p.categories || []) }))} allCategories={allCategories} />
-      <div style={{ marginBottom: 10 }}>
-        <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>Descriptor</label>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <input
-            value={item.descriptor || ''} onChange={(e) => setItem((p) => ({ ...p, descriptor: e.target.value }))}
-            placeholder="Short description — what it is, flavor, culinary role…"
-            style={{ flex: 1, padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12.5 }}
-          />
-          <button onClick={aiGenerateDescriptor} disabled={descBusy} style={{ padding: '5px 10px', borderRadius: 5, border: 'none', background: 'linear-gradient(135deg,#4f8ef7,#7c3aed)', color: '#fff', fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', cursor: descBusy ? 'default' : 'pointer', opacity: descBusy ? 0.6 : 1 }}>
-            {descBusy ? '🤖 …' : '🤖 Generate'}
-          </button>
-        </div>
+      <CategoryEditor categories={item.categories || []} setCategories={(fn) => setItem((p) => ({ ...p, categories: fn(p.categories || []) }))} allCategories={allCategories} />
+      <div className="Q-field">
+        <label>Description <button type="button" className="Q-link" onClick={aiDescriptor} disabled={descBusy}>{descBusy ? 'Writing…' : 'Write with AI'}</button></label>
+        <input value={item.descriptor || ''} onChange={set('descriptor')} placeholder="What it is, its flavour, how it is used" />
       </div>
-      <div style={{ marginBottom: 10 }}>
-        <button onClick={aiFillThis} disabled={aiBusy} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: 'linear-gradient(135deg,#4f8ef7,#7c3aed)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: aiBusy ? 'default' : 'pointer', opacity: aiBusy ? 0.6 : 1 }}>
-          {aiBusy ? '🤖 Analyzing…' : '🤖 AI auto-fill this ingredient'}
-        </button>
-        <span style={{ fontSize: 10.5, color: 'var(--muted)', marginLeft: 8 }}>Looks up branded/specific products on the web when needed</span>
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>Aliases (comma-separated)</label>
-        <input value={(item.aliases || []).join(', ')} onChange={(e) => setItem((p) => ({ ...p, aliases: e.target.value.split(',').map((a) => a.trim()).filter(Boolean) }))} style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12, boxSizing: 'border-box', marginBottom: 10 }} />
-      </div>
-      <div style={{ marginBottom: 6 }}>
-        <label style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Parameters</label>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 6, marginBottom: 10 }}>
-        {STD_PARAMS.map((key) => (
-          <div key={key}>
-            <label style={{ fontSize: 10, color: 'var(--muted)', display: 'block' }}>{STD_LABELS[key]}</label>
-            <input type="number" step="0.1" value={item.params[key] != null ? item.params[key] : ''} onChange={(e) => setItem((p) => ({ ...p, params: { ...p.params, [key]: parseFloat(e.target.value) || 0 } }))} style={{ width: '100%', padding: '4px 6px', borderRadius: 4, border: '1px solid var(--rule)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12, boxSizing: 'border-box' }} />
+      <details className="Q-ingform-more">
+        <summary>Nutrition data</summary>
+        <div className="Q-ingform-row">
+          <div className="Q-field">
+            <label>Type</label>
+            <select className="Q-select" value={item.ingredient_type} onChange={set('ingredient_type')}>
+              {INGREDIENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
           </div>
-        ))}
-        {Object.keys(item.params).filter((k) => !STD_PARAMS.includes(k)).map((key) => (
-          <div key={key}>
-            <label style={{ fontSize: 10, color: '#7c3aed', display: 'block' }}>{key.replace(/_/g, ' ')}</label>
-            <div style={{ display: 'flex', gap: 3 }}>
-              <input type="number" step="0.01" value={item.params[key] != null ? item.params[key] : ''} onChange={(e) => setItem((p) => ({ ...p, params: { ...p.params, [key]: parseFloat(e.target.value) || 0 } }))} style={{ flex: 1, padding: '4px 6px', borderRadius: 4, border: '1px solid #7c3aed', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12 }} />
-              <button onClick={() => removeCustomParam(key)} style={{ padding: '0 5px', borderRadius: 4, border: 'none', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 13 }}>&#x2715;</button>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <input value={newParamKey} onChange={(e) => setNewParamKey(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomParam() } }} placeholder="New param name..." style={{ flex: 1, padding: '4px 8px', borderRadius: 5, border: '1px dashed var(--muted)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12 }} />
-        <button onClick={addCustomParam} style={{ padding: '4px 10px', borderRadius: 5, border: '1px dashed var(--muted)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 12 }}>+ Add</button>
-      </div>
-      {item.ai_notes && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>{item.ai_notes}</div>}
-    </div>
-  )
-}
-
-function IngredientRow({ item, usage, expanded, selected, onToggleExpand, onToggleSelect, onEdit, onDelete, onToggleFavorite }) {
-  return (
-    <div style={{ border: `1px solid ${selected ? 'var(--id)' : 'var(--rule)'}`, borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => onEdit(item)}>
-        <input type="checkbox" checked={!!selected} onClick={(e) => e.stopPropagation()} onChange={() => onToggleSelect(item.id)} style={{ flexShrink: 0, cursor: 'pointer' }} />
-        <button onClick={(e) => { e.stopPropagation(); onToggleFavorite(item) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: '0 2px', flexShrink: 0, lineHeight: 1 }} title={item.is_favorite ? 'Remove favorite' : 'Mark favorite'}>
-          {item.is_favorite ? '⭐' : '☆'}
-        </button>
-        <div style={{ flex: 1 }}>
-          <div>
-            <span style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 14 }}>{item.name}</span>
-            {item.canonical_name !== item.name && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>({item.canonical_name})</span>}
-            {(item.categories || []).length > 0
-              ? item.categories.map((c) => <span key={c} style={{ fontSize: 10, background: 'var(--id-soft)', color: 'var(--id)', borderRadius: 4, padding: '1px 6px', marginLeft: 6 }}>{c}</span>)
-              : <span style={{ fontSize: 10, background: 'var(--surface-2)', color: 'var(--muted)', borderRadius: 4, padding: '1px 6px', marginLeft: 8 }}>{item.ingredient_type}</span>}
-            {(item.aliases || []).length > 0 && <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 6 }}>+{item.aliases.length} aliases</span>}
-          </div>
-          {item.descriptor && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>{item.descriptor}</div>}
+          <button type="button" className="Q-link" onClick={aiFill} disabled={aiBusy}>{aiBusy ? 'Analyzing…' : 'Fill with AI'}</button>
         </div>
-        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)' }}>
-          {item.params.fat_pct != null && <span>Fat:{item.params.fat_pct}%</span>}
-          {item.params.flour_equivalent_pct != null && <span>FlEq:{item.params.flour_equivalent_pct}%</span>}
-          {item.params.free_water_pct != null && <span>FrW:{item.params.free_water_pct}%</span>}
-        </div>
-        <button onClick={(e) => { e.stopPropagation(); onDelete(item.id) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 14, opacity: 0.5 }}>&#x1F5D1;</button>
-      </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggleExpand(item.id) }}
-        style={{ width: '100%', textAlign: 'left', padding: '5px 14px 7px', background: 'none', border: 'none', borderTop: '1px dotted var(--rule)', cursor: usage.length ? 'pointer' : 'default', fontSize: 10.5, color: 'var(--muted)', fontFamily: 'var(--mono)' }}
-        disabled={!usage.length}
-      >
-        {usage.length ? `${expanded ? '▲' : '▼'} used in ${usage.length} recipe${usage.length !== 1 ? 's' : ''}` : 'not used in any recipe'}
-      </button>
-      {expanded && usage.length > 0 && (
-        <div style={{ padding: '2px 14px 10px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {usage.map((r) => (
-            <span key={r.id} style={{ fontSize: 11, background: 'var(--id-soft)', border: '1px solid var(--id-line)', borderRadius: 20, padding: '2px 9px', color: 'var(--id)' }}>{r.title}</span>
+        <div className="Q-param-grid">
+          {STD_PARAMS.map((key) => (
+            <label key={key}><span>{STD_LABELS[key]}</span><input type="number" step="0.1" value={item.params?.[key] ?? ''} onChange={(e) => setParam(key, e.target.value)} /></label>
+          ))}
+          {customKeys.map((key) => (
+            <label key={key}>
+              <span>{key.replace(/_/g, ' ')} <button type="button" onClick={() => { const p = { ...item.params }; delete p[key]; setItem((x) => ({ ...x, params: p })) }} aria-label="Remove"><X size={11} /></button></span>
+              <input type="number" step="0.01" value={item.params[key] ?? ''} onChange={(e) => setParam(key, e.target.value)} />
+            </label>
           ))}
         </div>
-      )}
+        <div className="Q-ingform-row">
+          <input className="Q-inline-input" value={newParamKey} onChange={(e) => setNewParamKey(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addParam() } }} placeholder="Add a parameter…" />
+        </div>
+        {item.ai_notes && <p className="Q-dim" style={{ margin: '8px 0 0' }}>{item.ai_notes}</p>}
+      </details>
+      <div className="Q-ingform-foot">
+        <button type="button" className="btn ghost sm" onClick={onCancel}>Cancel</button>
+        <button type="button" className="btn primary sm" onClick={onSave}>{saveLabel}</button>
+      </div>
     </div>
   )
 }
@@ -231,388 +141,247 @@ export default function IngredientLibraryModal({ onClose, recipes = [] }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [editId, setEditId] = useState(null)
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const [grouped, setGrouped] = useState(false)
+  const [openId, setOpenId] = useState(null)
   const [editItem, setEditItem] = useState(null)
   const [creating, setCreating] = useState(false)
   const [newItem, setNewItem] = useState(BLANK_ITEM)
-  const [categoryFilter, setCategoryFilter] = useState('')
-  const [favoritesOnly, setFavoritesOnly] = useState(false)
-  const [viewMode, setViewMode] = useState('list') // 'list' | 'category'
-  const [expandedId, setExpandedId] = useState(null)
-  const [bulkBusy, setBulkBusy] = useState(false)
-  const [bulkProgress, setBulkProgress] = useState(null)
-  const [scope, setScope] = useState('all') // 'all' | 'selected'
-  const [showRecipePicker, setShowRecipePicker] = useState(false)
-  const [selectedRecipeIds, setSelectedRecipeIds] = useState(new Set())
-  const [selectedIngredientIds, setSelectedIngredientIds] = useState(new Set())
   const [collapsedCats, setCollapsedCats] = useState(new Set())
-  const [bulkCatInput, setBulkCatInput] = useState('')
-  const [showCatSuggest, setShowCatSuggest] = useState(false)
-  const [catBulkBusy, setCatBulkBusy] = useState(false)
+  const [busy, setBusy] = useState(null) // { label, done, total }
+  const [scope, setScope] = useState('all') // 'all' | 'selected'
+  const [scopeIds, setScopeIds] = useState(new Set())
+  const [selecting, setSelecting] = useState(false)
+  const [selected, setSelected] = useState(new Set())
+  const [bulkCat, setBulkCat] = useState('')
 
   useEffect(() => { libLoad().then((d) => { setItems(d); setLoading(false) }) }, [])
+  const reload = async () => setItems(await libLoad())
 
   const allCategories = useMemo(() => getAllCategories(items), [items])
-
-  const filtered = useMemo(() => {
-    const terms = expandSearchQuery(search)
-    return items
-      .filter((it) => {
-        const nm = (it.name || '').toLowerCase()
-        const cn = (it.canonical_name || '').toLowerCase()
-        const aliasText = (it.aliases || []).join(' ').toLowerCase()
-        const matchesSearch = !terms.length || terms.some((t) => nm.includes(t) || cn.includes(t) || aliasText.includes(t))
-        const matchesCategory = !categoryFilter || (it.categories || []).includes(categoryFilter)
-        return matchesSearch && matchesCategory && (!favoritesOnly || it.is_favorite)
-      })
-      .sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0) || a.name.localeCompare(b.name))
-  }, [items, search, categoryFilter, favoritesOnly])
-
-  // An item with multiple categories appears once under each of them (Reblochon → dairy AND cheese AND fermented).
-  const groupedByCategory = useMemo(() => {
-    const groups = new Map()
-    for (const item of filtered) {
-      const cats = (item.categories && item.categories.length) ? item.categories : ['uncategorized']
-      for (const c of cats) {
-        if (!groups.has(c)) groups.set(c, [])
-        groups.get(c).push(item)
-      }
-    }
-    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-  }, [filtered])
-
-  const usageMap = useMemo(() => {
-    const map = new Map()
-    for (const item of items) map.set(item.id, findRecipesForIngredient(item, recipes))
-    return map
-  }, [items, recipes])
-
   const categoryCounts = useMemo(() => {
     const counts = new Map()
     for (const it of items) for (const c of it.categories || []) counts.set(c, (counts.get(c) || 0) + 1)
     return counts
   }, [items])
+  const filtered = useMemo(() => {
+    const terms = expandSearchQuery(search)
+    return items
+      .filter((it) => {
+        const hay = [it.name, it.canonical_name, ...(it.aliases || [])].join(' ').toLowerCase()
+        return (!terms.length || terms.some((t) => hay.includes(t)))
+          && (!categoryFilter || (it.categories || []).includes(categoryFilter))
+          && (!favoritesOnly || it.is_favorite)
+      })
+      .sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0) || a.name.localeCompare(b.name))
+  }, [items, search, categoryFilter, favoritesOnly])
+  // An item with several categories appears once under each (Reblochon → dairy, cheese, fermented).
+  const groups = useMemo(() => {
+    const g = new Map()
+    for (const it of filtered) for (const c of (it.categories?.length ? it.categories : ['uncategorized'])) { if (!g.has(c)) g.set(c, []); g.get(c).push(it) }
+    return [...g.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [filtered])
+  const usageMap = useMemo(() => {
+    const m = new Map()
+    for (const it of items) m.set(it.id, findRecipesForIngredient(it, recipes))
+    return m
+  }, [items, recipes])
+  const scopedRecipes = scope === 'selected' ? recipes.filter((r) => scopeIds.has(r.id)) : recipes
+  const missingNames = useMemo(() => collectAllIngredientNames(scopedRecipes).filter((n) => !libFindMatch(n, items)), [scopedRecipes, items])
+  const targets = selected.size ? filtered.filter((i) => selected.has(i.id)) : filtered
 
-  const bulkCatSuggestions = useMemo(() => {
-    const q = bulkCatInput.trim().toLowerCase()
-    return allCategories.filter((c) => !q || c.includes(q)).slice(0, 30)
-  }, [allCategories, bulkCatInput])
-
-  const scopedRecipes = useMemo(
-    () => (scope === 'selected' ? recipes.filter((r) => selectedRecipeIds.has(r.id)) : recipes),
-    [scope, recipes, selectedRecipeIds],
-  )
-
-  const scopedMissingNames = useMemo(() => {
-    const names = collectAllIngredientNames(scopedRecipes)
-    return names.filter((n) => !libFindMatch(n, items))
-  }, [scopedRecipes, items])
-
-  // "todo o lo que seleccione": operates on the checked ingredients, or on every currently
-  // filtered/visible ingredient when nothing is checked.
-  const categorizeTargets = selectedIngredientIds.size ? filtered.filter((i) => selectedIngredientIds.has(i.id)) : filtered
-
-  function toggleSelectIngredient(id) {
-    setSelectedIngredientIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
-  function selectAllFiltered() { setSelectedIngredientIds(new Set(filtered.map((i) => i.id))) }
-  function clearIngredientSelection() { setSelectedIngredientIds(new Set()) }
-
-  function toggleCollapsedCategory(cat) {
-    setCollapsedCats((prev) => {
-      const next = new Set(prev)
-      if (next.has(cat)) next.delete(cat); else next.add(cat)
-      return next
-    })
-  }
-
-  async function applyCategoryToTargets(raw) {
-    const c = raw.trim().toLowerCase()
-    if (!c || !categorizeTargets.length) return
-    setCatBulkBusy(true)
-    for (const item of categorizeTargets) {
-      if ((item.categories || []).includes(c)) continue
-      await libUpsert({ ...item, categories: [...(item.categories || []), c] })
+  // ── actions ───────────────────────────────────────────────────────────────
+  async function addMissing() {
+    if (!missingNames.length) return
+    if (!window.confirm(`Add ${missingNames.length} ingredient${missingNames.length === 1 ? '' : 's'} from your recipes to the library?`)) return
+    setBusy({ label: 'Adding', done: 0, total: missingNames.length })
+    for (let i = 0; i < missingNames.length; i++) {
+      const name = missingNames[i]
+      await libUpsert({ name, canonical_name: name, ingredient_type: 'other', categories: [], aliases: [], params: {}, ai_notes: '', source: 'manual' })
+      setBusy({ label: 'Adding', done: i + 1, total: missingNames.length })
     }
-    const fresh = await libLoad()
-    setItems(fresh)
-    setCatBulkBusy(false)
-    setBulkCatInput('')
+    await reload(); setBusy(null); toast.success('Ingredients added')
   }
-
-  // Lets the AI decide categories for the target ingredients (batched), merging into whatever
-  // categories each ingredient already has rather than overwriting them.
-  async function aiCategorizeTargets() {
-    const targets = categorizeTargets
-    if (!targets.length) return
-    setCatBulkBusy(true)
-    setBulkProgress({ done: 0, total: targets.length })
-    for (let i = 0; i < targets.length; i += BATCH_SIZE) {
-      const batch = targets.slice(i, i + BATCH_SIZE)
+  async function analyzeMissing() {
+    if (!missingNames.length) return
+    setBusy({ label: 'Analyzing', done: 0, total: missingNames.length })
+    for (let i = 0; i < missingNames.length; i += BATCH_SIZE) {
+      const batch = missingNames.slice(i, i + BATCH_SIZE).map((name) => ({ name, qty: 100, unit: 'g' }))
       try {
-        const json = await categorizeIngredients(
-          batch.map((it) => ({ name: it.name, ingredient_type: it.ingredient_type })),
-          allCategories,
-        )
+        const json = await analyzeMacros('Ingredient Library — bulk analysis', batch)
+        for (const [n, vals] of Object.entries(json.cache || {})) {
+          await libUpsert({ ...applyAiResult({ name: n, canonical_name: n, ingredient_type: 'other', categories: [], aliases: [] }, vals), source: 'AI' })
+        }
+      } catch (e) { console.error('Bulk analysis batch failed:', e) }
+      setBusy({ label: 'Analyzing', done: Math.min(missingNames.length, i + BATCH_SIZE), total: missingNames.length })
+    }
+    await reload(); setBusy(null); toast.success('Nutrition data added')
+  }
+  async function aiCategorize() {
+    const list = targets
+    if (!list.length) return
+    setBusy({ label: 'Categorizing', done: 0, total: list.length })
+    for (let i = 0; i < list.length; i += BATCH_SIZE) {
+      const batch = list.slice(i, i + BATCH_SIZE)
+      try {
+        const json = await categorizeIngredients(batch.map((it) => ({ name: it.name, ingredient_type: it.ingredient_type })), allCategories)
         for (const [name, cats] of Object.entries(json.categories || {})) {
           if (!Array.isArray(cats) || !cats.length) continue
           const match = batch.find((it) => it.name === name) || batch.find((it) => it.name.toLowerCase() === name.toLowerCase())
           if (!match) continue
-          const merged = Array.from(new Set([...(match.categories || []), ...cats.map((c) => String(c).toLowerCase())]))
-          await libUpsert({ ...match, categories: merged })
+          await libUpsert({ ...match, categories: Array.from(new Set([...(match.categories || []), ...cats.map((c) => String(c).toLowerCase())])) })
         }
-      } catch (e) {
-        console.error('AI categorize batch failed:', e)
-      }
-      setBulkProgress({ done: Math.min(targets.length, i + BATCH_SIZE), total: targets.length })
+      } catch (e) { console.error('AI categorize batch failed:', e) }
+      setBusy({ label: 'Categorizing', done: Math.min(list.length, i + BATCH_SIZE), total: list.length })
     }
-    const fresh = await libLoad()
-    setItems(fresh)
-    setCatBulkBusy(false)
-    setBulkProgress(null)
+    await reload(); setBusy(null); toast.success('Categories updated')
   }
-
-  function startEdit(item) { setCreating(false); setEditId(item.id); setEditItem({ ...item, categories: [...(item.categories || [])], params: { ...item.params }, aliases: [...(item.aliases || [])] }) }
-  function cancelEdit() { setEditId(null); setEditItem(null) }
-  async function saveEdit() {
-    await libUpsert(editItem)
-    const fresh = await libLoad()
-    setItems(fresh); setEditId(null); setEditItem(null)
+  async function applyCategory() {
+    const c = bulkCat.trim().toLowerCase()
+    if (!c || !targets.length) return
+    setBusy({ label: 'Applying', done: 0, total: targets.length })
+    let n = 0
+    for (const it of targets) {
+      if (!(it.categories || []).includes(c)) await libUpsert({ ...it, categories: [...(it.categories || []), c] })
+      setBusy({ label: 'Applying', done: ++n, total: targets.length })
+    }
+    await reload(); setBusy(null); setBulkCat(''); toast.success(`“${c}” added to ${targets.length} ingredients`)
   }
-
-  function startCreate() { setEditId(null); setNewItem(BLANK_ITEM); setCreating(true) }
+  async function saveEdit() { await libUpsert(editItem); await reload(); setEditItem(null) }
   async function saveCreate() {
-    if (!newItem.name.trim()) { alert('Name is required.'); return }
+    if (!newItem.name.trim()) { toast.error('Name is required.'); return }
     await libUpsert({ ...newItem, canonical_name: newItem.canonical_name.trim() || newItem.name.trim() })
-    const fresh = await libLoad()
-    setItems(fresh); setCreating(false)
+    await reload(); setCreating(false)
   }
-
-  async function deleteItem(id) {
-    if (!window.confirm('Delete this ingredient?')) return
-    await libDelete(id); setItems(items.filter((i) => i.id !== id))
-    setSelectedIngredientIds((prev) => { const next = new Set(prev); next.delete(id); return next })
+  async function remove(item) {
+    if (!window.confirm(`Delete “${item.name}” from the library?`)) return
+    await libDelete(item.id)
+    setItems((p) => p.filter((i) => i.id !== item.id)); setOpenId(null)
   }
-
   async function toggleFavorite(item) {
     const updated = { ...item, is_favorite: !item.is_favorite }
-    setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)))
+    setItems((p) => p.map((i) => (i.id === item.id ? updated : i)))
     await libUpsert(updated)
   }
+  const toggleSet = (setter, id) => setter((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
-  function toggleSelectedRecipe(id) {
-    setSelectedRecipeIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
-
-  // Registers every ingredient name from the current scope as a library row (blank params, no AI call).
-  async function addScopedIngredients() {
-    if (!scopedMissingNames.length) { alert('Nothing new to add for this scope.'); return }
-    if (!window.confirm(`Add ${scopedMissingNames.length} ingredient${scopedMissingNames.length !== 1 ? 's' : ''} to the library?`)) return
-    setBulkBusy(true)
-    for (const name of scopedMissingNames) {
-      await libUpsert({ name, canonical_name: name, ingredient_type: 'other', categories: [], aliases: [], params: {}, ai_notes: '', source: 'manual' })
+  // ── rendering ─────────────────────────────────────────────────────────────
+  const row = (item) => {
+    if (editItem?.id === item.id) {
+      return <li key={item.id} className="Q-ing-item editing"><IngredientForm item={editItem} setItem={setEditItem} onSave={saveEdit} onCancel={() => setEditItem(null)} saveLabel="Save" allCategories={allCategories} /></li>
     }
-    const fresh = await libLoad()
-    setItems(fresh)
-    setBulkBusy(false)
+    const usage = usageMap.get(item.id) || []
+    const open = openId === item.id
+    return (
+      <li key={item.id} className={`Q-ing-item${open ? ' open' : ''}${selecting && selected.has(item.id) ? ' on' : ''}`}>
+        <div className="Q-ing-line" onClick={() => (selecting ? toggleSet(setSelected, item.id) : setOpenId(open ? null : item.id))}>
+          {selecting && <span className="Q-check" aria-hidden="true" />}
+          <span className="Q-ing-title">
+            {item.name}
+            {item.is_favorite && <Star size={12} fill="currentColor" className="Q-ing-star" />}
+          </span>
+          <span className="Q-ing-cats">{(item.categories || []).join(', ')}</span>
+          <span className="Q-ing-uses">{usage.length ? `${usage.length} recipe${usage.length === 1 ? '' : 's'}` : ''}</span>
+        </div>
+        {open && !selecting && (
+          <div className="Q-ing-detail">
+            {item.descriptor && <p>{item.descriptor}</p>}
+            {(item.aliases || []).length > 0 && <p className="Q-dim">Also: {item.aliases.join(', ')}</p>}
+            {usage.length > 0 && <p className="Q-dim">Used in {usage.map((r) => r.title).join(', ')}</p>}
+            <div className="Q-ing-actions">
+              <button onClick={() => setEditItem({ ...item, categories: [...(item.categories || [])], params: { ...(item.params || {}) }, aliases: [...(item.aliases || [])] })}>Edit</button>
+              <button onClick={() => toggleFavorite(item)}>{item.is_favorite ? 'Unfavorite' : 'Favorite'}</button>
+              <button className="danger" onClick={() => remove(item)}>Delete</button>
+            </div>
+          </div>
+        )}
+      </li>
+    )
   }
-
-  // Fills macro params (via AI, with web search for branded products) for the current scope's ingredients.
-  async function analyzeScopedIngredients() {
-    if (!scopedMissingNames.length) { alert('Every ingredient in this scope is already in the library.'); return }
-    setBulkBusy(true)
-    setBulkProgress({ done: 0, total: scopedMissingNames.length })
-    for (let i = 0; i < scopedMissingNames.length; i += BATCH_SIZE) {
-      const batch = scopedMissingNames.slice(i, i + BATCH_SIZE).map((name) => ({ name, qty: 100, unit: 'g' }))
-      try {
-        const json = await analyzeMacros('Ingredient Library — bulk analysis', batch)
-        for (const [ingName, vals] of Object.entries(json.cache || {})) {
-          await libUpsert({ ...applyAiResult({ name: ingName, canonical_name: ingName, ingredient_type: 'other', categories: [], aliases: [] }, vals), source: 'AI' })
-        }
-      } catch (e) {
-        console.error('Bulk ingredient analysis batch failed:', e)
-      }
-      setBulkProgress({ done: Math.min(scopedMissingNames.length, i + BATCH_SIZE), total: scopedMissingNames.length })
-    }
-    const fresh = await libLoad()
-    setItems(fresh)
-    setBulkBusy(false)
-    setBulkProgress(null)
-  }
-
-  const rowProps = { expandedId, onToggleExpand: (id) => setExpandedId((p) => (p === id ? null : id)), onToggleSelect: toggleSelectIngredient, onEdit: startEdit, onDelete: deleteItem, onToggleFavorite: toggleFavorite }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: 'var(--paper)', borderRadius: 12, width: 'min(900px,96vw)', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid var(--rule)' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 20 }}>📦</span>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>Ingredient Library</h2>
-          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)' }}>AI-powered · {items.length} ingredients</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>&#x2715;</button>
+    <Modal title="Ingredients" onClose={onClose} width={760} className="Q-lib">
+      <div className="Q-lib-bar">
+        <div className="Q-search">
+          <Search size={15} className="Q-search-ico" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${items.length} ingredients`} aria-label="Search ingredients" />
         </div>
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ingredients..." style={{ flex: 1, minWidth: 160, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 13 }} />
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 13 }}>
-            <option value="">All categories</option>
-            {allCategories.map((c) => <option key={c} value={c}>{c}{categoryCounts.get(c) ? ` (${categoryCounts.get(c)})` : ''}</option>)}
-          </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, cursor: 'pointer', color: 'var(--ink)' }}>
-            <input type="checkbox" checked={favoritesOnly} onChange={(e) => setFavoritesOnly(e.target.checked)} /> ⭐ Favorites only
-          </label>
-          <div style={{ display: 'flex', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
-            <button onClick={() => setViewMode('list')} style={{ padding: '5px 10px', fontSize: 12, border: 'none', cursor: 'pointer', background: viewMode === 'list' ? 'var(--id)' : 'var(--surface)', color: viewMode === 'list' ? '#fff' : 'var(--muted)' }}>List</button>
-            <button onClick={() => setViewMode('category')} style={{ padding: '5px 10px', fontSize: 12, border: 'none', cursor: 'pointer', background: viewMode === 'category' ? 'var(--id)' : 'var(--surface)', color: viewMode === 'category' ? '#fff' : 'var(--muted)' }}>By category</button>
-          </div>
-          <button onClick={startCreate} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--id)', background: 'none', color: 'var(--id)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Add ingredient</button>
-        </div>
+        <select className="Q-select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} aria-label="Category">
+          <option value="">All categories</option>
+          {allCategories.map((c) => <option key={c} value={c}>{c}{categoryCounts.get(c) ? ` (${categoryCounts.get(c)})` : ''}</option>)}
+        </select>
+        <Menu width={270} trigger={(p) => <button className="Q-icon-btn" onClick={p.toggle} aria-label="Library tools" title="Library tools"><MoreHorizontal size={18} /></button>}>
+          <MenuItem checked={favoritesOnly} onClick={() => setFavoritesOnly((v) => !v)}>Favorites only</MenuItem>
+          <MenuItem checked={grouped} onClick={() => setGrouped((v) => !v)}>Group by category</MenuItem>
+          <MenuSep />
+          <MenuLabel>From {scope === 'all' ? 'all recipes' : `${scopeIds.size} chosen recipes`}</MenuLabel>
+          <MenuItem disabled={!missingNames.length || !!busy} hint={missingNames.length || ''} onClick={addMissing}>Add missing ingredients</MenuItem>
+          <MenuItem disabled={!missingNames.length || !!busy} hint={missingNames.length || ''} onClick={analyzeMissing}>Add them with nutrition (AI)</MenuItem>
+          <MenuItem onClick={() => setScope((s) => (s === 'all' ? 'selected' : 'all'))}>{scope === 'all' ? 'Choose recipes…' : 'Use all recipes'}</MenuItem>
+          <MenuSep />
+          <MenuItem disabled={!targets.length || !!busy} hint={targets.length} onClick={aiCategorize}>Categorize with AI</MenuItem>
+          <MenuItem onClick={() => { setSelecting((v) => !v); setSelected(new Set()) }}>{selecting ? 'Stop selecting' : 'Select ingredients…'}</MenuItem>
+        </Menu>
+        <button className="btn primary sm" onClick={() => { setEditItem(null); setNewItem(BLANK_ITEM); setCreating(true) }}>Add</button>
+      </div>
 
-        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--rule)', background: 'var(--surface-2)' }}>
-          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--muted)' }}>Scope:</span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, cursor: 'pointer' }}>
-              <input type="radio" checked={scope === 'all'} onChange={() => { setScope('all'); setShowRecipePicker(false) }} /> Whole app ({recipes.length} recipes)
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, cursor: 'pointer' }}>
-              <input type="radio" checked={scope === 'selected'} onChange={() => { setScope('selected'); setShowRecipePicker(true) }} /> Selected recipes ({selectedRecipeIds.size})
-            </label>
-            {scope === 'selected' && (
-              <button onClick={() => setShowRecipePicker((p) => !p)} style={{ fontSize: 11.5, padding: '3px 9px', borderRadius: 14, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--muted)', cursor: 'pointer' }}>
-                {showRecipePicker ? 'Hide list' : 'Choose recipes…'}
-              </button>
-            )}
+      {busy && (
+        <div className="Q-lib-busy">
+          <span>{busy.label} {busy.done} of {busy.total}…</span>
+          <div className="Q-meter"><i style={{ width: `${(busy.done / Math.max(1, busy.total)) * 100}%` }} /></div>
+        </div>
+      )}
+
+      {scope === 'selected' && (
+        <div className="Q-lib-scope">
+          <div className="Q-dim">Tools use only these recipes:</div>
+          <div className="Q-lib-chips">
+            {recipes.map((r) => (
+              <button key={r.id} className={scopeIds.has(r.id) ? 'on' : ''} onClick={() => toggleSet(setScopeIds, r.id)}>{r.title}</button>
+            ))}
           </div>
-          {scope === 'selected' && showRecipePicker && (
-            <div style={{ maxHeight: 140, overflow: 'auto', display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8, padding: 8, background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 7 }}>
-              {recipes.map((r) => (
-                <button key={r.id} onClick={() => toggleSelectedRecipe(r.id)}
-                  style={{
-                    fontSize: 11.5, padding: '3px 10px', borderRadius: 14, cursor: 'pointer',
-                    border: `1.5px solid ${selectedRecipeIds.has(r.id) ? 'var(--id)' : 'var(--rule)'}`,
-                    background: selectedRecipeIds.has(r.id) ? 'var(--id-soft)' : 'var(--surface)',
-                    color: selectedRecipeIds.has(r.id) ? 'var(--id)' : 'var(--muted)',
-                  }}>
-                  {r.title}
-                </button>
+        </div>
+      )}
+
+      {selecting && (
+        <div className="Q-lib-select">
+          <span>{selected.size ? `${selected.size} selected` : `All ${filtered.length} shown`}</span>
+          <button className="Q-link" onClick={() => setSelected(new Set(filtered.map((i) => i.id)))}>Select all</button>
+          {selected.size > 0 && <button className="Q-link" onClick={() => setSelected(new Set())}>Clear</button>}
+          <input className="Q-inline-input" value={bulkCat} onChange={(e) => setBulkCat(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') applyCategory() }} placeholder="Category to add…" />
+          <button className="btn ghost sm" disabled={!bulkCat.trim() || !!busy} onClick={applyCategory}>Apply</button>
+          {bulkCat.trim() && (
+            <div className="Q-tag-suggest wide">
+              {allCategories.filter((c) => c.includes(bulkCat.trim().toLowerCase()) && c !== bulkCat.trim().toLowerCase()).slice(0, 8).map((c) => (
+                <button key={c} type="button" onClick={() => setBulkCat(c)}>{c}</button>
               ))}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={addScopedIngredients} disabled={bulkBusy || !scopedMissingNames.length}
-              title="Register missing ingredient names in the library without calling the AI"
-              style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600, cursor: bulkBusy || !scopedMissingNames.length ? 'default' : 'pointer', opacity: bulkBusy || !scopedMissingNames.length ? 0.5 : 1 }}>
-              + Add {scopedMissingNames.length || ''} ingredient{scopedMissingNames.length !== 1 ? 's' : ''} to library
+        </div>
+      )}
+
+      {creating && (
+        <div className="Q-ing-item editing" style={{ marginBottom: 12 }}>
+          <IngredientForm item={newItem} setItem={setNewItem} onSave={saveCreate} onCancel={() => setCreating(false)} saveLabel="Add ingredient" allCategories={allCategories} />
+        </div>
+      )}
+
+      {loading && <div className="Q-msg">Loading…</div>}
+      {!loading && !filtered.length && !creating && <div className="Q-msg">No ingredients found.</div>}
+
+      {!grouped && <ul className="Q-ing-list">{filtered.map(row)}</ul>}
+      {grouped && groups.map(([cat, list]) => {
+        const collapsed = collapsedCats.has(cat)
+        return (
+          <div key={cat} className="Q-ing-group">
+            <button className="Q-ing-group-h" onClick={() => toggleSet(setCollapsedCats, cat)}>
+              <span>{cat}</span><span className="Q-dim">{list.length}{collapsed ? ' · show' : ''}</span>
             </button>
-            <button onClick={analyzeScopedIngredients} disabled={bulkBusy || !scopedMissingNames.length}
-              title="Fill macro parameters via AI (searches the web for branded/specific products)"
-              style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: 'linear-gradient(135deg,#4f8ef7,#7c3aed)', color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: bulkBusy || !scopedMissingNames.length ? 'default' : 'pointer', opacity: bulkBusy || !scopedMissingNames.length ? 0.6 : 1 }}>
-              {bulkBusy && bulkProgress ? `🤖 Analyzing ${bulkProgress.done}/${bulkProgress.total}…` : `🤖 Analyze macros (${scopedMissingNames.length})`}
-            </button>
+            {!collapsed && <ul className="Q-ing-list">{list.map(row)}</ul>}
           </div>
-        </div>
-
-        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--rule)', background: 'var(--surface-2)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--muted)' }}>Categorize:</span>
-          <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-            {selectedIngredientIds.size ? `${selectedIngredientIds.size} selected` : `all ${filtered.length} shown`}
-          </span>
-          <button onClick={selectAllFiltered} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 12, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--muted)', cursor: 'pointer' }}>Select all shown</button>
-          {selectedIngredientIds.size > 0 && (
-            <button onClick={clearIngredientSelection} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 12, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--muted)', cursor: 'pointer' }}>Clear selection</button>
-          )}
-          {/* Own dropdown instead of <datalist>: the native popup is positioned by the browser
-              and escapes the modal, rendering against the far edge of the window. */}
-          <div style={{ position: 'relative' }}>
-            <input
-              value={bulkCatInput}
-              onChange={(e) => { setBulkCatInput(e.target.value); setShowCatSuggest(true) }}
-              onFocus={() => setShowCatSuggest(true)}
-              onBlur={() => setTimeout(() => setShowCatSuggest(false), 120)} // let a click on a suggestion land first
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && bulkCatInput.trim()) { setShowCatSuggest(false); applyCategoryToTargets(bulkCatInput) }
-                if (e.key === 'Escape') setShowCatSuggest(false)
-              }}
-              placeholder="category to apply…"
-              style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 12, width: 160, boxSizing: 'border-box' }}
-            />
-            {showCatSuggest && bulkCatSuggestions.length > 0 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 3, width: 160, maxHeight: 190, overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.13)', zIndex: 20 }}>
-                {bulkCatSuggestions.map((c) => (
-                  <button
-                    key={c}
-                    onMouseDown={(e) => e.preventDefault()} // keep focus so onBlur doesn't beat the click
-                    onClick={() => { setBulkCatInput(c); setShowCatSuggest(false) }}
-                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 9px', background: 'none', border: 'none', borderBottom: '1px solid var(--rule)', cursor: 'pointer', fontSize: 12, color: 'var(--ink)' }}
-                  >
-                    {c}{categoryCounts.get(c) ? <span style={{ color: 'var(--muted)', fontSize: 10.5 }}> ({categoryCounts.get(c)})</span> : null}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button onClick={() => applyCategoryToTargets(bulkCatInput)} disabled={catBulkBusy || !bulkCatInput.trim() || !categorizeTargets.length}
-            style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid var(--rule)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 12, fontWeight: 600, cursor: catBulkBusy || !bulkCatInput.trim() ? 'default' : 'pointer', opacity: catBulkBusy || !bulkCatInput.trim() ? 0.5 : 1 }}>
-            + Apply to {categorizeTargets.length}
-          </button>
-          <button onClick={aiCategorizeTargets} disabled={catBulkBusy || !categorizeTargets.length}
-            title="Let AI assign categories to the target ingredients"
-            style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: 'linear-gradient(135deg,#4f8ef7,#7c3aed)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: catBulkBusy || !categorizeTargets.length ? 'default' : 'pointer', opacity: catBulkBusy || !categorizeTargets.length ? 0.6 : 1 }}>
-            {catBulkBusy && bulkProgress ? `🤖 ${bulkProgress.done}/${bulkProgress.total}…` : `🤖 AI-categorize ${categorizeTargets.length}`}
-          </button>
-        </div>
-
-        <div style={{ flex: 1, overflow: 'auto', padding: '12px 20px' }}>
-          {creating && (
-            <div style={{ border: '1px solid var(--id)', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-              <IngredientForm item={newItem} setItem={setNewItem} onSave={saveCreate} onCancel={() => setCreating(false)} saveLabel="Create" allCategories={allCategories} />
-            </div>
-          )}
-          {loading && <div style={{ color: 'var(--muted)', textAlign: 'center', padding: 32 }}>Loading...</div>}
-          {!loading && filtered.length === 0 && !creating && <div style={{ color: 'var(--muted)', textAlign: 'center', padding: 32 }}>No ingredients found.</div>}
-
-          {viewMode === 'list' && filtered.map((item) => (
-            editId === item.id ? (
-              <div key={item.id} style={{ border: '1px solid var(--rule)', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-                <IngredientForm item={editItem} setItem={setEditItem} onSave={saveEdit} onCancel={cancelEdit} saveLabel="Save" allCategories={allCategories} />
-              </div>
-            ) : (
-              <IngredientRow key={item.id} item={item} usage={usageMap.get(item.id) || []} expanded={expandedId === item.id} selected={selectedIngredientIds.has(item.id)} {...rowProps} />
-            )
-          ))}
-
-          {viewMode === 'category' && groupedByCategory.map(([cat, groupItems]) => {
-            const isCollapsed = collapsedCats.has(cat)
-            return (
-              <div key={cat} style={{ marginBottom: 16 }}>
-                <button
-                  onClick={() => toggleCollapsedCategory(cat)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.14em', color: 'var(--id)', marginBottom: 7, paddingBottom: 4, borderBottom: '1px solid var(--rule)' }}
-                >
-                  <span style={{ fontSize: 9, width: 10, display: 'inline-block' }}>{isCollapsed ? '▸' : '▾'}</span>
-                  {cat} <span style={{ color: 'var(--muted)' }}>({groupItems.length})</span>
-                </button>
-                {!isCollapsed && groupItems.map((item) => (
-                  editId === item.id ? (
-                    <div key={item.id} style={{ border: '1px solid var(--rule)', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-                      <IngredientForm item={editItem} setItem={setEditItem} onSave={saveEdit} onCancel={cancelEdit} saveLabel="Save" allCategories={allCategories} />
-                    </div>
-                  ) : (
-                    <IngredientRow key={item.id} item={item} usage={usageMap.get(item.id) || []} expanded={expandedId === item.id} selected={selectedIngredientIds.has(item.id)} {...rowProps} />
-                  )
-                ))}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
+        )
+      })}
+    </Modal>
   )
 }

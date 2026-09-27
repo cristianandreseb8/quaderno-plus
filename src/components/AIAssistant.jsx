@@ -72,9 +72,8 @@ export default function AIAssistant({ recipe, onAction, onRequestSaveNote }) {
       </div>
       {messages.length === 0 && (
         <div className="Q-assistant-welcome">
-          <div style={{ fontSize: 32, marginBottom: 8 }}>🤖</div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ai)', marginBottom: 5 }}>AI Recipe Assistant</div>
-          <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 12 }}>Ask anything or give instructions to modify this recipe.</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)', marginBottom: 5 }}>Ask about this recipe</div>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 12 }}>Questions, tips, or changes — the assistant can edit the recipe for you.</div>
           <div className="Q-quick-chips">{CHIPS.map((c) => <button key={c} className="Q-chip" onClick={() => setInput(c)}>{c}</button>)}</div>
         </div>
       )}

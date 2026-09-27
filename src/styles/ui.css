@@ -151,3 +151,5 @@
 }
 .Q-compare-panel { width: 600px; }
 @keyframes qslide { from { transform: translateX(24px); opacity: 0; } }
+.Q-import-row.pending { opacity: .6; }
+.Q-import-row.pending .Q-import-row-txt b { font-weight: 500; }

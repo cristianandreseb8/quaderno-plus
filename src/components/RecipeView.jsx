@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, Loader2, MoreHorizontal } from 'lucide-react'
 import {
-  BookMarked, Bot, Clock, Copy, Download, FileSpreadsheet, FileText, FlaskConical, Globe, Image as ImageIcon, Languages, Loader2,
-  MoreHorizontal, NotebookPen, Pencil, Percent, RotateCcw, Save, Scale, Tag, Trash2, Users, UtensilsCrossed,
-} from 'lucide-react'
-import {
-  calcPct, findStepsForIng, getTotalGrams, parseIng, parseSections, scaleRecipe, toGrams,
+  calcPct, findStepsForIng, getTotalGrams, numberSteps, parseIng, parseSections, scaleRecipe, sectionGrams, splitIngLine, toGrams,
 } from '../lib/recipeCalc.js'
 import { parseTabs, serializeTabs } from '../lib/notesData.js'
 import { translateRecipe } from '../lib/ai.js'
@@ -13,17 +10,15 @@ import { useSettings } from '../lib/settings.js'
 import Menu, { MenuItem, MenuLabel, MenuSep, MenuToggle } from './ui/Menu.jsx'
 import { toast } from './ui/Toaster.jsx'
 import NotesPanel from './NotesPanel.jsx'
-import IDPanel from './IDPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
 
 const TABS = [
-  ['recipe', 'Recipe', UtensilsCrossed, 'Recipe'],
-  ['notes', 'Notes & media', NotebookPen, 'Notes'],
-  ['id', 'R&D', FlaskConical, 'R&D'],
-  ['ai', 'Assistant', Bot, 'AI'],
+  ['recipe', 'Recipe'],
+  ['notes', 'Notes'],
+  ['ai', 'Assistant'],
 ]
 
-export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant }) {
+export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant, inSession, onToggleSession }) {
   const { settings, update: updateSettings } = useSettings()
   const [tab, setTab] = useState('recipe')
   const [lightboxSrc, setLightboxSrc] = useState(null)
@@ -150,7 +145,6 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
   }
   async function handleSaveNotes(serialized) { await onUpdate({ ...recipe, notes_pad: serialized }) }
   async function handleSaveMedia(serialized) { await onUpdate({ ...recipe, media_library: serialized }) }
-  async function handleSaveIdData(serialized) { await onUpdate({ ...recipe, id_data: serialized }) }
 
   async function runExport(kind) {
     setExporting(true)
@@ -173,38 +167,31 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
 
   const toolbar = (
     <div className="Q-rtools">
-      {!appliedScale && (
-        <button className={`Q-tool${showScale ? ' on' : ''}`} onClick={() => setShowScale(!showScale)} title="Scale the recipe">
-          <Scale size={15} /> Scale
-        </button>
-      )}
-      <button className={`Q-tool${showPct ? ' on' : ''}`} onClick={() => setShowPct(!showPct)} title="Show percentages">
-        <Percent size={15} /> Baker's %
-      </button>
+      {!appliedScale && <button className={`Q-tool${showScale ? ' on' : ''}`} onClick={() => setShowScale(!showScale)}>Scale</button>}
+      <button className={`Q-tool${showPct ? ' on' : ''}`} onClick={() => setShowPct(!showPct)}>Baker's %</button>
+      <Menu
+        align="start" width={200}
+        trigger={(p) => (
+          <button className={`Q-tool${translated ? ' on' : ''}`} onClick={p.toggle} disabled={translating}>
+            {translating ? <><Loader2 size={13} className="spin" /> Translating</> : 'Translate'}
+          </button>
+        )}
+      >
+        <MenuLabel>Show in</MenuLabel>
+        {langsOrdered.map((l) => <MenuItem key={l} checked={!!translated && targetLang === l} onClick={() => translateTo(l)}>{l}</MenuItem>)}
+        {translated && (<><MenuSep /><MenuItem onClick={() => setTranslated(null)}>Show original</MenuItem></>)}
+      </Menu>
       <Menu
         align="start" width={210}
         trigger={(p) => (
-          <button className={`Q-tool${translated ? ' on' : ''}`} onClick={p.toggle} disabled={translating} title="Translate this view">
-            {translating ? <Loader2 size={15} className="spin" /> : <Languages size={15} />} {translating ? 'Translating…' : 'Translate'}
+          <button className="Q-tool" onClick={p.toggle} disabled={exporting}>
+            {exporting ? <><Loader2 size={13} className="spin" /> Exporting</> : 'Export'}
           </button>
         )}
       >
-        <MenuLabel>Show this recipe in</MenuLabel>
-        {langsOrdered.map((l) => <MenuItem key={l} icon={Globe} checked={translated && targetLang === l} onClick={() => translateTo(l)}>{l}</MenuItem>)}
-        {translated && (<><MenuSep /><MenuItem icon={RotateCcw} onClick={() => setTranslated(null)}>Show original</MenuItem></>)}
-      </Menu>
-      <Menu
-        align="start" width={230}
-        trigger={(p) => (
-          <button className="Q-tool" onClick={p.toggle} disabled={exporting} title="Download">
-            {exporting ? <Loader2 size={15} className="spin" /> : <Download size={15} />} Export
-          </button>
-        )}
-      >
-        <MenuLabel>Download as</MenuLabel>
-        <MenuItem icon={FileText} onClick={() => runExport('pdf')}>PDF document</MenuItem>
-        <MenuItem icon={ImageIcon} onClick={() => runExport('img')}>Image (PNG)</MenuItem>
-        <MenuItem icon={FileSpreadsheet} onClick={() => runExport('xls')}>Excel sheet</MenuItem>
+        <MenuItem onClick={() => runExport('pdf')}>PDF</MenuItem>
+        <MenuItem onClick={() => runExport('img')}>Image</MenuItem>
+        <MenuItem onClick={() => runExport('xls')}>Excel</MenuItem>
         <MenuSep />
         <MenuToggle checked={exportNotes} onChange={(v) => updateSettings({ exportNotes: v })}>Include notes</MenuToggle>
       </Menu>
@@ -287,19 +274,19 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
       </div>
       {sections.map((sec, si) => {
         const pctData = showPct ? calcPct(sec.items, pctMode, pctBase, customBaseGrams ? parseFloat(customBaseGrams) : null) : null
-        const secG = sec.items.reduce((s, ing) => { const p = parseIng(ing); return s + toGrams(p.qty, p.unit) }, 0)
+        const secG = sectionGrams(sec.items)
         return (
           <div key={si}>
             {sec.name && <div className="Q-sec-h"><span>{sec.name}</span></div>}
             <ul className="Q-ings">
               {sec.items.map((ing, ii) => {
                 const rawIdx = sec.rawIndices[ii], isCk = checked.has(rawIdx)
-                const mm = String(ing).match(/^([\d.,]+\s*[^\s]+)\s{2,}(.+)$/) || String(ing).match(/^([\d.,]+\s*[a-zA-Z%]+)\s+(.+)$/)
+                const d = splitIngLine(ing)
                 const pct = pctData ? pctData[ii] : null
                 return (
-                  <li key={ii} className={`Q-ing-row${isCk ? ' checked' : ''}`} onClick={() => handleIngToggle(rawIdx)}>
+                  <li key={ii} className={`Q-ing-row${isCk ? ' checked' : ''}${d.ref ? ' ref' : ''}`} onClick={() => handleIngToggle(rawIdx)} title={d.ref ? 'Made earlier in this recipe' : undefined}>
                     <span className="Q-ing-check" aria-hidden="true" />
-                    {mm ? <><span className="Q-ing-qty">{mm[1].trim()}</span><span className="Q-ing-name">{mm[2].trim()}</span></> : <span className="Q-ing-name wide">{ing}</span>}
+                    <span className="Q-ing-qty">{d.qty}</span><span className="Q-ing-name">{d.name}</span>
                     {pct?.pct != null && <span className={`Q-pct-badge${pct.isBase ? ' base' : ''}`}>{pct.pct.toFixed(1)}%</span>}
                   </li>
                 )
@@ -321,7 +308,13 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
             <span>Method</span>
             {highlightedSteps.size > 0 && <em className="Q-hl-note">{highlightedSteps.size === 1 ? '1 step uses' : `${highlightedSteps.size} steps use`} the ticked ingredients</em>}
           </div>
-          <ol className="Q-steps">{viewR.steps.map((s, i) => (String(s).trim() ? <li key={i} className={highlightedSteps.has(i) ? 'highlighted' : ''}>{s}</li> : null))}</ol>
+          <ol className="Q-steps">
+            {numberSteps(viewR.steps).map((st, i) => {
+              if (!st.text) return null
+              if (st.header) return <li key={i} className="Q-step-h">{st.text}</li>
+              return <li key={i} data-n={st.n} className={highlightedSteps.has(i) ? 'highlighted' : ''}>{st.text}</li>
+            })}
+          </ol>
         </>
       )}
       {viewR.notes && <div className="Q-baker-note"><b>Notes</b>{viewR.notes}</div>}
@@ -346,72 +339,68 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
     </div>
   )
 
+  const meta = [viewR.time, viewR.servings, viewR.source].filter(Boolean)
+  const origin = [recipe.fixed_lang && `${recipe.fixed_lang} version`, copiedFrom && `copy of ${copiedFrom.title}`].filter(Boolean).join(', ')
+
   return (
     <div className="Q-view">
       <div className="Q-view-header">
         <div className="Q-view-title">
           <h1>{viewR.title || 'Untitled'}</h1>
           <div className="Q-meta">
-            {viewR.category && <span className="Q-meta-chip"><Tag size={13} />{viewR.category}</span>}
-            {viewR.time && <span className="Q-meta-item"><Clock size={14} />{viewR.time}</span>}
-            {viewR.servings && <span className="Q-meta-item"><Users size={14} />{viewR.servings}</span>}
-            {viewR.source && <span className="Q-meta-item muted"><BookMarked size={14} />{viewR.source}</span>}
+            {viewR.category && <span className="Q-meta-cat">{viewR.category}</span>}
+            {meta.map((m, i) => <span key={i}>{m}</span>)}
           </div>
+          {origin && <div className="Q-origin">{origin.charAt(0).toUpperCase() + origin.slice(1)}</div>}
         </div>
         {recipe.thumbnail && <img src={recipe.thumbnail} className="Q-recipe-thumb" onClick={() => setLightboxSrc(recipe.thumbnail)} alt={recipe.title} />}
       </div>
 
-      {(appliedScale || translated || recipe.fixed_lang || copiedFrom) && (
-        <div className="Q-banners">
-          {appliedScale && (
-            <div className="Q-banner scale">
-              <Scale size={14} /> Scaled {appliedScale.label}
-              <span className="sp" />
-              <button onClick={saveCurrentAsNew}><Save size={13} /> Save as new</button>
-              <button onClick={() => { setAppliedScale(null); setChecked(new Set()); setHighlightedSteps(new Set()) }}><RotateCcw size={13} /> Reset</button>
-            </div>
-          )}
-          {translated && (
-            <div className="Q-banner trans">
-              <Languages size={14} /> Showing in {targetLang}
-              <span className="sp" />
-              {!appliedScale && <button onClick={saveCurrentAsNew}><Save size={13} /> Save as new</button>}
-              <button onClick={() => setTranslated(null)}><RotateCcw size={13} /> Original</button>
-            </div>
-          )}
-          {recipe.fixed_lang && <div className="Q-banner copy"><Globe size={14} /> {recipe.fixed_lang} version</div>}
-          {copiedFrom && <div className="Q-banner plain"><Copy size={14} /> Copy of <b>{copiedFrom.title}</b></div>}
+      {appliedScale && (
+        <div className="Q-banner">
+          <span>Scaled {appliedScale.label}</span>
+          <span className="sp" />
+          <button onClick={saveCurrentAsNew}>Save as new</button>
+          <button onClick={() => { setAppliedScale(null); setChecked(new Set()); setHighlightedSteps(new Set()) }}>Reset</button>
+        </div>
+      )}
+      {translated && (
+        <div className="Q-banner">
+          <span>Shown in {targetLang}</span>
+          <span className="sp" />
+          {!appliedScale && <button onClick={saveCurrentAsNew}>Save as new</button>}
+          <button onClick={() => setTranslated(null)}>Original</button>
         </div>
       )}
 
       <div className="Q-tabbar">
         <div className="Q-tabs" role="tablist">
-          {TABS.map(([k, l, Icon, short]) => (
-            <button key={k} role="tab" aria-selected={tab === k} aria-label={l} className={`Q-tab-btn${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>
-              <Icon size={15} /><span className="full">{l}</span><span className="short">{short}</span>
-            </button>
+          {TABS.map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={tab === k} className={`Q-tab-btn${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{l}</button>
           ))}
         </div>
         <div className="Q-tabbar-actions">
-          <button className="btn ghost sm" onClick={onEdit} title="Edit recipe"><Pencil size={14} /><span className="lbl">Edit</span></button>
+          <button className={`Q-sess-toggle${inSession ? ' on' : ''}`} onClick={onToggleSession} title={inSession ? 'Remove from the session' : 'Add to the cooking session'}>
+            {inSession ? <><Check size={14} strokeWidth={2.6} /> In session</> : 'Add to session'}
+          </button>
+          <button className="Q-textbtn" onClick={onEdit}>Edit</button>
           <Menu
-            width={240}
+            width={230}
             trigger={(p) => <button className="Q-icon-btn" onClick={p.toggle} aria-label="More actions" title="More actions"><MoreHorizontal size={18} /></button>}
           >
-            <MenuItem icon={Copy} onClick={() => onCopy(recipe, null)}>Duplicate</MenuItem>
-            <MenuLabel>Duplicate as a translated copy</MenuLabel>
+            <MenuItem onClick={() => onCopy(recipe, null)}>Duplicate</MenuItem>
+            <MenuLabel>Duplicate translated</MenuLabel>
             <div className="Q-menu-scroll short">
-              {langsOrdered.map((l) => <MenuItem key={l} icon={Globe} onClick={() => onCopy(recipe, l)}>{l}</MenuItem>)}
+              {langsOrdered.map((l) => <MenuItem key={l} onClick={() => onCopy(recipe, l)}>{l}</MenuItem>)}
             </div>
             <MenuSep />
-            <MenuItem icon={Trash2} danger onClick={onDelete}>Delete recipe</MenuItem>
+            <MenuItem danger onClick={onDelete}>Delete recipe</MenuItem>
           </Menu>
         </div>
       </div>
 
       {tab === 'recipe' && recipeContent}
       {tab === 'notes' && <NotesPanel recipe={recipe} onSave={handleSaveNotes} onSaveMedia={handleSaveMedia} onAddNote={addNoteRef} />}
-      {tab === 'id' && <IDPanel recipe={recipe} onSave={handleSaveIdData} allRecipes={allRecipes} />}
       {tab === 'ai' && <AIAssistant recipe={viewR} onAction={handleAssistantAction} onRequestSaveNote={handleRequestSaveNote} />}
       {lightboxSrc && <div className="Q-lightbox" onClick={() => setLightboxSrc(null)}><img src={lightboxSrc} alt="" /></div>}
     </div>

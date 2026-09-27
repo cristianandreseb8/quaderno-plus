@@ -9,6 +9,31 @@ export function isSectionHeader(line) {
   return /^##?\s+/.test(line)
 }
 
+// "→ 117 g  lievito madre (refreshed)" — a preparation made earlier in the same recipe and
+// added to a later part. It is shown and scaled, but never counted in totals or bought.
+const REF_RX = /^\s*(?:→|->)\s*/
+export const isRefLine = (line) => REF_RX.test(String(line || ''))
+export const stripRef = (line) => String(line || '').replace(REF_RX, '')
+
+// Split an ingredient line for display: quantity column, name, and whether it is a reference.
+export function splitIngLine(line) {
+  const ref = isRefLine(line)
+  const t = ref ? stripRef(line) : String(line || '')
+  const m = t.match(/^([\d.,]+\s*[^\s]+)\s{2,}(.+)$/) || t.match(/^([\d.,]+\s*[a-zA-Z%]+)\s+(.+)$/)
+  return m ? { ref, qty: m[1].trim(), name: m[2].trim() } : { ref, qty: '', name: t.trim() }
+}
+
+// Numbering skips "## Part" header lines inside the method.
+export function numberSteps(steps) {
+  let n = 0
+  return (steps || []).map((s) => {
+    if (isSectionHeader(s)) return { header: true, text: String(s).replace(/^##?\s*/, ''), n: null }
+    if (!String(s).trim()) return { header: false, text: '', n: null }
+    n += 1
+    return { header: false, text: String(s), n }
+  })
+}
+
 const UNICODE_FRACTIONS = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875 }
 const UNICODE_FRACTION_CHARS = Object.keys(UNICODE_FRACTIONS).join('')
 
@@ -84,11 +109,35 @@ export function calcPct(items, mode, base, baseGramsOverride = null) {
   }))
 }
 
-export function getTotalGrams(ingredients) {
-  return (ingredients || []).reduce((s, ing) => {
+// Weight of one part of the recipe, including what comes into it from an earlier part —
+// so "First dough" reads 953 g like the book, starter included.
+export function sectionGrams(items) {
+  return (items || []).reduce((s, ing) => {
     if (isSectionHeader(ing)) return s
-    const p = parseIng(ing)
+    const p = parseIng(stripRef(ing))
     return s + toGrams(p.qty, p.unit)
+  }, 0)
+}
+
+const sigWords = (s) => String(s || '').replace(/\([^)]*\)/g, ' ').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2)
+// Does a reference line ("→ first dough (risen)") point at this part ("First dough")?
+function refersTo(refName, sectionName) {
+  const want = sigWords(refName).slice(0, 2)
+  const have = sigWords(sectionName)
+  return want.length > 0 && want.every((w) => have.includes(w))
+}
+
+// Total weight of what the recipe produces. A part that is fully used in a later part (the
+// starter, the first dough) is counted inside that later part, not a second time.
+export function getTotalGrams(ingredients) {
+  const ings = ingredients || []
+  if (!ings.some(isRefLine)) return sectionGrams(ings.filter((l) => !isSectionHeader(l)))
+  const sections = parseSections(ings)
+  const refs = []
+  sections.forEach((sec, si) => sec.items.forEach((it) => { if (isRefLine(it)) refs.push({ name: parseIng(stripRef(it)).name, si }) }))
+  return sections.reduce((total, sec, si) => {
+    const consumed = sec.name && refs.some((r) => r.si > si && refersTo(r.name, sec.name))
+    return consumed ? total : total + sectionGrams(sec.items)
   }, 0)
 }
 
@@ -97,9 +146,10 @@ export function scaleRecipe(recipe, factor) {
     ...recipe,
     ingredients: (recipe.ingredients || []).map((ing) => {
       if (isSectionHeader(ing)) return ing
-      const p = parseIng(ing)
+      const ref = isRefLine(ing)
+      const p = parseIng(ref ? stripRef(ing) : ing)
       if (p.qty === null) return ing
-      return `${fmtQty(p.qty * factor)}${p.unit ? ' ' + p.unit : ''}  ${p.name}`
+      return `${ref ? '→ ' : ''}${fmtQty(p.qty * factor)}${p.unit ? ' ' + p.unit : ''}  ${p.name}`
     }),
   }
 }

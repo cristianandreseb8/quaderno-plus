@@ -60,3 +60,68 @@
 .Q-app-ai-msgs { flex: 1; overflow: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
 .Q-app-ai-input { border-top: 1px solid var(--rule); padding: 12px 14px; display: flex; gap: 8px; align-items: flex-end; }
 .Q-compare-body { flex: 1; overflow: auto; padding: 18px; }
+
+/* ── Ingredient library ──────────────────────────────────────────────────── */
+.Q-lib .Q-modal-body { padding-top: 14px; }
+.Q-lib-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; position: sticky; top: -14px; z-index: 2; background: var(--surface); padding: 2px 0 8px; }
+.Q-lib-bar .Q-search { flex: 1; }
+.Q-lib-bar .Q-select { height: 36px; max-width: 170px; }
+.Q-lib-busy { margin-bottom: 12px; font-size: 12.5px; color: var(--muted); }
+.Q-lib-busy .Q-meter { margin: 6px 0 0; }
+.Q-lib-scope { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.Q-lib-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; max-height: 120px; overflow: auto; }
+.Q-lib-chips button { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--rule); background: var(--surface); color: var(--muted); font-size: 12px; cursor: pointer; }
+.Q-lib-chips button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.Q-lib-select { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); font-size: 13px; }
+.Q-inline-input { height: 32px; min-width: 150px; flex: 1; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); padding: 0 10px; font-size: 13px; color: var(--ink); }
+.Q-inline-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.Q-ing-list { list-style: none; margin: 0; padding: 0; }
+.Q-ing-item { border-bottom: 1px solid var(--rule); }
+.Q-ing-item:last-child { border-bottom: none; }
+.Q-ing-line { display: flex; align-items: baseline; gap: 12px; padding: 10px 8px; border-radius: 8px; cursor: pointer; }
+.Q-ing-line:hover { background: var(--hover); }
+.Q-ing-item.on .Q-ing-line, .Q-ing-item.open .Q-ing-line { background: var(--surface-2); }
+.Q-ing-line .Q-check { align-self: center; width: 18px; height: 18px; }
+.Q-ing-item.on .Q-check { background: var(--accent); border-color: var(--accent); }
+.Q-ing-title { font-weight: 600; font-size: 14px; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; }
+.Q-ing-star { color: #E0A100; }
+.Q-ing-cats { flex: 1; min-width: 0; font-size: 12.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-ing-uses { margin-left: auto; flex-shrink: 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.Q-ing-detail { padding: 2px 8px 12px; font-size: 13px; line-height: 1.55; }
+.Q-ing-detail p { margin: 0 0 6px; }
+.Q-ing-actions { display: flex; gap: 2px; margin: 6px 0 0 -8px; }
+.Q-ing-actions button { height: 28px; padding: 0 8px; border: none; border-radius: 7px; background: none; color: var(--accent); font: 600 12.5px var(--sans); cursor: pointer; }
+.Q-ing-actions button:hover { background: var(--hover); }
+.Q-ing-actions button.danger { color: var(--red); }
+.Q-ing-item.editing { border: 1px solid var(--rule); border-radius: 12px; margin: 6px 0; background: var(--surface); }
+.Q-ingform { padding: 16px; }
+.Q-ingform .Q-field > label { display: flex; align-items: center; gap: 10px; }
+.Q-ingform-more { margin: 4px 0 8px; }
+.Q-ingform-more summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); padding: 6px 0; }
+.Q-ingform-row { display: flex; align-items: flex-end; gap: 14px; margin: 8px 0; }
+.Q-ingform-row .Q-field { margin: 0; }
+.Q-param-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.Q-param-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--muted); }
+.Q-param-grid label span { display: flex; align-items: center; gap: 4px; }
+.Q-param-grid label span button { border: none; background: none; color: var(--faint); cursor: pointer; padding: 0; display: flex; }
+.Q-param-grid input { height: 32px; border: 1px solid var(--rule); border-radius: 7px; background: var(--surface); padding: 0 8px; font: 13px var(--mono); color: var(--ink); }
+.Q-ingform-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.Q-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-height: 40px; padding: 4px 6px; border: 1px solid var(--rule-strong); border-radius: 9px; background: var(--surface); }
+.Q-tag { display: inline-flex; align-items: center; gap: 3px; height: 26px; padding: 0 4px 0 10px; border-radius: 999px; background: var(--surface-2); font-size: 12.5px; }
+.Q-tag button { display: flex; border: none; background: none; color: var(--faint); cursor: pointer; padding: 3px; border-radius: 50%; }
+.Q-tag button:hover { color: var(--red); }
+.Q-field .Q-tag-input { flex: 1; min-width: 110px; height: 28px; border: none; box-shadow: none; padding: 0 4px; background: transparent; }
+.Q-field .Q-tag-input:focus { box-shadow: none; }
+.Q-tag-suggest { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.Q-tag-suggest.wide { width: 100%; margin-top: 0; }
+.Q-tag-suggest button { height: 24px; padding: 0 9px; border-radius: 999px; border: 1px dashed var(--rule-strong); background: none; color: var(--muted); font-size: 12px; cursor: pointer; }
+.Q-tag-suggest button:hover { color: var(--accent); border-color: var(--accent); }
+.Q-ing-group { margin-bottom: 10px; }
+.Q-ing-group-h { display: flex; justify-content: space-between; width: 100%; padding: 12px 8px 6px; border: none; border-bottom: 1px solid var(--rule); background: none; font: 700 11px var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--faint); cursor: pointer; }
+.Q-ing-group-h .Q-dim { text-transform: none; letter-spacing: 0; font-weight: 500; }
+@media (max-width: 760px) {
+  .Q-lib-bar { flex-wrap: wrap; }
+  .Q-lib-bar .Q-search { flex-basis: 100%; }
+  .Q-lib-bar .Q-select { flex: 1; max-width: none; }
+  .Q-ing-cats { display: none; }
+}

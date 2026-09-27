@@ -1,4 +1,3 @@
-import { LayoutPanelLeft, Rows3, Settings, Wand2 } from 'lucide-react'
 import Modal from './ui/Modal.jsx'
 import { THEMES, TEXT_SIZES, useSettings } from '../lib/settings.js'
 import { LANGS } from '../lib/constants.js'
@@ -28,7 +27,7 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
   const { settings, update } = useSettings()
 
   return (
-    <Modal title="Settings" icon={Settings} onClose={onClose} width={760}>
+    <Modal title="Settings" onClose={onClose} width={760}>
       <section className="Q-set-sec">
         <h3>Template</h3>
         <p className="Q-set-help">Changes colours and typography across the whole app. Saved on this device.</p>
@@ -56,8 +55,8 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
             <div className="Q-set-help">Side by side keeps the ingredients next to the method on wide screens.</div>
           </div>
           <div className="Q-seg">
-            <button type="button" className={settings.layout === 'stacked' ? 'on' : ''} onClick={() => update({ layout: 'stacked' })}><Rows3 size={14} /> Stacked</button>
-            <button type="button" className={settings.layout === 'split' ? 'on' : ''} onClick={() => update({ layout: 'split' })}><LayoutPanelLeft size={14} /> Side by side</button>
+            <button type="button" className={settings.layout === 'stacked' ? 'on' : ''} onClick={() => update({ layout: 'stacked' })}>Stacked</button>
+            <button type="button" className={settings.layout === 'split' ? 'on' : ''} onClick={() => update({ layout: 'split' })}>Side by side</button>
           </div>
         </div>
       </section>
@@ -94,7 +93,7 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
             </div>
           </div>
           <button className="btn ghost sm" disabled={!uncategorizedCount || categorizing} onClick={onAutoCategorize}>
-            <Wand2 size={14} /> {categorizing ? 'Categorizing…' : 'Categorize'}
+            {categorizing ? 'Categorizing…' : 'Categorize'}
           </button>
         </div>
       </section>

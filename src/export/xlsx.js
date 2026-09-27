@@ -1,4 +1,4 @@
-import { getTotalGrams, isFlour, parseIng, parseSections, toGrams } from '../lib/recipeCalc.js'
+import { getTotalGrams, isFlour, numberSteps, parseIng, sectionGrams, parseSections, toGrams } from '../lib/recipeCalc.js'
 import { calcMacros } from '../lib/macros.js'
 
 export async function exportXLS(recipe, pctOpts = null) {
@@ -21,13 +21,13 @@ export async function exportXLS(recipe, pctOpts = null) {
       if (isFlour(p.name)) flourRows.push(curRow)
       curRow++
     })
-    const sg = sec.items.reduce((s, i) => { const p = parseIng(i); return s + toGrams(p.qty, p.unit) }, 0)
+    const sg = sectionGrams(sec.items)
     if (sec.name && sg > 0) { rows.push(['Subtotal: ' + sec.name, '', '', sg]); curRow++ }
   })
   const tg = getTotalGrams(recipe.ingredients || [])
   if (tg > 0) rows.push(['TOTAL', '', '', tg])
   rows.push([], ['METHOD'])
-  ;(recipe.steps || []).forEach((s, i) => rows.push([(i + 1) + '.', s]))
+  numberSteps(recipe.steps).forEach((st) => { if (st.text) rows.push(st.header ? [st.text.toUpperCase(), ''] : [st.n + '.', st.text]) })
   if (recipe.notes) { rows.push([], ["Baker's Notes"]); rows.push([recipe.notes]) }
   const ws1 = XLSX.utils.aoa_to_sheet(rows)
   ws1['!cols'] = [{ wch: 32 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 12 }]

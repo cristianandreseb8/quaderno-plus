@@ -48,3 +48,5 @@ export const categorizeIngredients = (ingredients, knownCategories) =>
 export const describeIngredient = (name, ingredientType) =>
   invoke({ type: 'describe_ingredient', name, ingredient_type: ingredientType })
 export const extractPdfRecipes = (params) => invoke({ type: 'extract_pdf', ...params })
+export const pdfOutline = (params) => invoke({ type: 'pdf_outline', ...params })
+export const pdfRecipe = (params) => invoke({ type: 'pdf_recipe', ...params })

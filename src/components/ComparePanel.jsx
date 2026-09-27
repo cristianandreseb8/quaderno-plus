@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Columns2, Search, X } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 import { calcMacros } from '../lib/macros.js'
 
 const COLORS = ['#3E7CB1', '#BC6C2C', '#2D6A4F', '#5B3A8C', '#1A6B6B']
@@ -24,7 +24,7 @@ export default function ComparePanel({ recipes, onClose }) {
     <div className="Q-compare-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="Q-compare-panel">
         <div className="Q-compare-header">
-          <span className="Q-app-ai-title"><Columns2 size={18} /> Compare recipes</span>
+          <span className="Q-app-ai-title">Compare recipes</span>
           <button className="Q-icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
         <div className="Q-compare-body">

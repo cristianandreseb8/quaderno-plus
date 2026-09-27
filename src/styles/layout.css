@@ -7,9 +7,8 @@
   transition: background .12s, border-color .12s, color .12s, box-shadow .12s, filter .12s;
 }
 .btn:hover { background: var(--hover); }
-.btn:focus-visible, .Q-icon-btn:focus-visible, .Q-hbtn:focus-visible, .Q-tool:focus-visible, .Q-tab-btn:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 2px;
-}
+.Q :focus { outline: none; }
+.Q :focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-soft), 0 0 0 5px var(--accent); }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; box-shadow: var(--shadow-sm); }
 .btn.primary:hover:not(:disabled) { filter: brightness(.94); background: var(--accent); }
@@ -55,21 +54,18 @@
   height: 56px; padding: 0 14px 0 18px;
   border-bottom: 1px solid var(--rule); background: var(--bg);
 }
-.Q-brand { display: flex; align-items: center; gap: 8px; font-family: var(--heading); font-weight: var(--heading-weight); font-size: 19px; color: var(--ink); white-space: nowrap; letter-spacing: -.01em; }
-.Q-brand svg { color: var(--accent); }
-.Q-brand b { color: var(--accent); font-weight: 700; }
-.Q-top-right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
-.Q-top-wide { display: flex; align-items: center; gap: 2px; }
+.Q-brand { font-family: var(--heading); font-weight: var(--heading-weight); font-size: 20px; color: var(--ink); white-space: nowrap; letter-spacing: -.015em; }
+.Q-brand b { color: var(--accent); font-weight: 600; }
+.Q-top-right { margin-left: auto; display: flex; align-items: center; gap: 2px; }
 .Q-top-right .Q-top-narrow { display: none; }
-.Q-top-right > .Q-menu-wrap:last-child { margin-left: 6px; }
+.Q-new { margin-left: 8px; }
 .Q-hbtn {
-  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 10px; border-radius: 8px;
-  border: none; background: transparent; color: var(--muted); font: 500 13px var(--sans); cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 8px;
+  border: none; background: transparent; color: var(--muted); font: 500 13.5px var(--sans); cursor: pointer; white-space: nowrap;
   transition: background .12s, color .12s;
 }
+.Q-hbtn.icon { width: 36px; padding: 0; justify-content: center; }
 .Q-hbtn:hover { background: var(--hover); color: var(--ink); }
-.Q-hbtn.ai { color: var(--ai); }
-.Q-hbtn.ai:hover { background: var(--ai-soft); }
 .Q-import-pill {
   display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-radius: 999px;
   border: 1px solid var(--rule); background: var(--surface); color: var(--ink); font: 600 12px var(--sans); cursor: pointer;
@@ -80,7 +76,11 @@
 /* ── Body ────────────────────────────────────────────────────────────────── */
 .Q-body { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 0; }
 .Q-side { background: var(--side); border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.Q-side-tools { display: flex; gap: 6px; padding: 12px 12px 6px; }
+.Q-side-switch { display: flex; gap: 2px; margin: 12px 12px 4px; padding: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--rule); }
+.Q-side-switch button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; border: none; border-radius: 7px; background: transparent; color: var(--muted); font: 600 13px var(--sans); cursor: pointer; }
+.Q-side-switch button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm), 0 0 0 1px var(--rule); }
+.Q-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font: 700 11px/18px var(--sans); text-align: center; }
+.Q-side-tools { display: flex; gap: 6px; padding: 8px 12px 6px; }
 .Q-side-tools .Q-icon-btn { border-color: var(--rule); background: var(--surface); width: 36px; height: 36px; }
 .Q-side-tools .Q-icon-btn.on { border-color: transparent; background: var(--accent-soft); }
 .Q-search { position: relative; flex: 1; min-width: 0; }
@@ -113,6 +113,16 @@
 .Q-fav:hover { color: #D99A00; }
 .Q-fav.on { opacity: 1; color: #E0A100; }
 @media (hover: none) { .Q-fav { opacity: .55; } }
+.Q-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.Q-sess-side { padding-top: 6px; }
+.Q-sess-shop .Q-list-txt { padding: 3px 4px; }
+.Q-side-label { padding: 16px 12px 6px; font: 700 10.5px var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
+.Q-side-add { display: block; width: calc(100% - 8px); margin: 6px 4px 0; padding: 10px; border-radius: 10px; border: 1px dashed var(--rule-strong); background: none; color: var(--muted); font: 600 13px var(--sans); cursor: pointer; }
+.Q-side-add:hover { color: var(--accent); border-color: var(--accent); }
+.Q-side-foot { display: flex; justify-content: space-between; padding: 22px 8px 4px; }
+.Q-side-foot button { border: none; background: none; padding: 4px; color: var(--faint); font: 500 12.5px var(--sans); cursor: pointer; }
+.Q-side-foot button:hover { color: var(--ink); }
+.Q-done-mark { font: 700 11px var(--sans); color: var(--green); flex-shrink: 0; }
 .Q-list-skel { display: flex; gap: 11px; align-items: center; padding: 7px 8px; }
 .Q-list-skel i { width: 42px; height: 42px; border-radius: 8px; background: var(--surface-2); flex-shrink: 0; }
 .Q-list-skel div { flex: 1; display: flex; flex-direction: column; gap: 6px; }
@@ -126,7 +136,7 @@
 .Q-pane:has(.Q-rbody.split) { max-width: 1180px; }
 .Q-back-btn { display: none; }
 
-.Q-hero { max-width: 460px; margin: 12vh auto 0; text-align: center; padding: 20px; }
+.Q-hero { max-width: 440px; margin: 14vh auto 0; text-align: center; padding: 20px; }
 .Q-hero-ico { width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 18px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; }
 .Q-hero h2 { font-family: var(--heading); font-weight: var(--heading-weight); font-size: 24px; margin: 0 0 10px; letter-spacing: -.01em; }
 .Q-hero p { color: var(--muted); font-size: 14px; line-height: 1.65; margin: 0 auto 24px; }

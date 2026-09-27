@@ -1,12 +1,12 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ArrowLeft, ArrowUpDown, BookOpen, Camera, ClipboardPaste, Columns2, FilePlus2, FileUp, Menu as MenuIcon, Package, Plus, Search, Settings, Sparkles, Star, X,
-} from 'lucide-react'
+import { ArrowLeft, ArrowUpDown, MoreHorizontal, Plus, Search, Star, X } from 'lucide-react'
 import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadOne } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { SettingsContext, applySettings, loadSettings, saveSettings } from './lib/settings.js'
 import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
+import { addRecipe, buildShoppingList, removeRecipe, resetTicks, useSession } from './lib/session.js'
+import { numberSteps } from './lib/recipeCalc.js'
 
 // After a redeploy, chunk filenames change and a client that loaded the old index.html
 // gets a 404 when it lazy-loads a panel — which used to unmount the app to a blank screen.
@@ -33,6 +33,10 @@ const IngredientLibraryModal = lazyRetry(() => import('./components/IngredientLi
 const AppAIChat = lazyRetry(() => import('./components/AppAIChat.jsx'))
 const SettingsModal = lazyRetry(() => import('./components/SettingsModal.jsx'))
 const PdfImport = lazyRetry(() => import('./components/PdfImport.jsx'))
+const ShoppingList = lazyRetry(() => import('./components/session/ShoppingList.jsx'))
+const CookView = lazyRetry(() => import('./components/session/CookView.jsx'))
+const RecipePicker = lazyRetry(() => import('./components/session/RecipePicker.jsx'))
+const isPhone = () => window.matchMedia('(max-width: 760px)').matches
 
 const SORTS = [
   ['recent', 'Recently added'],
@@ -61,7 +65,11 @@ export default function App() {
   const [importStatus, setImportStatus] = useState(null) // { running, pct, found } while a PDF import is alive
   const [categorizingAI, setCategorizingAI] = useState(false)
   const [settings, setSettings] = useState(loadSettings)
+  const [view, setView] = useState(() => localStorage.getItem('qdplus_view') || 'recipes') // 'recipes' | 'session'
+  const [sessSel, setSessSel] = useState(() => (isPhone() ? null : 'shopping')) // 'shopping' | recipe id
+  const [showPicker, setShowPicker] = useState(false)
   const searchRef = useRef(null)
+  const { session, change: changeSession, finish: finishSession } = useSession(toast.error)
 
   const updateSettings = useCallback((patch) => {
     setSettings((prev) => { const next = { ...prev, ...patch }; saveSettings(next); return next })
@@ -284,153 +292,269 @@ export default function App() {
   }, [recipes, q, catFilter, sortMode, recentlyOpened])
 
   function openRecipe(id) {
-    setSelId(id); setMode('view')
+    setView('recipes'); setSelId(id); setMode('view')
     setRecentlyOpened((prev) => {
       const next = [id, ...prev.filter((x) => x !== id)].slice(0, 50)
       localStorage.setItem('qdplus_opened', JSON.stringify(next))
       return next
     })
   }
+  function switchView(v) {
+    setView(v)
+    try { localStorage.setItem('qdplus_view', v) } catch (_) { /* ignore */ }
+    if (v === 'session' && !isPhone() && !sessSel) setSessSel('shopping')
+  }
   function startNew(kind) {
     if (kind === 'pdf') { setImportOpen(true); return }
+    switchView('recipes')
     setEditorStart(kind); setMode('new'); setSelId(null)
   }
-  function goBack() { setMode('view'); setSelId(null) }
+  function goBack() {
+    if (view === 'session') { setSessSel(null); return }
+    setMode('view'); setSelId(null)
+  }
 
-  const isOpen = mode !== 'view' || !!sel
+  // ── Session ────────────────────────────────────────────────────────────
+  const recipesById = useMemo(() => new Map(recipes.map((r) => [r.id, r])), [recipes])
+  const sessionEntries = useMemo(() => (session?.recipes || []).filter((e) => recipesById.has(e.id)), [session, recipesById])
+  const sessionIds = useMemo(() => new Set(sessionEntries.map((e) => e.id)), [sessionEntries])
+  const shopStats = useMemo(() => {
+    if (!session) return { ready: 0, total: 0 }
+    const items = buildShoppingList(sessionEntries, recipesById)
+    const extra = session.shopping.extra || []
+    return {
+      total: items.length + extra.length,
+      ready: items.filter((it) => session.shopping.have[it.key]).length + extra.filter((e) => e.have).length,
+    }
+  }, [session, sessionEntries, recipesById])
+  const stepStats = (r) => {
+    const total = numberSteps(r.steps).filter((st) => st.n).length
+    const done = (session?.progress?.[r.id]?.steps || []).length
+    return { done: Math.min(done, total), total }
+  }
+  function toggleInSession(id, on) {
+    changeSession(on ? addRecipe(id) : removeRecipe(id))
+    if (sessSel === id && !on) setSessSel('shopping')
+  }
+  function toggleFromRecipe(id) {
+    const on = !sessionIds.has(id)
+    toggleInSession(id, on)
+    if (on) toast.success('Added to the session', { action: { label: 'Open', onClick: () => { switchView('session'); setSessSel('shopping') } } })
+    else toast('Removed from the session')
+  }
+  async function endSession() {
+    if (!window.confirm('Finish this session? Its shopping list and progress are archived and a fresh session starts.')) return
+    await finishSession(); setSessSel(isPhone() ? null : 'shopping')
+    toast('Session finished')
+  }
+
+  const isOpen = view === 'session' ? !!sessSel : (mode !== 'view' || !!sel)
   const uncategorizedCount = recipes.filter((r) => !r.category).length
   const importMounted = importOpen || !!importStatus
+  const cookEntry = view === 'session' && sessSel && sessSel !== 'shopping' ? sessionEntries.find((e) => e.id === sessSel) : null
+  const cookRecipe = cookEntry ? recipesById.get(cookEntry.id) : null
 
-  const newMenu = (compact) => (
-    <Menu
-      width={250}
-      trigger={(p) => (
-        <button className={`btn primary${compact ? ' icon-only' : ''}`} onClick={p.toggle} aria-expanded={p.open} title="Add a recipe">
-          <Plus size={16} strokeWidth={2.4} /><span className="lbl">New</span>
-        </button>
-      )}
-    >
-      <MenuLabel>Add a recipe</MenuLabel>
-      <MenuItem icon={FilePlus2} onClick={() => startNew('blank')} hint="Write it">Blank recipe</MenuItem>
-      <MenuItem icon={ClipboardPaste} onClick={() => startNew('text')} hint="AI tidies it">Paste text</MenuItem>
-      <MenuItem icon={Camera} onClick={() => startNew('photo')} hint="AI reads it">From photos</MenuItem>
+  const moreItems = (phone) => (
+    <>
+      {phone && <MenuItem onClick={() => setShowAppAI(true)}>Assistant</MenuItem>}
+      <MenuItem onClick={() => setShowLibrary(true)}>Ingredients</MenuItem>
+      <MenuItem onClick={() => setShowCompare(true)}>Compare recipes</MenuItem>
       <MenuSep />
-      <MenuItem icon={FileUp} onClick={() => startNew('pdf')} hint="1 or many">Import PDF or book</MenuItem>
-    </Menu>
+      <MenuItem onClick={() => setShowSettings(true)}>Settings</MenuItem>
+    </>
   )
 
   return (
     <SettingsContext.Provider value={settingsCtx}>
       <div className="Q" data-open={isOpen ? '1' : '0'}>
         <header className="Q-top">
-          <div className="Q-brand"><BookOpen size={19} strokeWidth={1.8} /> <span>Quaderno<b>+</b></span></div>
+          <div className="Q-brand">Quaderno<b>+</b></div>
           {importStatus && (
             <button className="Q-import-pill" onClick={() => setImportOpen(true)} title="Show PDF import">
               <span className="dot" /> Importing · {importStatus.pct}%{importStatus.found ? ` · ${importStatus.found} found` : ''}
             </button>
           )}
           <div className="Q-top-right">
-            <button className="Q-hbtn ai" onClick={() => setShowAppAI(true)} title="AI assistant — create, find and organise recipes">
-              <Sparkles size={17} /><span className="lbl">Assistant</span>
-            </button>
-            <div className="Q-top-wide">
-              <button className="Q-hbtn" onClick={() => setShowLibrary(true)} title="Ingredient library"><Package size={17} /><span className="lbl">Ingredients</span></button>
-              <button className="Q-hbtn" onClick={() => setShowCompare(true)} title="Compare recipes"><Columns2 size={17} /><span className="lbl">Compare</span></button>
-              <button className="Q-hbtn" onClick={() => setShowSettings(true)} title="Settings"><Settings size={17} /></button>
-            </div>
-            <Menu
-              className="Q-top-narrow" width={210}
-              trigger={(p) => <button className="Q-hbtn" onClick={p.toggle} aria-label="More"><MenuIcon size={18} /></button>}
-            >
-              <MenuItem icon={Package} onClick={() => setShowLibrary(true)}>Ingredient library</MenuItem>
-              <MenuItem icon={Columns2} onClick={() => setShowCompare(true)}>Compare recipes</MenuItem>
-              <MenuItem icon={Settings} onClick={() => setShowSettings(true)}>Settings</MenuItem>
+            <button className="Q-hbtn Q-top-wide" onClick={() => setShowAppAI(true)}>Assistant</button>
+            <Menu className="Q-top-wide" width={200} trigger={(p) => <button className="Q-hbtn icon" onClick={p.toggle} aria-label="More" title="More"><MoreHorizontal size={18} /></button>}>
+              {moreItems(false)}
             </Menu>
-            {newMenu(false)}
+            <Menu className="Q-top-narrow" width={210} trigger={(p) => <button className="Q-hbtn icon" onClick={p.toggle} aria-label="More"><MoreHorizontal size={20} /></button>}>
+              {moreItems(true)}
+            </Menu>
+            <Menu
+              width={240}
+              trigger={(p) => (
+                <button className="btn primary Q-new" onClick={p.toggle} aria-expanded={p.open} title="Add a recipe">
+                  <Plus size={16} strokeWidth={2.4} /><span className="lbl">New</span>
+                </button>
+              )}
+            >
+              <MenuItem onClick={() => startNew('blank')} hint="Write it">Blank recipe</MenuItem>
+              <MenuItem onClick={() => startNew('text')} hint="AI tidies it">Paste text</MenuItem>
+              <MenuItem onClick={() => startNew('photo')} hint="AI reads it">From photos</MenuItem>
+              <MenuSep />
+              <MenuItem onClick={() => startNew('pdf')} hint="One or many">Import PDF or book</MenuItem>
+            </Menu>
           </div>
         </header>
 
         <div className="Q-body">
           <aside className="Q-side">
-            <div className="Q-side-tools">
-              <div className="Q-search">
-                <Search size={15} className="Q-search-ico" />
-                <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search recipes" aria-label="Search recipes" />
-                {q && <button className="Q-search-x" onClick={() => setQ('')} aria-label="Clear search"><X size={14} /></button>}
-              </div>
-              <Menu
-                width={230}
-                trigger={(p) => (
-                  <button className={`Q-icon-btn${catFilter || sortMode !== 'recent' ? ' on' : ''}`} onClick={p.toggle} title="Sort and filter" aria-label="Sort and filter">
-                    <ArrowUpDown size={16} />
-                  </button>
-                )}
-              >
-                <MenuLabel>Sort by</MenuLabel>
-                {SORTS.map(([k, l]) => <MenuItem key={k} checked={sortMode === k} onClick={() => setSort(k)}>{l}</MenuItem>)}
-                {categories.length > 0 && (
-                  <>
-                    <MenuSep />
-                    <MenuLabel>Category</MenuLabel>
-                    <div className="Q-menu-scroll">
-                      <MenuItem checked={!catFilter} onClick={() => setCatFilter('')}>All categories</MenuItem>
-                      {categories.map(([c, n]) => <MenuItem key={c} checked={catFilter === c} hint={n} onClick={() => setCatFilter(c)}>{c}</MenuItem>)}
-                    </div>
-                  </>
-                )}
-              </Menu>
+            <div className="Q-side-switch" role="tablist">
+              <button role="tab" aria-selected={view === 'recipes'} className={view === 'recipes' ? 'on' : ''} onClick={() => switchView('recipes')}>Recipes</button>
+              <button role="tab" aria-selected={view === 'session'} className={view === 'session' ? 'on' : ''} onClick={() => switchView('session')}>
+                Session{sessionEntries.length > 0 && <span className="Q-count">{sessionEntries.length}</span>}
+              </button>
             </div>
-            <div className="Q-side-meta">
-              {catFilter
-                ? <button className="Q-chip-filter" onClick={() => setCatFilter('')}>{catFilter}<X size={12} /></button>
-                : <span>{loading ? 'Loading…' : `${filtered.length} ${filtered.length === 1 ? 'recipe' : 'recipes'}`}</span>}
-              {catFilter && <span>{filtered.length}</span>}
-            </div>
-            <div className="Q-list">
-              {loading && Array.from({ length: 8 }).map((_, i) => <div key={i} className="Q-list-skel"><i /><div><b /><s /></div></div>)}
-              {!loading && !filtered.length && (
-                <div className="Q-msg">{q || catFilter ? 'No recipes match.' : 'No recipes yet.'}</div>
-              )}
-              {filtered.map((r) => (
-                <div
-                  key={r.id} className="Q-list-item" role="button" tabIndex={0} aria-selected={r.id === selId && mode === 'view'}
-                  onClick={() => openRecipe(r.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecipe(r.id) } }}
-                >
-                  {r.thumbnail ? <img src={r.thumbnail} className="Q-list-thumb" alt="" loading="lazy" /> : <div className="Q-list-thumb ph">{(r.title || '?').trim().charAt(0).toUpperCase()}</div>}
-                  <div className="Q-list-txt">
-                    <h4>{r.title}</h4>
-                    <span>{[r.category, r.source].filter(Boolean).join(' · ') || 'Uncategorized'}{r.fixed_lang && ` · ${r.fixed_lang}`}</span>
+
+            {view === 'recipes' && (
+              <>
+                <div className="Q-side-tools">
+                  <div className="Q-search">
+                    <Search size={15} className="Q-search-ico" />
+                    <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search recipes" aria-label="Search recipes" />
+                    {q && <button className="Q-search-x" onClick={() => setQ('')} aria-label="Clear search"><X size={14} /></button>}
                   </div>
-                  <button
-                    className={`Q-fav${r.is_favorite ? ' on' : ''}`} title={r.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-                    onClick={(e) => { e.stopPropagation(); updateRecipe({ ...r, is_favorite: !r.is_favorite }) }}
+                  <Menu
+                    width={230}
+                    trigger={(p) => (
+                      <button className={`Q-icon-btn${catFilter || sortMode !== 'recent' ? ' on' : ''}`} onClick={p.toggle} title="Sort and filter" aria-label="Sort and filter">
+                        <ArrowUpDown size={16} />
+                      </button>
+                    )}
                   >
-                    <Star size={15} fill={r.is_favorite ? 'currentColor' : 'none'} />
-                  </button>
+                    <MenuLabel>Sort by</MenuLabel>
+                    {SORTS.map(([k, l]) => <MenuItem key={k} checked={sortMode === k} onClick={() => setSort(k)}>{l}</MenuItem>)}
+                    {categories.length > 0 && (
+                      <>
+                        <MenuSep />
+                        <MenuLabel>Category</MenuLabel>
+                        <div className="Q-menu-scroll">
+                          <MenuItem checked={!catFilter} onClick={() => setCatFilter('')}>All categories</MenuItem>
+                          {categories.map(([c, n]) => <MenuItem key={c} checked={catFilter === c} hint={n} onClick={() => setCatFilter(c)}>{c}</MenuItem>)}
+                        </div>
+                      </>
+                    )}
+                  </Menu>
                 </div>
-              ))}
-            </div>
+                <div className="Q-side-meta">
+                  {catFilter
+                    ? <button className="Q-chip-filter" onClick={() => setCatFilter('')}>{catFilter}<X size={12} /></button>
+                    : <span>{loading ? 'Loading…' : `${filtered.length} ${filtered.length === 1 ? 'recipe' : 'recipes'}`}</span>}
+                  {catFilter && <span>{filtered.length}</span>}
+                </div>
+                <div className="Q-list">
+                  {loading && Array.from({ length: 8 }).map((_, i) => <div key={i} className="Q-list-skel"><i /><div><b /><s /></div></div>)}
+                  {!loading && !filtered.length && <div className="Q-msg">{q || catFilter ? 'No recipes match.' : 'No recipes yet.'}</div>}
+                  {filtered.map((r) => (
+                    <div
+                      key={r.id} className="Q-list-item" role="button" tabIndex={0} aria-selected={r.id === selId && mode === 'view'}
+                      onClick={() => openRecipe(r.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecipe(r.id) } }}
+                    >
+                      {r.thumbnail ? <img src={r.thumbnail} className="Q-list-thumb" alt="" loading="lazy" /> : <div className="Q-list-thumb ph">{(r.title || '?').trim().charAt(0).toUpperCase()}</div>}
+                      <div className="Q-list-txt">
+                        <h4>{r.title}</h4>
+                        <span>{[r.category, r.source].filter(Boolean).join(' · ') || 'Uncategorized'}</span>
+                      </div>
+                      {sessionIds.has(r.id) && <span className="Q-dot" title="In the session" />}
+                      <button
+                        className={`Q-fav${r.is_favorite ? ' on' : ''}`} title={r.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                        onClick={(e) => { e.stopPropagation(); updateRecipe({ ...r, is_favorite: !r.is_favorite }) }}
+                      >
+                        <Star size={14} fill={r.is_favorite ? 'currentColor' : 'none'} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {view === 'session' && (
+              <div className="Q-list Q-sess-side">
+                <div
+                  className="Q-list-item Q-sess-shop" role="button" tabIndex={0} aria-selected={sessSel === 'shopping'}
+                  onClick={() => setSessSel('shopping')} onKeyDown={(e) => { if (e.key === 'Enter') setSessSel('shopping') }}
+                >
+                  <div className="Q-list-txt">
+                    <h4>Shopping list</h4>
+                    <span>{shopStats.total ? `${shopStats.ready} of ${shopStats.total} ready` : 'Empty'}</span>
+                  </div>
+                </div>
+                <div className="Q-side-label">Cooking</div>
+                {sessionEntries.map((e) => {
+                  const r = recipesById.get(e.id)
+                  const st = stepStats(r)
+                  return (
+                    <div
+                      key={e.id} className="Q-list-item" role="button" tabIndex={0} aria-selected={sessSel === e.id}
+                      onClick={() => setSessSel(e.id)} onKeyDown={(ev) => { if (ev.key === 'Enter') setSessSel(e.id) }}
+                    >
+                      {r.thumbnail ? <img src={r.thumbnail} className="Q-list-thumb" alt="" loading="lazy" /> : <div className="Q-list-thumb ph">{(r.title || '?').trim().charAt(0).toUpperCase()}</div>}
+                      <div className="Q-list-txt">
+                        <h4>{r.title}</h4>
+                        <span>{(Number(e.factor) || 1) !== 1 ? `×${+Number(e.factor).toFixed(2)} · ` : ''}{st.total ? `${st.done} of ${st.total} steps` : 'No method'}</span>
+                      </div>
+                      {st.total > 0 && st.done === st.total && <span className="Q-done-mark">Done</span>}
+                    </div>
+                  )
+                })}
+                <button className="Q-side-add" onClick={() => setShowPicker(true)}>{sessionEntries.length ? 'Add or remove recipes' : 'Choose recipes'}</button>
+                {session && (sessionEntries.length > 0 || shopStats.total > 0) && (
+                  <div className="Q-side-foot">
+                    <button onClick={() => { if (window.confirm('Clear every tick in this session?')) changeSession(resetTicks()) }}>Clear ticks</button>
+                    <button onClick={endSession}>Finish session</button>
+                  </div>
+                )}
+              </div>
+            )}
           </aside>
 
           <main className="Q-main">
             <div className="Q-pane">
-              {isOpen && <button className="Q-back-btn" onClick={goBack}><ArrowLeft size={16} /> Recipes</button>}
+              {isOpen && <button className="Q-back-btn" onClick={goBack}><ArrowLeft size={16} /> {view === 'session' ? 'Session' : 'Recipes'}</button>}
               <Suspense fallback={<div className="Q-msg">Loading…</div>}>
-                {mode === 'new' && <RecipeEditor key={'new-' + editorStart} startWith={editorStart} onImportPdf={() => setImportOpen(true)} onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(window.matchMedia('(max-width: 760px)').matches ? null : recipes[0]?.id || null) }} />}
-                {mode === 'edit' && sel && !sel._lite && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
-                {mode === 'view' && sel && sel._lite && <div className="Q-view-loading"><div /><div /><div /></div>}
-                {mode === 'view' && sel && !sel._lite && <RecipeView key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)} onUpdate={updateRecipe} allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant} />}
+                {view === 'recipes' && (
+                  <>
+                    {mode === 'new' && <RecipeEditor key={'new-' + editorStart} startWith={editorStart} onImportPdf={() => setImportOpen(true)} onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(isPhone() ? null : recipes[0]?.id || null) }} />}
+                    {mode === 'edit' && sel && !sel._lite && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
+                    {mode === 'view' && sel && sel._lite && <div className="Q-view-loading"><div /><div /><div /></div>}
+                    {mode === 'view' && sel && !sel._lite && (
+                      <RecipeView
+                        key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)} onUpdate={updateRecipe}
+                        allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant}
+                        inSession={sessionIds.has(sel.id)} onToggleSession={() => toggleFromRecipe(sel.id)}
+                      />
+                    )}
+                  </>
+                )}
+                {view === 'session' && sessSel === 'shopping' && (
+                  sessionEntries.length || shopStats.total
+                    ? <ShoppingList session={session} recipesById={recipesById} change={changeSession} />
+                    : (
+                      <div className="Q-hero">
+                        <h2>Plan a session</h2>
+                        <p>Choose the recipes you will cook. Their ingredients merge into one shopping list you tick off, and each recipe gets a step-by-step checklist for the kitchen.</p>
+                        <div className="Q-hero-actions"><button className="btn primary" onClick={() => setShowPicker(true)}>Choose recipes</button></div>
+                      </div>
+                    )
+                )}
+                {view === 'session' && cookRecipe && (
+                  <CookView
+                    key={cookRecipe.id} recipe={cookRecipe} entry={cookEntry} progress={session?.progress?.[cookRecipe.id]} change={changeSession}
+                    onOpenRecipe={() => openRecipe(cookRecipe.id)} onRemove={() => toggleInSession(cookRecipe.id, false)}
+                  />
+                )}
               </Suspense>
-              {mode === 'view' && !sel && !loading && (
+              {view === 'recipes' && mode === 'view' && !sel && !loading && (
                 <div className="Q-hero">
-                  <div className="Q-hero-ico"><BookOpen size={30} strokeWidth={1.5} /></div>
-                  <h2>{recipes.length ? 'Pick a recipe to start cooking' : 'Welcome to Quaderno+'}</h2>
+                  <h2>{recipes.length ? 'Pick a recipe' : 'Welcome to Quaderno+'}</h2>
                   <p>{recipes.length
-                    ? 'Choose one from the list, or add something new — type it, paste it, snap a photo, or import a whole PDF cookbook.'
+                    ? 'Open one from the list, or add something new — type it, paste it, snap a photo, or import a PDF cookbook.'
                     : 'Your professional recipe notebook. Add your first recipe by typing it, pasting text, taking photos, or importing a PDF cookbook.'}</p>
                   <div className="Q-hero-actions">
-                    <button className="btn primary" onClick={() => startNew('blank')}><Plus size={16} /> New recipe</button>
-                    <button className="btn ghost" onClick={() => startNew('pdf')}><FileUp size={16} /> Import PDF or book</button>
+                    <button className="btn primary" onClick={() => startNew('blank')}>New recipe</button>
+                    <button className="btn ghost" onClick={() => startNew('pdf')}>Import PDF or book</button>
                   </div>
                 </div>
               )}
@@ -465,6 +589,11 @@ export default function App() {
             />
           </Suspense>
         )}
+        {showPicker && (
+          <Suspense fallback={null}>
+            <RecipePicker recipes={recipes} selectedIds={sessionIds} onToggle={toggleInSession} onClose={() => setShowPicker(false)} />
+          </Suspense>
+        )}
         {importMounted && (
           <Suspense fallback={null}>
             <PdfImport
@@ -474,7 +603,7 @@ export default function App() {
               onSaved={onImportedRecipe}
               onRemoved={onImportRemoved}
               onOpenRecipe={(id) => { setImportOpen(false); openRecipe(id) }}
-              onShowAll={(source) => { setImportOpen(false); setCatFilter(''); setQ(source) }}
+              onShowAll={(source) => { setImportOpen(false); switchView('recipes'); setCatFilter(''); setQ(source) }}
               knownCategories={categories.map(([c]) => c)}
             />
           </Suspense>

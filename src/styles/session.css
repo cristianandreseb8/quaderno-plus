@@ -1,0 +1,57 @@
+/* ── Session: shopping list + cooking ────────────────────────────────────── */
+.Q-sess-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.Q-sess-head h1 { margin: 0 0 4px; font-family: var(--heading); font-weight: var(--heading-weight); font-size: clamp(24px, 3vw, 32px); line-height: 1.15; letter-spacing: -.015em; }
+.Q-sess-head p { margin: 0; font-size: 13.5px; color: var(--muted); }
+.Q-textbtns { display: flex; align-items: center; gap: 2px; flex-shrink: 0; padding-top: 4px; }
+.Q-textbtns > button, .Q-textbtns .Q-menu-wrap > button:not(.Q-factor) { height: 30px; padding: 0 10px; border: none; border-radius: 7px; background: none; color: var(--muted); font: 600 13px var(--sans); cursor: pointer; }
+.Q-textbtns > button:hover { background: var(--hover); color: var(--ink); }
+.Q-meter { height: 3px; border-radius: 2px; background: var(--rule); overflow: hidden; margin-bottom: 18px; }
+.Q-meter i { display: block; height: 100%; background: var(--accent); transition: width .35s ease; }
+
+.Q-check { position: relative; flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; border: 1.6px solid var(--rule-strong); transition: background .12s, border-color .12s; }
+.done > .Q-check, .on > .Q-check { background: var(--accent); border-color: var(--accent); }
+.done > .Q-check::after, .on > .Q-check::after { content: ''; position: absolute; left: 6.2px; top: 2.6px; width: 4.5px; height: 9px; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+
+.Q-shop { font-size: calc(var(--fs) * var(--fs-scale, 1)); }
+.Q-shop-list { list-style: none; margin: 0; padding: 0; }
+.Q-shop-row { display: flex; align-items: center; gap: 12px; padding: .55em .4em; border-bottom: 1px solid var(--rule); cursor: pointer; border-radius: 8px; transition: background .1s; }
+.Q-shop-row:hover { background: var(--hover); }
+.Q-shop-qty { flex-shrink: 0; width: 6.2em; border: 1px solid transparent; border-radius: 6px; background: transparent; padding: 3px 6px; margin: -3px 0; font: 600 .9em var(--mono); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.Q-shop-qty:hover { border-color: var(--rule); }
+.Q-shop-qty:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px var(--accent-soft); cursor: text; }
+.Q-shop-qty.static { display: inline-block; }
+.Q-shop-name { flex: 1; min-width: 0; }
+.Q-shop-src { flex-shrink: 1; min-width: 0; max-width: 38%; font-size: .78em; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-shop-rm { display: flex; padding: 4px; border: none; background: none; color: var(--faint); border-radius: 6px; cursor: pointer; opacity: 0; }
+.Q-shop-row:hover .Q-shop-rm { opacity: 1; }
+@media (hover: none) { .Q-shop-rm { opacity: .7; } }
+.Q-shop-rm:hover { color: var(--red); }
+.Q-shop-row.done .Q-shop-name, .Q-shop-row.done .Q-shop-qty { color: var(--faint); }
+.Q-shop-add { padding: 6px 0 0 calc(20px + 12px + .4em); }
+.Q-shop-add input { width: 100%; height: 38px; border: none; border-bottom: 1px dashed var(--rule-strong); background: transparent; font-size: .95em; color: var(--ink); padding: 0 2px; }
+.Q-shop-add input:focus { outline: none; border-bottom-color: var(--accent); box-shadow: none; }
+.Q-shop-label { margin: 28px 0 4px; padding-left: .4em; font: 700 11px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+
+.Q-factor { height: 28px; min-width: 40px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--rule-strong); background: var(--surface); color: var(--ink); font: 700 12.5px var(--sans); cursor: pointer; font-variant-numeric: tabular-nums; }
+.Q-factor:hover { border-color: var(--accent); color: var(--accent); }
+.Q-factor-custom { padding: 4px 6px 6px; }
+.Q-factor-custom input { width: 100%; height: 32px; border-radius: 7px; border: 1px solid var(--rule); background: var(--surface); padding: 0 9px; font-size: 13px; color: var(--ink); }
+
+.Q-cook-body { display: block; }
+@container main (min-width: 820px) {
+  .Q-cook-body { display: grid; grid-template-columns: minmax(260px, 5fr) 7fr; gap: 44px; align-items: start; }
+  .Q-cook-body > .Q-rsec:first-child { position: sticky; top: 14px; }
+}
+.Q-cook-steps li { cursor: pointer; transition: background .12s, color .12s; }
+.Q-cook-steps li:hover { background: var(--hover); }
+.Q-cook-steps li.done { color: var(--faint); }
+.Q-cook-steps li.done::before { content: '✓'; color: var(--green); font-weight: 700; }
+.Q-cook-steps li.next { background: var(--accent-soft); }
+.Q-cook-steps li.next::before { color: var(--accent); font-weight: 700; }
+
+.Q-pick-list { list-style: none; margin: 0; padding: 0; max-height: 52vh; overflow: auto; }
+.Q-pick-row { display: flex; align-items: center; gap: 12px; padding: 9px 8px; border-radius: 9px; cursor: pointer; }
+.Q-pick-row:hover { background: var(--hover); }
+.Q-pick-txt { min-width: 0; }
+.Q-pick-txt b { display: block; font-weight: 600; font-size: 14px; }
+.Q-pick-txt span { font-size: 12px; color: var(--muted); }
