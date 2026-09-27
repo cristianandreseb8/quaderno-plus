@@ -43,10 +43,10 @@ export default function VideoBlock({ videos, onChange, adding, onAddingDone }) {
       {(videos || []).map((v) => (
         <div key={v.id} className="Q-video">
           <Player video={v} />
-          <button className="Q-video-rm" onClick={() => { if (window.confirm('Remove this video from the recipe?')) onChange(videos.filter((x) => x.id !== v.id)) }} aria-label="Remove video"><X size={14} /></button>
+          {onChange && <button className="Q-video-rm" onClick={() => { if (window.confirm('Remove this video from the recipe?')) onChange(videos.filter((x) => x.id !== v.id)) }} aria-label="Remove video"><X size={14} /></button>}
         </div>
       ))}
-      {(adding || !(videos || []).length) && (
+      {onChange && (adding || !(videos || []).length) && (
         <div className="Q-video-add">
           <input
             ref={inputRef} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste a YouTube, Vimeo, Instagram or TikTok link"

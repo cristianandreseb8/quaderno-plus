@@ -2,7 +2,10 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { ArrowLeft, ArrowUpDown, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Star, X } from 'lucide-react'
 import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadOne } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
-import { SettingsContext, applySettings, loadSettings, saveSettings } from './lib/settings.js'
+import { SettingsContext, applySettings, loadSettings, saveSettings, useSettings } from './lib/settings.js'
+import { setNewPassword, useAuth } from './lib/auth.js'
+import { acceptInvite, loadPublicRecipe } from './lib/sharing.js'
+import AuthScreen from './components/AuthScreen.jsx'
 import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
 import { addRecipe, buildShoppingList, removeRecipe, resetTicks, useSession } from './lib/session.js'
@@ -37,7 +40,15 @@ const PdfImport = lazyRetry(() => import('./components/PdfImport.jsx'))
 const ShoppingList = lazyRetry(() => import('./components/session/ShoppingList.jsx'))
 const CookView = lazyRetry(() => import('./components/session/CookView.jsx'))
 const RecipePicker = lazyRetry(() => import('./components/session/RecipePicker.jsx'))
+const ShareModal = lazyRetry(() => import('./components/ShareModal.jsx'))
 const isPhone = () => window.matchMedia('(max-width: 760px)').matches
+
+const SCOPES = [
+  ['library', 'My library'],
+  ['mine', 'My recipes'],
+  ['shared', 'Shared with me'],
+  ['public', 'Public recipes'],
+]
 
 const SORTS = [
   ['recent', 'Recently added'],
@@ -48,7 +59,7 @@ const SORTS = [
   ['favorites', 'Favorites first'],
 ]
 
-export default function App() {
+function Workspace({ user, profile, setProfile, invite, openId }) {
   const [recipes, setRecipes] = useState([])
   const [loading, setLoading] = useState(true)
   const [selId, setSelId] = useState(null)
@@ -65,7 +76,10 @@ export default function App() {
   const [importOpen, setImportOpen] = useState(false)
   const [importStatus, setImportStatus] = useState(null) // { running, pct, found } while a PDF import is alive
   const [categorizingAI, setCategorizingAI] = useState(false)
-  const [settings, setSettings] = useState(loadSettings)
+  const { settings, update: updateSettings } = useSettings()
+  const uid = user.id
+  const [scope, setScope] = useState(() => localStorage.getItem('qdplus_scope') || 'library') // library | mine | shared | public
+  const [shareFor, setShareFor] = useState(null)
   const [view, setView] = useState(() => localStorage.getItem('qdplus_view') || 'recipes') // 'recipes' | 'session'
   const [sessSel, setSessSel] = useState(() => (isPhone() ? null : 'shopping')) // 'shopping' | recipe id
   const [showPicker, setShowPicker] = useState(false)
@@ -74,20 +88,27 @@ export default function App() {
   const { session, change: changeSession, finish: finishSession } = useSession(toast.error)
   const install = useInstall()
 
-  const updateSettings = useCallback((patch) => {
-    setSettings((prev) => { const next = { ...prev, ...patch }; saveSettings(next); return next })
-  }, [])
-  useEffect(() => { applySettings(settings) }, [settings])
-  const settingsCtx = useMemo(() => ({ settings, update: updateSettings }), [settings, updateSettings])
 
   useEffect(() => {
-    dbLoad().then((data) => {
+    (async () => {
+      // An invite link binds to this account first, so the shared recipe is in the first load.
+      let target = openId
+      if (invite) {
+        try {
+          const rid = await acceptInvite(invite)
+          if (rid) { target = rid; toast.success('A recipe was shared with you') } else toast.error('This invite link has already been used by someone else.')
+        } catch (e) { toast.error('Could not open the invite: ' + e.message) }
+        try { sessionStorage.removeItem('qdplus_invite') } catch (_) { /* ignore */ }
+      }
+      if (invite || openId) window.history.replaceState(null, '', window.location.pathname)
+      const data = await dbLoad()
       setRecipes(data)
+      if (target && data.some((r) => r.id === target)) { setSelId(target); return }
       const lastId = localStorage.getItem('qdplus_last_recipe')
       const restored = lastId && data.some((r) => r.id === lastId) ? lastId : data[0]?.id || null
       // On phones the list is the home screen; only auto-open a recipe on wide screens.
       setSelId(window.matchMedia('(max-width: 760px)').matches ? null : restored)
-    })
+    })()
       .catch((e) => toast.error('Could not load recipes: ' + e.message))
       .finally(() => setLoading(false))
   }, [])
@@ -142,6 +163,9 @@ export default function App() {
   }, [])
 
   function setSort(s) { setSortMode(s); try { localStorage.setItem('qdplus_sort', s) } catch (_) { /* storage unavailable */ } }
+  function pickScope(v) { setScope(v); try { localStorage.setItem('qdplus_scope', v) } catch (_) { /* storage unavailable */ } }
+  const isMine = (r) => !!r && r.owner_id === uid
+  const ownerName = (r) => r?.owner?.display_name || 'another cook'
 
   async function saveRecipe(rec) {
     try {
@@ -263,7 +287,7 @@ export default function App() {
     }
   }
   async function handleAutoCategories() {
-    const uncategorized = recipes.filter((r) => !r.category)
+    const uncategorized = recipes.filter((r) => !r.category && r.owner_id === uid)
     if (!uncategorized.length) { toast('All recipes already have a category.'); return }
     if (!window.confirm('Let AI suggest a category for ' + uncategorized.length + ' recipes without one?')) return
     setCategorizingAI(true)
@@ -295,6 +319,11 @@ export default function App() {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
     let list = recipes.filter((r) => {
+      const mine = r.owner_id === uid
+      if (scope === 'library' && !(mine || r.visibility === 'shared')) return false
+      if (scope === 'mine' && !mine) return false
+      if (scope === 'shared' && (mine || r.visibility !== 'shared')) return false
+      if (scope === 'public' && r.visibility !== 'public') return false
       if (catFilter && (r.category || '').trim() !== catFilter) return false
       if (!needle) return true
       return [r.title, r.category, r.source, ...(r.ingredients || [])].join(' ').toLowerCase().includes(needle)
@@ -308,7 +337,7 @@ export default function App() {
       list = [...list].sort((a, b) => { const ia = idx(a.id), ib = idx(b.id); if (ia === -1 && ib === -1) return 0; if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib })
     }
     return list
-  }, [recipes, q, catFilter, sortMode, recentlyOpened])
+  }, [recipes, q, catFilter, sortMode, recentlyOpened, scope, uid])
 
   function openRecipe(id) {
     setView('recipes'); setSelId(id); setMode('view')
@@ -370,7 +399,7 @@ export default function App() {
   const isOpen = view === 'session' ? !!sessSel : (mode !== 'view' || !!sel)
   const sidebarOpen = settings.sidebar !== false
   toggleSidebarRef.current = () => updateSettings({ sidebar: !sidebarOpen })
-  const uncategorizedCount = recipes.filter((r) => !r.category).length
+  const uncategorizedCount = recipes.filter((r) => !r.category && r.owner_id === uid).length
   const importMounted = importOpen || !!importStatus
   const cookEntry = view === 'session' && sessSel && sessSel !== 'shopping' ? sessionEntries.find((e) => e.id === sessSel) : null
   const cookRecipe = cookEntry ? recipesById.get(cookEntry.id) : null
@@ -396,7 +425,7 @@ export default function App() {
   )
 
   return (
-    <SettingsContext.Provider value={settingsCtx}>
+    <>
       <div className="Q" data-open={isOpen ? '1' : '0'} data-side={sidebarOpen ? '1' : '0'}>
         <header className="Q-top">
           <button
@@ -456,11 +485,14 @@ export default function App() {
                   <Menu
                     width={230}
                     trigger={(p) => (
-                      <button className={`Q-icon-btn${catFilter || sortMode !== 'recent' ? ' on' : ''}`} onClick={p.toggle} title="Sort and filter" aria-label="Sort and filter">
+                      <button className={`Q-icon-btn${catFilter || sortMode !== 'recent' || scope !== 'library' ? ' on' : ''}`} onClick={p.toggle} title="Show, sort and filter" aria-label="Show, sort and filter">
                         <ArrowUpDown size={16} />
                       </button>
                     )}
                   >
+                    <MenuLabel>Show</MenuLabel>
+                    {SCOPES.map(([k, l]) => <MenuItem key={k} checked={scope === k} onClick={() => pickScope(k)}>{l}</MenuItem>)}
+                    <MenuSep />
                     <MenuLabel>Sort by</MenuLabel>
                     {SORTS.map(([k, l]) => <MenuItem key={k} checked={sortMode === k} onClick={() => setSort(k)}>{l}</MenuItem>)}
                     {categories.length > 0 && (
@@ -478,7 +510,7 @@ export default function App() {
                 <div className="Q-side-meta">
                   {catFilter
                     ? <button className="Q-chip-filter" onClick={() => setCatFilter('')}>{catFilter}<X size={12} /></button>
-                    : <span>{loading ? 'Loading…' : `${filtered.length} ${filtered.length === 1 ? 'recipe' : 'recipes'}`}</span>}
+                    : <span>{loading ? 'Loading…' : `${filtered.length} ${filtered.length === 1 ? 'recipe' : 'recipes'}${scope !== 'library' ? ' · ' + SCOPES.find(([k]) => k === scope)[1].toLowerCase() : ''}`}</span>}
                   {catFilter && <span>{filtered.length}</span>}
                 </div>
                 <div className="Q-list">
@@ -492,15 +524,19 @@ export default function App() {
                       {r.thumbnail ? <img src={r.thumbnail} className="Q-list-thumb" alt="" loading="lazy" /> : <div className="Q-list-thumb ph">{(r.title || '?').trim().charAt(0).toUpperCase()}</div>}
                       <div className="Q-list-txt">
                         <h4>{r.title}</h4>
-                        <span>{[r.category, r.source].filter(Boolean).join(' · ') || 'Uncategorized'}</span>
+                        <span>{isMine(r)
+                          ? [r.category, r.source].filter(Boolean).join(' · ') || 'Uncategorized'
+                          : [`by ${ownerName(r)}`, r.category].filter(Boolean).join(' · ')}</span>
                       </div>
                       {sessionIds.has(r.id) && <span className="Q-dot" title="In the session" />}
-                      <button
-                        className={`Q-fav${r.is_favorite ? ' on' : ''}`} title={r.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-                        onClick={(e) => { e.stopPropagation(); updateRecipe({ ...r, is_favorite: !r.is_favorite }) }}
-                      >
-                        <Star size={14} fill={r.is_favorite ? 'currentColor' : 'none'} />
-                      </button>
+                      {isMine(r) && (
+                        <button
+                          className={`Q-fav${r.is_favorite ? ' on' : ''}`} title={r.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                          onClick={(e) => { e.stopPropagation(); updateRecipe({ ...r, is_favorite: !r.is_favorite }) }}
+                        >
+                          <Star size={14} fill={r.is_favorite ? 'currentColor' : 'none'} />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -554,13 +590,14 @@ export default function App() {
                 {view === 'recipes' && (
                   <>
                     {mode === 'new' && <RecipeEditor key={'new-' + editorStart} startWith={editorStart} onImportPdf={() => setImportOpen(true)} onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(isPhone() ? null : recipes[0]?.id || null) }} />}
-                    {mode === 'edit' && sel && !sel._lite && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
+                    {mode === 'edit' && sel && !sel._lite && isMine(sel) && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
                     {mode === 'view' && sel && sel._lite && <div className="Q-view-loading"><div /><div /><div /></div>}
                     {mode === 'view' && sel && !sel._lite && (
                       <RecipeView
                         key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)} onUpdate={updateRecipe}
                         allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant}
                         inSession={sessionIds.has(sel.id)} onToggleSession={() => toggleFromRecipe(sel.id)}
+                        canEdit={isMine(sel)} ownerName={isMine(sel) ? null : ownerName(sel)} onShare={() => setShareFor(sel)}
                       />
                     )}
                   </>
@@ -580,7 +617,7 @@ export default function App() {
                   <CookView
                     key={cookRecipe.id} recipe={cookRecipe} entry={cookEntry} progress={session?.progress?.[cookRecipe.id]} change={changeSession}
                     onOpenRecipe={() => openRecipe(cookRecipe.id)} onRemove={() => toggleInSession(cookRecipe.id, false)}
-                    onVideos={(v) => updateRecipe({ ...cookRecipe, videos: v })}
+                    onVideos={isMine(cookRecipe) ? (v) => updateRecipe({ ...cookRecipe, videos: v }) : null}
                   />
                 )}
               </Suspense>
@@ -624,6 +661,15 @@ export default function App() {
             <SettingsModal
               onClose={() => setShowSettings(false)} recipeCount={recipes.length}
               uncategorizedCount={uncategorizedCount} categorizing={categorizingAI} onAutoCategorize={handleAutoCategories}
+              user={user} profile={profile} onProfile={setProfile}
+            />
+          </Suspense>
+        )}
+        {shareFor && (
+          <Suspense fallback={null}>
+            <ShareModal
+              recipe={shareFor} fromName={profile?.display_name} onClose={() => setShareFor(null)}
+              onVisibility={(v) => { setRecipes((p) => p.map((x) => (x.id === shareFor.id ? { ...x, visibility: v } : x))); setShareFor((p) => ({ ...p, visibility: v })) }}
             />
           </Suspense>
         )}
@@ -646,8 +692,105 @@ export default function App() {
             />
           </Suspense>
         )}
-        <Toaster />
       </div>
+    </>
+  )
+}
+
+// Shown to anyone (signed in or not) who opens the link of a public recipe.
+function PublicRecipe({ id, onSignIn }) {
+  const [recipe, setRecipe] = useState(undefined)
+  useEffect(() => {
+    loadPublicRecipe(id).then((r) => setRecipe(r ? { ...r, time: r.time_estimate, videos: r.videos || [], source_photos: r.source_photos || [] } : null))
+      .catch(() => setRecipe(null))
+  }, [id])
+  if (recipe === undefined) return <div className="Q-splash">Quaderno<b>+</b></div>
+  if (recipe === null) return <AuthScreen reason="This recipe is private or no longer exists. Sign in to open recipes shared with you." />
+  const noop = () => {}
+  return (
+    <div className="Q" data-open="1" data-side="0">
+      <header className="Q-top">
+        <div className="Q-brand">Quaderno<b>+</b></div>
+        <div className="Q-top-right"><button className="btn primary Q-new" onClick={onSignIn}><span className="lbl">Sign in</span></button></div>
+      </header>
+      <div className="Q-body">
+        <main className="Q-main">
+          <div className="Q-pane">
+            <Suspense fallback={<div className="Q-msg">Loading…</div>}>
+              <RecipeView
+                recipe={recipe} guest canEdit={false} ownerName={recipe.owner?.display_name}
+                onEdit={noop} onDelete={noop} onUpdate={noop} allRecipes={[]} onCopy={onSignIn} onSaveVariant={onSignIn}
+              />
+            </Suspense>
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}
+
+function SetPasswordModal({ onDone }) {
+  const [pw, setPw] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function save(e) {
+    e.preventDefault()
+    if (pw.length < 8) { toast.error('Use at least 8 characters.'); return }
+    setBusy(true)
+    try { await setNewPassword(pw); toast.success('Password updated'); onDone() } catch (ex) { toast.error(ex.message) } finally { setBusy(false) }
+  }
+  return (
+    <div className="Q-modal-overlay">
+      <form className="Q-modal" style={{ maxWidth: 420 }} onSubmit={save}>
+        <div className="Q-modal-head"><h2>Choose a new password</h2></div>
+        <div className="Q-modal-body">
+          <div className="Q-field"><label>New password</label><input type="password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></div>
+        </div>
+        <div className="Q-modal-foot"><button className="btn primary" disabled={busy}>Save password</button></div>
+      </form>
+    </div>
+  )
+}
+
+export default function App() {
+  const [settings, setSettings] = useState(loadSettings)
+  const updateSettings = useCallback((patch) => {
+    setSettings((prev) => { const next = { ...prev, ...patch }; saveSettings(next); return next })
+  }, [])
+  useEffect(() => { applySettings(settings) }, [settings])
+  const settingsCtx = useMemo(() => ({ settings, update: updateSettings }), [settings, updateSettings])
+
+  const auth = useAuth()
+  const [params] = useState(() => new URLSearchParams(window.location.search))
+  const openId = params.get('r')
+  // Keep an invite token across the sign-in / sign-up round trip.
+  const [invite] = useState(() => {
+    const t = params.get('invite')
+    try { if (t) sessionStorage.setItem('qdplus_invite', t); return t || sessionStorage.getItem('qdplus_invite') } catch (_) { return t }
+  })
+  const [wantsAuth, setWantsAuth] = useState(false)
+
+  let content
+  if (auth.loading) content = <div className="Q-splash">Quaderno<b>+</b></div>
+  else if (!auth.user && openId && !wantsAuth) content = <PublicRecipe id={openId} onSignIn={() => setWantsAuth(true)} />
+  else if (!auth.user) {
+    content = (
+      <AuthScreen
+        reason={invite ? 'Someone shared a recipe with you. Sign in, or create a free account, to open it.' : null}
+        onCancel={openId ? () => setWantsAuth(false) : null} cancelLabel="Back to the recipe"
+      />
+    )
+  } else {
+    content = (
+      <>
+        <Workspace key={auth.user.id} user={auth.user} profile={auth.profile} setProfile={auth.setProfile} invite={invite} openId={openId} />
+        {auth.recovering && <SetPasswordModal onDone={auth.doneRecovering} />}
+      </>
+    )
+  }
+  return (
+    <SettingsContext.Provider value={settingsCtx}>
+      {content}
+      <Toaster />
     </SettingsContext.Provider>
   )
 }

@@ -153,3 +153,38 @@
 @keyframes qslide { from { transform: translateX(24px); opacity: 0; } }
 .Q-import-row.pending { opacity: .6; }
 .Q-import-row.pending .Q-import-row-txt b { font-weight: 500; }
+
+/* ── Sign in ─────────────────────────────────────────────────────────────── */
+.Q-splash { min-height: 100dvh; display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--ink); font: var(--heading-weight) 26px var(--heading); letter-spacing: -.015em; }
+.Q-splash b, .Q-auth-brand b { color: var(--accent); font-weight: 600; }
+.Q-auth { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; background: var(--bg); color: var(--ink); font-family: var(--sans); }
+.Q-auth-card { width: 100%; max-width: 380px; }
+.Q-auth-brand { font: var(--heading-weight) 22px var(--heading); letter-spacing: -.015em; margin-bottom: 28px; }
+.Q-auth-card h1 { font: var(--heading-weight) 28px/1.15 var(--heading); letter-spacing: -.015em; margin: 0 0 8px; }
+.Q-auth-reason { margin: 0 0 18px; font-size: 14px; color: var(--muted); line-height: 1.5; }
+.Q-auth-card .Q-field { margin-top: 14px; }
+.Q-auth-card .Q-field > label { display: flex; justify-content: space-between; align-items: baseline; }
+.Q-auth-card .btn.block { margin-top: 18px; height: 44px; font-size: 14.5px; }
+.Q-auth-err { margin-top: 12px; padding: 10px 12px; border-radius: 9px; background: var(--red-soft); color: var(--red); font-size: 13px; }
+.Q-auth-info { margin-top: 12px; padding: 10px 12px; border-radius: 9px; background: var(--green-soft); color: var(--green); font-size: 13px; line-height: 1.45; }
+.Q-auth-switch { margin-top: 18px; font-size: 13.5px; color: var(--muted); text-align: center; }
+.Q-auth-switch .Q-link { font-size: 13.5px; }
+.Q-auth-cancel { display: block; margin: 14px auto 0; border: none; background: none; color: var(--faint); font: 500 13px var(--sans); cursor: pointer; }
+.Q-auth-cancel:hover { color: var(--ink); }
+
+/* ── Share ───────────────────────────────────────────────────────────────── */
+.Q-share-title { margin: 0 0 12px; font: var(--heading-weight) 17px var(--heading); }
+.Q-share-seg { margin-bottom: 8px; }
+.Q-share-box { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 8px 8px 8px 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface-2); }
+.Q-share-box code { flex: 1; min-width: 0; font: 12.5px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.Q-share-add { display: flex; gap: 8px; margin-top: 14px; }
+.Q-share-add input { flex: 1; min-width: 0; height: 36px; border: 1px solid var(--rule-strong); border-radius: 9px; background: var(--surface); padding: 0 12px; font-size: 13.5px; color: var(--ink); }
+.Q-share-add input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.Q-share-list { list-style: none; margin: 14px 0 0; padding: 0; border: 1px solid var(--rule); border-radius: 12px; }
+.Q-share-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+.Q-share-list li:last-child { border-bottom: none; }
+.Q-share-list li > div { flex: 1; min-width: 0; }
+.Q-share-list b { display: block; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.Q-share-list span { font-size: 12px; color: var(--muted); }
+.Q-share-note { margin: 18px 0 0; font-size: 12.5px; color: var(--faint); line-height: 1.5; }
+.Q-textbtn.on { color: var(--accent); }

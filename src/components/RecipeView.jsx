@@ -4,6 +4,7 @@ import {
   calcPct, findStepsForIng, getTotalGrams, numberSteps, parseIng, parseSections, scaleRecipe, sectionGrams, splitIngLine, toGrams,
 } from '../lib/recipeCalc.js'
 import { parseTabs, serializeTabs } from '../lib/notesData.js'
+import { parseMediaLibrary } from '../lib/media.js'
 import { translateRecipe } from '../lib/ai.js'
 import { LANGS } from '../lib/constants.js'
 import { normalizeBlocks, useSettings } from '../lib/settings.js'
@@ -20,7 +21,11 @@ const TABS = [
   ['ai', 'Assistant'],
 ]
 
-export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant, inSession, onToggleSession }) {
+export default function RecipeView({
+  recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant, inSession, onToggleSession,
+  canEdit: canEditProp = true, ownerName = null, onShare = null, guest = false,
+}) {
+  const canEdit = canEditProp && !guest
   const { settings, update: updateSettings } = useSettings()
   const [tab, setTab] = useState('recipe')
   const [lightboxSrc, setLightboxSrc] = useState(null)
@@ -104,6 +109,7 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
   }
 
   async function translateTo(lang) {
+    if (guest) { toast('Sign in to translate recipes.'); return }
     setTargetLang(lang); setTranslating(true)
     try {
       const result = await translateRecipe(recipe, lang)
@@ -129,14 +135,21 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
         catch (e) { toast.error(e.message) }
         finally { setTranslating(false) }
         break
-      case 'update_field': await onUpdate({ ...recipe, [action.field]: action.value }); break
-      case 'update_ingredients': await onUpdate({ ...recipe, ingredients: action.ingredients }); break
-      case 'update_steps': await onUpdate({ ...recipe, steps: action.steps }); break
-      case 'add_note': if (addNoteRef.current) addNoteRef.current(action.content); break
+      case 'update_field':
+      case 'update_ingredients':
+      case 'update_steps':
+      case 'add_note':
+        if (!canEdit) { toast('Only the owner can change this recipe — save a copy to edit your own.'); break }
+        if (action.type === 'update_field') await onUpdate({ ...recipe, [action.field]: action.value })
+        if (action.type === 'update_ingredients') await onUpdate({ ...recipe, ingredients: action.ingredients })
+        if (action.type === 'update_steps') await onUpdate({ ...recipe, steps: action.steps })
+        if (action.type === 'add_note' && addNoteRef.current) addNoteRef.current(action.content)
+        break
     }
   }
 
   async function handleRequestSaveNote(content) {
+    if (!canEdit) { toast('Only the owner can add notes to this recipe.'); return }
     try {
       const tabs = parseTabs(recipe.notes_pad)
       const updated = tabs.map((t, i) => (i === 0 ? { ...t, content: t.content + (t.content ? '\n\n' : '') + content } : t))
@@ -322,8 +335,8 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
     },
     (videos.length > 0 || addingVideo) && {
       id: 'video', title: videos.length > 1 ? `Videos` : 'Video', summary: videos.length > 1 ? `${videos.length}` : '',
-      actions: videos.length > 0 && !addingVideo && <button className="Q-link" onClick={() => setAddingVideo(true)}>Add</button>,
-      content: <VideoBlock videos={videos} onChange={(v) => onUpdate({ ...recipe, videos: v })} adding={addingVideo} onAddingDone={() => setAddingVideo(false)} />,
+      actions: canEdit && videos.length > 0 && !addingVideo && <button className="Q-link" onClick={() => setAddingVideo(true)}>Add</button>,
+      content: <VideoBlock videos={videos} onChange={canEdit ? (v) => onUpdate({ ...recipe, videos: v }) : null} adding={addingVideo} onAddingDone={() => setAddingVideo(false)} />,
     },
     viewR.notes && { id: 'notes', title: 'Notes', content: <div className="Q-baker-note">{viewR.notes}</div> },
     recipe.source_photos?.length > 0 && {
@@ -346,7 +359,10 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
     if (b.collapsed.video) updateSettings({ blocks: { ...b, collapsed: { ...b.collapsed, video: false } } })
   }
 
-  const meta = [viewR.time, viewR.servings, viewR.source].filter(Boolean)
+  const meta = [viewR.time, viewR.servings, viewR.source, ownerName && `by ${ownerName}`].filter(Boolean)
+  const hasNotes = parseTabs(recipe.notes_pad).some((t) => String(t.content || '').trim()) || parseMediaLibrary(recipe.media_library || '').length > 0
+  const tabs = TABS.filter(([k]) => (k === 'notes' ? canEdit || hasNotes : k === 'ai' ? !guest : true))
+  const shareLabel = { private: 'Share', shared: 'Shared', public: 'Public' }[recipe.visibility] || 'Share'
   const origin = [recipe.fixed_lang && `${recipe.fixed_lang} version`, copiedFrom && `copy of ${copiedFrom.title}`].filter(Boolean).join(', ')
 
   return (
@@ -382,33 +398,39 @@ export default function RecipeView({ recipe, onEdit, onDelete, onUpdate, allReci
 
       <div className="Q-tabbar">
         <div className="Q-tabs" role="tablist">
-          {TABS.map(([k, l]) => (
+          {tabs.map(([k, l]) => (
             <button key={k} role="tab" aria-selected={tab === k} className={`Q-tab-btn${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{l}</button>
           ))}
         </div>
         <div className="Q-tabbar-actions">
-          <button className={`Q-sess-toggle${inSession ? ' on' : ''}`} onClick={onToggleSession} title={inSession ? 'Remove from the session' : 'Add to the cooking session'}>
-            {inSession ? <><Check size={14} strokeWidth={2.6} /> In session</> : 'Add to session'}
-          </button>
-          <button className="Q-textbtn" onClick={onEdit}>Edit</button>
-          <Menu
-            width={230}
-            trigger={(p) => <button className="Q-icon-btn" onClick={p.toggle} aria-label="More actions" title="More actions"><MoreHorizontal size={18} /></button>}
-          >
-            <MenuItem onClick={() => { setTab('recipe'); setAddingVideo(true); unfoldVideo() }}>Add video</MenuItem>
-            <MenuItem onClick={() => onCopy(recipe, null)}>Duplicate</MenuItem>
-            <MenuLabel>Duplicate translated</MenuLabel>
-            <div className="Q-menu-scroll short">
-              {langsOrdered.map((l) => <MenuItem key={l} onClick={() => onCopy(recipe, l)}>{l}</MenuItem>)}
-            </div>
-            <MenuSep />
-            <MenuItem danger onClick={onDelete}>Delete recipe</MenuItem>
-          </Menu>
+          {onToggleSession && (
+            <button className={`Q-sess-toggle${inSession ? ' on' : ''}`} onClick={onToggleSession} title={inSession ? 'Remove from the session' : 'Add to the cooking session'}>
+              {inSession ? <><Check size={14} strokeWidth={2.6} /> In session</> : 'Add to session'}
+            </button>
+          )}
+          {canEdit && onShare && <button className={`Q-textbtn${recipe.visibility && recipe.visibility !== 'private' ? ' on' : ''}`} onClick={onShare}>{shareLabel}</button>}
+          {canEdit && <button className="Q-textbtn" onClick={onEdit}>Edit</button>}
+          {guest ? (
+            <button className="Q-textbtn" onClick={() => onCopy(recipe, null)}>Save a copy</button>
+          ) : (
+            <Menu
+              width={240}
+              trigger={(p) => <button className="Q-icon-btn" onClick={p.toggle} aria-label="More actions" title="More actions"><MoreHorizontal size={18} /></button>}
+            >
+              {canEdit && <MenuItem onClick={() => { setTab('recipe'); setAddingVideo(true); unfoldVideo() }}>Add video</MenuItem>}
+              <MenuItem onClick={() => onCopy(recipe, null)}>{canEdit ? 'Duplicate' : 'Save a copy to my recipes'}</MenuItem>
+              <MenuLabel>{canEdit ? 'Duplicate translated' : 'Save a translated copy'}</MenuLabel>
+              <div className="Q-menu-scroll short">
+                {langsOrdered.map((l) => <MenuItem key={l} onClick={() => onCopy(recipe, l)}>{l}</MenuItem>)}
+              </div>
+              {canEdit && (<><MenuSep /><MenuItem danger onClick={onDelete}>Delete recipe</MenuItem></>)}
+            </Menu>
+          )}
         </div>
       </div>
 
       {tab === 'recipe' && recipeContent}
-      {tab === 'notes' && <NotesPanel recipe={recipe} onSave={handleSaveNotes} onSaveMedia={handleSaveMedia} onAddNote={addNoteRef} />}
+      {tab === 'notes' && <NotesPanel recipe={recipe} onSave={handleSaveNotes} onSaveMedia={handleSaveMedia} onAddNote={addNoteRef} readOnly={!canEdit} />}
       {tab === 'ai' && <AIAssistant recipe={viewR} onAction={handleAssistantAction} onRequestSaveNote={handleRequestSaveNote} />}
       {lightboxSrc && <div className="Q-lightbox" onClick={() => setLightboxSrc(null)}><img src={lightboxSrc} alt="" /></div>}
     </div>

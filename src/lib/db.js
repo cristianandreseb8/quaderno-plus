@@ -7,7 +7,10 @@ const HEAVY = ['source_photos', 'media_library']
 const LITE_COLUMNS = [
   'id', 'created_at', 'updated_at', 'title', 'category', 'time_estimate', 'servings', 'notes', 'source',
   'ingredients', 'steps', 'notes_pad', 'thumbnail', 'id_data', 'fixed_lang', 'copied_from', 'is_favorite', 'videos',
+  'owner_id', 'visibility',
 ].join(',')
+// Display name of whoever owns the recipe (shown on shared and public recipes).
+const OWNER = 'owner:profiles!recipes_owner_profile_fk(display_name)'
 
 function toDb(r) {
   const row = {
@@ -71,12 +74,12 @@ async function withRetry(fn) {
 }
 
 export async function dbLoad() {
-  const data = await withRetry(() => supabase.from('recipes').select(LITE_COLUMNS).order('created_at', { ascending: false }))
+  const data = await withRetry(() => supabase.from('recipes').select(`${LITE_COLUMNS},${OWNER}`).order('created_at', { ascending: false }))
   return (data || []).map((r) => fromDb(r, true))
 }
 
 export async function dbLoadOne(id) {
-  const data = await withRetry(() => supabase.from('recipes').select('*').eq('id', id).single())
+  const data = await withRetry(() => supabase.from('recipes').select(`*,${OWNER}`).eq('id', id).single())
   return fromDb(data)
 }
 

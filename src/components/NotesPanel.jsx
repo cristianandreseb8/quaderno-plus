@@ -5,7 +5,7 @@ import { useVoiceInput } from '../lib/voice.js'
 import { aiSuggestNotes } from '../lib/ai.js'
 import MediaLibraryPanel from './MediaLibraryPanel.jsx'
 
-export default function NotesPanel({ recipe, onSave, onSaveMedia, onAddNote }) {
+export default function NotesPanel({ recipe, onSave, onSaveMedia, onAddNote, readOnly = false }) {
   const [tabs, setTabs] = useState(() => parseTabs(recipe.notes_pad))
   const [activeIdx, setActiveIdx] = useState(0)
   const [activeSection, setActiveSection] = useState('notes') // 'notes' | 'media'
@@ -103,16 +103,16 @@ export default function NotesPanel({ recipe, onSave, onSaveMedia, onAddNote }) {
             {tabs.map((t, i) => (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center' }}>
                 <button className={`Q-notes-tab${i === activeIdx ? ' active' : ''}`} onClick={() => setActiveIdx(i)}>{t.name}</button>
-                {i === activeIdx && (
+                {i === activeIdx && !readOnly && (
                   <button onClick={() => renameTab(i)} title="Rename" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--muted)', padding: '0 3px', lineHeight: 1, marginLeft: -2 }}>✏</button>
                 )}
               </div>
             ))}
-            <button className="Q-notes-tab-add" onClick={addTab} title="Add tab">＋</button>
+            {!readOnly && <button className="Q-notes-tab-add" onClick={addTab} title="Add tab">＋</button>}
           </div>
           <div className="Q-notes-toolbar">
             <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--faint)' }}>{activeTab?.name}</span>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {!readOnly && <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {saving && <span style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>saving…</span>}
               {voice.recording && <span className="Q-recording-pill">Recording…</span>}
               {tabs.length > 1 && <button className="btn danger xs" onClick={() => removeTab(activeIdx)}>Remove tab</button>}
@@ -121,18 +121,19 @@ export default function NotesPanel({ recipe, onSave, onSaveMedia, onAddNote }) {
               </select>
               <button className={`Q-voice-btn${voice.recording ? ' recording' : ''}`} onClick={voice.recording ? voice.stop : voice.start} title="Voice note">{voice.recording ? '⏹' : '🎙'}</button>
               <button className="btn xs ai" onClick={aiSuggest} disabled={aiLoading}>{aiLoading ? '…' : 'AI tips'}</button>
-            </div>
+            </div>}
           </div>
           {voice.recording && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Recording — tap stop when done. The text is added with a timestamp.</div>}
           <textarea
             className="Q-notes-textarea"
             value={activeTab?.content || ''}
             onChange={(e) => updateContent(e.target.value)}
-            placeholder={`${activeTab?.name} for ${recipe.title}…`}
+            readOnly={readOnly}
+            placeholder={readOnly ? '' : `${activeTab?.name} for ${recipe.title}…`}
           />
         </>
       )}
-      {activeSection === 'media' && <MediaLibraryPanel recipeId={recipe.id} mediaRaw={recipe.media_library || ''} onSave={onSaveMedia} />}
+      {activeSection === 'media' && <MediaLibraryPanel recipeId={recipe.id} mediaRaw={recipe.media_library || ''} onSave={onSaveMedia} readOnly={readOnly} />}
     </div>
   )
 }

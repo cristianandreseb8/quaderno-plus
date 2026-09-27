@@ -3,7 +3,7 @@ import { uid } from '../lib/recipeCalc.js'
 import { compressImage, parseMediaLibrary, readFileAsBase64 } from '../lib/media.js'
 import { MAX_AUDIO_BYTES, MAX_VIDEO_CAP } from '../lib/constants.js'
 
-export default function MediaLibraryPanel({ recipeId, mediaRaw, onSave }) {
+export default function MediaLibraryPanel({ recipeId, mediaRaw, onSave, readOnly = false }) {
   const [items, setItems] = useState(() => parseMediaLibrary(mediaRaw))
   const [uploading, setUploading] = useState(false)
   const [err, setErr] = useState('')
@@ -53,10 +53,10 @@ export default function MediaLibraryPanel({ recipeId, mediaRaw, onSave }) {
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.18em', color: 'var(--navy)' }}>
           Media Library — {items.length} file{items.length !== 1 ? 's' : ''}
         </span>
-        <label className="Q-media-upload-btn">
+        {!readOnly && <label className="Q-media-upload-btn">
           {uploading ? 'Uploading…' : '＋ Add media'}
           <input ref={fileRef} type="file" multiple accept="image/*,audio/*,video/*" style={{ display: 'none' }} disabled={uploading} onChange={(e) => handleFiles(e.target.files)} />
-        </label>
+        </label>}
       </div>
       {err && <div className="Q-err" style={{ marginBottom: 8 }}>{err}</div>}
       <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
@@ -70,7 +70,7 @@ export default function MediaLibraryPanel({ recipeId, mediaRaw, onSave }) {
             {item.type === 'audio' && <div className="Q-media-audio"><span style={{ fontSize: 24 }}>🎙</span><span style={{ fontSize: 10, color: 'var(--muted)' }}>Audio</span></div>}
             {item.type === 'video' && <div className="Q-media-video"><span style={{ fontSize: 24 }}>🎬</span><span style={{ fontSize: 10 }}>Video</span></div>}
             <div className="Q-media-label">{item.name.length > 16 ? item.name.slice(0, 13) + '…' : item.name}</div>
-            <button className="Q-media-rm" onClick={(e) => { e.stopPropagation(); remove(item.id) }}>×</button>
+            {!readOnly && <button className="Q-media-rm" onClick={(e) => { e.stopPropagation(); remove(item.id) }}>×</button>}
           </div>
         ))}
       </div>

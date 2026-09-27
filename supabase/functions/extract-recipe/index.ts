@@ -215,8 +215,25 @@ ${known ? `category: reuse one of these when it fits: ${known}.\n` : ""}
 ${recipeRules(String(b.mode || "book"))}`
 }
 
+// The gateway has already verified the JWT's signature (verify_jwt); here we only require
+// that it belongs to a signed-in account, so the public anon key cannot spend AI credit.
+function jwtRole(req: Request): string {
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "")
+  const part = token.split(".")[1]
+  if (!part) return ""
+  try {
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(part.length / 4) * 4, "=")
+    return JSON.parse(atob(b64)).role || ""
+  } catch (_) {
+    return ""
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS })
+  if (jwtRole(req) !== "authenticated") {
+    return new Response(JSON.stringify({ error: "Sign in to use the AI features." }), { status: 401, headers: { "Content-Type": "application/json", ...CORS } })
+  }
 
   const body = await req.json()
 

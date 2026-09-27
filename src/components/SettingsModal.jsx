@@ -2,6 +2,9 @@ import Modal from './ui/Modal.jsx'
 import { THEMES, TEXT_SIZES, useSettings } from '../lib/settings.js'
 import { LANGS } from '../lib/constants.js'
 import { INSTALL_HELP, useInstall } from '../lib/install.js'
+import { saveDisplayName, signOut } from '../lib/auth.js'
+import { toast } from './ui/Toaster.jsx'
+import { useState } from 'react'
 
 function ThemeCard({ theme, active, onPick }) {
   const [bg, surface, accent, ink] = theme.colors
@@ -24,12 +27,47 @@ function ThemeCard({ theme, active, onPick }) {
   )
 }
 
-export default function SettingsModal({ onClose, uncategorizedCount, categorizing, onAutoCategorize, recipeCount }) {
+export default function SettingsModal({ onClose, uncategorizedCount, categorizing, onAutoCategorize, recipeCount, user, profile, onProfile }) {
   const { settings, update } = useSettings()
   const install = useInstall()
+  const [name, setName] = useState(profile?.display_name || '')
+  const [savingName, setSavingName] = useState(false)
+  async function saveName() {
+    if (!user || name.trim() === (profile?.display_name || '')) return
+    setSavingName(true)
+    try { onProfile(await saveDisplayName(user.id, name)); toast.success('Name saved') } catch (e) { toast.error(e.message) } finally { setSavingName(false) }
+  }
+  async function copyInvite() {
+    const link = window.location.origin + '/'
+    try { await navigator.clipboard.writeText(link); toast.success('Link copied — send it to anyone you want to invite') } catch (_) { window.prompt('Copy this link:', link) }
+  }
 
   return (
     <Modal title="Settings" onClose={onClose} width={760}>
+      {user && (
+        <section className="Q-set-sec">
+          <h3>Account</h3>
+          <div className="Q-set-row">
+            <div style={{ flex: 1 }}>
+              <div className="Q-set-label">Your name</div>
+              <div className="Q-set-help">Shown to people you share recipes with. Signed in as {user.email}.</div>
+            </div>
+            <input className="Q-inline-input" style={{ maxWidth: 220 }} value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} disabled={savingName} />
+          </div>
+          <div className="Q-set-row">
+            <div>
+              <div className="Q-set-label">Invite someone to Quaderno+</div>
+              <div className="Q-set-help">They create a free account with the link. To give them a specific recipe, use Share on that recipe.</div>
+            </div>
+            <button className="btn ghost sm" onClick={copyInvite}>Copy link</button>
+          </div>
+          <div className="Q-set-row">
+            <div><div className="Q-set-label">Sign out</div><div className="Q-set-help">Your recipes stay safe in your account.</div></div>
+            <button className="btn ghost sm" onClick={() => { onClose(); signOut() }}>Sign out</button>
+          </div>
+        </section>
+      )}
+
       <section className="Q-set-sec">
         <h3>Template</h3>
         <p className="Q-set-help">Changes colours and typography across the whole app. Saved on this device.</p>
