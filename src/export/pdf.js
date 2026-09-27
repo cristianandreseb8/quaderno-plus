@@ -1,4 +1,4 @@
-import { calcPct, getTotalGrams, isFlour, numberSteps, parseIng, sectionGrams, parseSections, toGrams } from '../lib/recipeCalc.js'
+import { calcPct, getTotalGrams, isFlour, numberSteps, parseIng, sectionGrams, parseSections } from '../lib/recipeCalc.js'
 import { parseTabs } from '../lib/notesData.js'
 
 export async function exportPDF(recipe, pctOpts = null, exportNotes = false, originalThumbnail = null) {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Globe, Loader2, Lock, MoreHorizontal, Users } from 'lucide-react'
 import {
-  calcPct, findStepsForIng, getTotalGrams, numberSteps, parseIng, parseSections, scaleRecipe, sectionGrams, splitIngLine, toGrams,
+  calcPct, findStepsForIng, fmtQty, getTotalGrams, ingGrams, lineGrams, numberSteps, parseIng, parseSections, scaleRecipe, sectionGrams, splitIngLine,
 } from '../lib/recipeCalc.js'
 import { parseTabs, serializeTabs } from '../lib/notesData.js'
 import { parseMediaLibrary } from '../lib/media.js'
@@ -89,7 +89,7 @@ export default function RecipeView({
       if (!scaleIngName || !scaleIngGrams) return
       const origIng = (recipe.ingredients || []).find((i) => !/^##?\s+/.test(i) && parseIng(i).name.toLowerCase() === scaleIngName.toLowerCase())
       if (!origIng) { toast.error('Ingredient not found'); return }
-      const origG = toGrams(parseIng(origIng).qty, parseIng(origIng).unit)
+      const origG = lineGrams(origIng)
       if (!origG) { toast.error('That ingredient has no weight to scale from'); return }
       factor = parseFloat(scaleIngGrams) / origG; if (!factor) return
       label = scaleIngName + ': ' + scaleIngGrams + ' g'
@@ -200,12 +200,12 @@ export default function RecipeView({
             <label>Base ingredient</label>
             <select className="Q-select" value={scaleIngName} onChange={(e) => { setScaleIngName(e.target.value); setScaleIngGrams('') }} style={{ flex: 1, minWidth: 0 }}>
               <option value="">Choose…</option>
-              {(recipe.ingredients || []).filter((i) => !/^##?\s+/.test(i)).map((ing, i) => { const p = parseIng(ing); const g = toGrams(p.qty, p.unit); return p.name ? <option key={i} value={p.name}>{p.name} ({g > 0 ? g + ' g' : p.qty || '?'})</option> : null })}
+              {(recipe.ingredients || []).filter((i) => !/^##?\s+/.test(i)).map((ing, i) => { const p = parseIng(ing); const g = lineGrams(ing); return p.name ? <option key={i} value={p.name}>{p.name} ({g > 0 ? fmtQty(g) + ' g' : p.qty || '?'})</option> : null })}
             </select>
           </div>
           {scaleIngName && (() => {
             const origIng = (recipe.ingredients || []).find((i) => !/^##?\s+/.test(i) && parseIng(i).name.toLowerCase() === scaleIngName.toLowerCase())
-            const origG = origIng ? toGrams(parseIng(origIng).qty, parseIng(origIng).unit) : 0
+            const origG = origIng ? lineGrams(origIng) : 0
             return (
               <div className="Q-scale-row">
                 <label>I have</label>
@@ -240,7 +240,7 @@ export default function RecipeView({
               <span className="Q-dim">as</span>
               <input
                 type="number" value={customBaseGrams} onChange={(e) => setCustomBaseGrams(e.target.value)}
-                placeholder={String(toGrams(...(() => { const p = parseIng((viewR.ingredients || []).find((i) => i.toLowerCase().includes(pctBase.toLowerCase())) || ''); return [p.qty, p.unit] })())) || 'g'}
+                placeholder={fmtQty(lineGrams((viewR.ingredients || []).find((i) => i.toLowerCase().includes(pctBase.toLowerCase())) || '')) || 'g'}
               />
               <span className="Q-dim">g</span>
               {customBaseGrams && <button className="Q-link" onClick={() => setCustomBaseGrams('')}>reset</button>}
@@ -265,11 +265,13 @@ export default function RecipeView({
               {sec.items.map((ing, ii) => {
                 const rawIdx = sec.rawIndices[ii], isCk = checked.has(rawIdx)
                 const d = splitIngLine(ing)
+                const est = ingGrams(ing)
                 const pct = pctData ? pctData[ii] : null
                 return (
                   <li key={ii} className={`Q-ing-row${isCk ? ' checked' : ''}${d.ref ? ' ref' : ''}`} onClick={() => handleIngToggle(rawIdx)} title={d.ref ? 'Made earlier in this recipe' : undefined}>
                     <span className="Q-ing-check" aria-hidden="true" />
-                    <span className="Q-ing-qty">{d.qty}</span><span className="Q-ing-name">{d.name}</span>
+                    <span className="Q-ing-qty">{d.qty}</span>
+                    <span className="Q-ing-name">{d.name}{est.approx && est.grams > 0 && <span className="Q-ing-approx" title="Typical weight, used in totals and baker's %">≈ {fmtQty(est.grams)} g</span>}</span>
                     {pct?.pct != null && <span className={`Q-pct-badge${pct.isBase ? ' base' : ''}`}>{pct.pct.toFixed(1)}%</span>}
                   </li>
                 )

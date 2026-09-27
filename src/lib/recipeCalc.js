@@ -1,4 +1,5 @@
-import { FLOUR_WORDS } from './constants.js'
+import { hasFlourWord } from './constants.js'
+import { estimateGrams, isUnitWord, scaleInlineWeights } from './grams.js'
 
 export const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36)
 
@@ -16,11 +17,15 @@ export const isRefLine = (line) => REF_RX.test(String(line || ''))
 export const stripRef = (line) => String(line || '').replace(REF_RX, '')
 
 // Split an ingredient line for display: quantity column, name, and whether it is a reference.
+// Only a real unit goes in the quantity column — "2 large eggs" is 2 + "large eggs".
 export function splitIngLine(line) {
   const ref = isRefLine(line)
-  const t = ref ? stripRef(line) : String(line || '')
-  const m = t.match(/^([\d.,]+\s*[^\s]+)\s{2,}(.+)$/) || t.match(/^([\d.,]+\s*[a-zA-Z%]+)\s+(.+)$/)
-  return m ? { ref, qty: m[1].trim(), name: m[2].trim() } : { ref, qty: '', name: t.trim() }
+  const t = (ref ? stripRef(line) : String(line || '')).trim()
+  const m = t.match(ING_RX)
+  if (!m) return { ref, qty: '', name: t }
+  const amount = (m[1] ? m[1] + ' ' : '') + m[2]
+  if (m[3] && (isUnitWord(m[3]) || m[3] === '%')) return { ref, qty: `${amount} ${m[3]}`, name: m[4].trim() }
+  return { ref, qty: amount, name: [m[3], m[4].trim()].filter(Boolean).join(' ') }
 }
 
 // Numbering skips "## Part" header lines inside the method.
@@ -37,9 +42,12 @@ export function numberSteps(steps) {
 const UNICODE_FRACTIONS = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875 }
 const UNICODE_FRACTION_CHARS = Object.keys(UNICODE_FRACTIONS).join('')
 
+// qty (with an optional whole number before a fraction: "1 1/2", "1 ½"), unit, name.
+const ING_RX = new RegExp(`^(?:(\\d+)\\s+)?([\\d.,]+(?:/[\\d.,]+)?|[${UNICODE_FRACTION_CHARS}])\\s*([a-zA-Z%]*)\\s{1,}(.+)$`)
+
 export function parseIng(text) {
   const t = String(text || '').trim()
-  const m = t.match(new RegExp(`^(?:(\\d+)\\s+)?([\\d.,]+(?:/[\\d.,]+)?|[${UNICODE_FRACTION_CHARS}])\\s*([a-zA-Z%]*)\\s{1,}(.+)$`))
+  const m = t.match(ING_RX)
   if (!m) return { qty: null, unit: '', name: t }
   const whole = m[1] ? parseFloat(m[1]) : 0
   const frac = UNICODE_FRACTIONS[m[2]] !== undefined
@@ -48,25 +56,29 @@ export function parseIng(text) {
   return { qty: whole + frac, unit: m[3].toLowerCase(), name: m[4].trim() }
 }
 
+// Weight of a quantity in a known unit (g, kg, oz, ml…). Prefer lineGrams, which also
+// understands "1 egg", "1 tsp salt" and "1 cup flour".
 export function toGrams(qty, unit) {
-  if (!qty || isNaN(qty)) return 0
-  const u = unit || ''
-  if (u === 'kg') return qty * 1000
-  if (u === 'l') return qty * 1000
-  if (u === 'ml') return qty
-  if (u === '%') return 0
-  return qty
+  return estimateGrams({ qty, unit, name: '' }).grams
 }
+
+// Weight of one ingredient line, estimated when it is not written in grams.
+// approx is true for estimates, so the view can show "≈ 50 g" next to "1 egg".
+export function ingGrams(line) {
+  if (isSectionHeader(line)) return { grams: 0, approx: false }
+  return estimateGrams(parseIng(stripRef(line)))
+}
+export const lineGrams = (line) => ingGrams(line).grams
 
 export function isFlour(name) {
-  const s = (name || '').toLowerCase()
-  return FLOUR_WORDS.some((k) => s.includes(k))
+  return hasFlourWord(name)
 }
 
+// 1040, 12.5, 4, 0.25 — no trailing zeros ("4 eggs", not "4.0 eggs").
 export function fmtQty(q) {
   if (q >= 100) return String(Math.round(q))
-  if (q >= 10) return (Math.round(q * 10) / 10).toFixed(1)
-  return (Math.round(q * 100) / 100).toFixed(q < 1 ? 2 : 1)
+  if (q >= 10) return String(Math.round(q * 10) / 10)
+  return String(Math.round(q * 100) / 100)
 }
 
 export function parseSections(ingredients) {
@@ -88,10 +100,7 @@ export function parseSections(ingredients) {
 }
 
 export function calcPct(items, mode, base, baseGramsOverride = null) {
-  const parsed = items.map((i) => {
-    const p = parseIng(i)
-    return { ...p, grams: toGrams(p.qty, p.unit) }
-  })
+  const parsed = items.map((i) => ({ ...parseIng(stripRef(i)), grams: lineGrams(i) }))
   let bg = 0
   if (mode === 'baker') bg = parsed.filter((p) => isFlour(p.name)).reduce((s, p) => s + p.grams, 0)
   else if (mode === 'mass') bg = parsed.reduce((s, p) => s + p.grams, 0)
@@ -112,11 +121,7 @@ export function calcPct(items, mode, base, baseGramsOverride = null) {
 // Weight of one part of the recipe, including what comes into it from an earlier part —
 // so "First dough" reads 953 g like the book, starter included.
 export function sectionGrams(items) {
-  return (items || []).reduce((s, ing) => {
-    if (isSectionHeader(ing)) return s
-    const p = parseIng(stripRef(ing))
-    return s + toGrams(p.qty, p.unit)
-  }, 0)
+  return (items || []).reduce((s, ing) => s + lineGrams(ing), 0)
 }
 
 const sigWords = (s) => String(s || '').replace(/\([^)]*\)/g, ' ').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2)
@@ -147,9 +152,12 @@ export function scaleRecipe(recipe, factor) {
     ingredients: (recipe.ingredients || []).map((ing) => {
       if (isSectionHeader(ing)) return ing
       const ref = isRefLine(ing)
-      const p = parseIng(ref ? stripRef(ing) : ing)
-      if (p.qty === null) return ing
-      return `${ref ? '→ ' : ''}${fmtQty(p.qty * factor)}${p.unit ? ' ' + p.unit : ''}  ${p.name}`
+      const t = (ref ? stripRef(ing) : String(ing)).trim()
+      const m = t.match(ING_RX)
+      if (!m) return ing
+      const p = parseIng(t)
+      // Keep the unit as written ("TL", "cdta") and scale weights noted in the name too.
+      return `${ref ? '→ ' : ''}${fmtQty(p.qty * factor)}${m[3] ? ' ' + m[3] : ''}  ${scaleInlineWeights(m[4].trim(), factor, fmtQty)}`
     }),
   }
 }

@@ -1,4 +1,4 @@
-import { calcPct, getTotalGrams, numberSteps, parseIng, sectionGrams, parseSections, toGrams } from '../lib/recipeCalc.js'
+import { calcPct, getTotalGrams, numberSteps, parseIng, sectionGrams, parseSections } from '../lib/recipeCalc.js'
 import { loadImage } from '../lib/media.js'
 import { parseTabs } from '../lib/notesData.js'
 

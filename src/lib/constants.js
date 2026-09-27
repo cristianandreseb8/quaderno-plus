@@ -22,6 +22,15 @@ export const SENSORY_LABELS = {
 export const FLOUR_WORDS = [
   'flour', 'farina', 'harina', 'mehl', 'farine', 'semolina', 'semola', 'manitoba', 'grano', 't45', 't55', 't65', 't80', 't150', '00', 'tipo',
 ]
+// Names that mean flour anywhere in a word ("Weizenmehl"); the rest ("00", "T55", "tipo") only
+// as a word of their own, so "eggs (300 g)" or "panna 1000" never count as flour.
+const FLOUR_STEMS = ['flour', 'farina', 'harina', 'mehl', 'farine', 'semolina', 'semola', 'manitoba']
+export function hasFlourWord(name) {
+  const s = String(name || '').toLowerCase()
+  if (FLOUR_STEMS.some((k) => s.includes(k))) return true
+  const words = s.split(/[^\p{L}\p{N}]+/u)
+  return FLOUR_WORDS.some((k) => !FLOUR_STEMS.includes(k) && words.includes(k))
+}
 
 export const MAX_AUDIO_BYTES = (2 * 60 * 128 * 1024) / 8 // ~2 min @ 128kbps
 export const MAX_VIDEO_CAP = 30 * 1024 * 1024 // 30 MB cap

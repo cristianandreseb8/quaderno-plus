@@ -73,6 +73,7 @@
 .Q-ing-row.checked .Q-ing-check::after { content: ''; position: absolute; left: 33%; top: 18%; width: 25%; height: 45%; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .Q-ing-qty { font-family: var(--mono); font-size: .9em; font-weight: 600; min-width: 5.6em; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); }
 .Q-ing-name { flex: 1; min-width: 0; }
+.Q-ing-approx { margin-left: 8px; font-size: .82em; color: var(--faint); white-space: nowrap; }
 .Q-ing-row.checked .Q-ing-qty, .Q-ing-row.checked .Q-ing-name { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--rule-strong); }
 .Q-pct-badge { font: .78em var(--mono); color: var(--muted); white-space: nowrap; min-width: 3.8em; text-align: right; }
 .Q-pct-badge.base { color: var(--accent); font-weight: 700; }

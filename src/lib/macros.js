@@ -1,4 +1,4 @@
-import { FLOUR_WORDS } from './constants.js'
+import { hasFlourWord } from './constants.js'
 
 // Approximate nutritional factors per 100g of ingredient type
 export const NUTRIENT_DB = {
@@ -23,7 +23,7 @@ export const NUTRIENT_DB = {
 
 export function detectIngType(name) {
   const s = (name || '').toLowerCase()
-  if (FLOUR_WORDS.some((k) => s.includes(k))) return 'flour'
+  if (hasFlourWord(s)) return 'flour'
   if (['butter', 'beurre', 'mantequilla', 'burro', 'margarine', 'margarina'].some((k) => s.includes(k))) return 'butter'
   if (['tuorlo', 'yolk', 'jaune', 'yema'].some((k) => s.includes(k))) return 'egg_yolk'
   if (['egg', 'uovo', 'huevo', 'oeuf', 'uova'].some((k) => s.includes(k))) return 'egg'

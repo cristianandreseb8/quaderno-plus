@@ -1,4 +1,4 @@
-import { getTotalGrams, isFlour, numberSteps, parseIng, sectionGrams, parseSections, toGrams } from '../lib/recipeCalc.js'
+import { getTotalGrams, isFlour, lineGrams, numberSteps, parseIng, sectionGrams, parseSections } from '../lib/recipeCalc.js'
 import { calcMacros } from '../lib/macros.js'
 
 export async function exportXLS(recipe, pctOpts = null) {
@@ -16,7 +16,7 @@ export async function exportXLS(recipe, pctOpts = null) {
     if (sec.name) { rows.push(['── ' + sec.name + ' ──', '', '', '']); curRow++ }
     sec.items.forEach((ing) => {
       const p = parseIng(ing)
-      const g = toGrams(p.qty, p.unit)
+      const g = Math.round(lineGrams(ing) * 10) / 10
       rows.push([p.name, p.qty || '', p.unit || '', g > 0 ? g : ''])
       if (isFlour(p.name)) flourRows.push(curRow)
       curRow++
@@ -41,7 +41,7 @@ export async function exportXLS(recipe, pctOpts = null) {
   ]
   flatItems.forEach((ing) => {
     const p = parseIng(ing)
-    const g = toGrams(p.qty, p.unit)
+    const g = Math.round(lineGrams(ing) * 10) / 10
     calcRows.push([p.name, g > 0 ? g : 0, '', isFlour(p.name) ? '← flour base' : ''])
   })
   const ws2 = XLSX.utils.aoa_to_sheet(calcRows)
