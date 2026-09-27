@@ -4,7 +4,7 @@ import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadOne } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { SettingsContext, applySettings, loadSettings, saveSettings, useSettings } from './lib/settings.js'
 import { setNewPassword, signOut, useAuth } from './lib/auth.js'
-import { acceptInvite, loadPublicRecipe } from './lib/sharing.js'
+import { VISIBILITY, acceptInvite, loadPublicRecipe } from './lib/sharing.js'
 import AuthScreen from './components/AuthScreen.jsx'
 import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
@@ -530,9 +530,12 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                       {r.thumbnail ? <img src={r.thumbnail} className="Q-list-thumb" alt="" loading="lazy" /> : <div className="Q-list-thumb ph">{(r.title || '?').trim().charAt(0).toUpperCase()}</div>}
                       <div className="Q-list-txt">
                         <h4>{r.title}</h4>
-                        <span>{isMine(r)
-                          ? [r.category, r.source].filter(Boolean).join(' · ') || 'Uncategorized'
-                          : [`by ${ownerName(r)}`, r.category].filter(Boolean).join(' · ')}</span>
+                        <span>
+                          {isMine(r) && r.visibility && r.visibility !== 'private' && <em className="Q-vis-tag">{VISIBILITY[r.visibility]} · </em>}
+                          {isMine(r)
+                            ? [r.category, r.source].filter(Boolean).join(' · ') || 'Uncategorized'
+                            : [`by ${ownerName(r)}`, r.category].filter(Boolean).join(' · ')}
+                        </span>
                       </div>
                       {sessionIds.has(r.id) && <span className="Q-dot" title="In the session" />}
                       {isMine(r) && (

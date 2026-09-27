@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Loader2, MoreHorizontal } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Globe, Loader2, Lock, MoreHorizontal, Users } from 'lucide-react'
 import {
   calcPct, findStepsForIng, getTotalGrams, numberSteps, parseIng, parseSections, scaleRecipe, sectionGrams, splitIngLine, toGrams,
 } from '../lib/recipeCalc.js'
 import { parseTabs, serializeTabs } from '../lib/notesData.js'
 import { parseMediaLibrary } from '../lib/media.js'
 import { translateRecipe } from '../lib/ai.js'
+import { VISIBILITY } from '../lib/sharing.js'
 import { LANGS } from '../lib/constants.js'
 import { normalizeBlocks, useSettings } from '../lib/settings.js'
 import Menu, { MenuItem, MenuSep, MenuToggle } from './ui/Menu.jsx'
@@ -331,7 +332,9 @@ export default function RecipeView({
   const meta = [viewR.time, viewR.servings, viewR.source, ownerName && `by ${ownerName}`].filter(Boolean)
   const hasNotes = parseTabs(recipe.notes_pad).some((t) => String(t.content || '').trim()) || parseMediaLibrary(recipe.media_library || '').length > 0
   const tabs = TABS.filter(([k]) => (k === 'notes' ? canEdit || hasNotes : k === 'ai' ? !guest : true))
-  const shareLabel = { private: 'Share', shared: 'Shared', public: 'Public' }[recipe.visibility] || 'Share'
+  const vis = recipe.visibility || 'private'
+  const VisIcon = { private: Lock, shared: Users, public: Globe }[vis] || Lock
+  const visLabel = canEdit ? VISIBILITY[vis] : vis === 'shared' ? 'Shared with you' : VISIBILITY[vis]
   const origin = [recipe.fixed_lang && `${recipe.fixed_lang} version`, copiedFrom && `copy of ${copiedFrom.title}`].filter(Boolean).join(', ')
 
   return (
@@ -342,6 +345,13 @@ export default function RecipeView({
           <div className="Q-meta">
             {viewR.category && <span className="Q-meta-cat">{viewR.category}</span>}
             {meta.map((m, i) => <span key={i}>{m}</span>)}
+            {!guest && (
+              <span className={`Q-meta-vis ${vis}`}>
+                {canEdit && onShare
+                  ? <button onClick={onShare} title="Change who can see this recipe"><VisIcon size={12} strokeWidth={2.2} />{visLabel}</button>
+                  : <><VisIcon size={12} strokeWidth={2.2} />{visLabel}</>}
+              </span>
+            )}
           </div>
           {origin && <div className="Q-origin">{origin.charAt(0).toUpperCase() + origin.slice(1)}</div>}
         </div>
@@ -383,7 +393,7 @@ export default function RecipeView({
               {inSession ? <><Check size={14} strokeWidth={2.6} /> In session</> : 'Add to session'}
             </button>
           )}
-          {canEdit && onShare && <button className={`Q-textbtn${recipe.visibility && recipe.visibility !== 'private' ? ' on' : ''}`} onClick={onShare}>{shareLabel}</button>}
+          {canEdit && onShare && <button className="Q-textbtn" onClick={onShare}>Share</button>}
           {canEdit && <button className="Q-textbtn" onClick={onEdit}>Edit</button>}
           {guest && <button className="Q-textbtn" onClick={() => onCopy(recipe, null)}>Save a copy</button>}
           <Menu

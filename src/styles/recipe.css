@@ -10,6 +10,11 @@
 .Q-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; font-size: 13.5px; color: var(--muted); }
 .Q-meta > span + span::before { content: '·'; margin: 0 8px; color: var(--faint); }
 .Q-meta-cat { color: var(--accent); font-weight: 600; }
+.Q-meta-vis, .Q-meta-vis button { display: inline-flex; align-items: center; gap: 4px; }
+.Q-meta-vis button { padding: 0; border: none; background: none; color: inherit; font: inherit; cursor: pointer; }
+.Q-meta-vis button:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.Q-meta-vis svg { flex-shrink: 0; transform: translateY(1px); }
+.Q-meta-vis.shared, .Q-meta-vis.public { color: var(--accent); font-weight: 600; }
 .Q-origin { margin-top: 5px; font-size: 12.5px; color: var(--faint); }
 .Q-recipe-thumb { width: 96px; height: 96px; border-radius: 14px; object-fit: cover; cursor: zoom-in; flex-shrink: 0; }
 

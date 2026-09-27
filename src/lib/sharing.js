@@ -1,5 +1,8 @@
 import { supabase } from './supabase.js'
 
+// Who can see a recipe, in the words the interface uses everywhere.
+export const VISIBILITY = { private: 'Private', shared: 'Invite only', public: 'Public' }
+
 // Links people can open: a public recipe (anyone), or a personal invite (one person).
 export const recipeLink = (id) => `${window.location.origin}/?r=${id}`
 export const inviteLink = (token) => `${window.location.origin}/?invite=${token}`

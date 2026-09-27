@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import Modal from './ui/Modal.jsx'
 import { toast } from './ui/Toaster.jsx'
-import { createShare, inviteLink, listShares, mailInvite, recipeLink, removeShare, setVisibility } from '../lib/sharing.js'
+import { VISIBILITY, createShare, inviteLink, listShares, mailInvite, recipeLink, removeShare, setVisibility } from '../lib/sharing.js'
 
 const LEVELS = [
-  ['private', 'Private', 'Only you can see this recipe.'],
-  ['shared', 'People', 'Only the people you invite. Each invite is a personal link for one person.'],
-  ['public', 'Public', 'Anyone with the link can view it — no account needed.'],
+  ['private', VISIBILITY.private, 'Only you can see this recipe.'],
+  ['shared', VISIBILITY.shared, 'Only the people you invite. Each invite is a personal link for one person.'],
+  ['public', VISIBILITY.public, 'Anyone with the link can view it — no account needed.'],
 ]
 
 async function copy(text, what) {
