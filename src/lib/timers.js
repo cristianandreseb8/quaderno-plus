@@ -17,6 +17,7 @@ const RING_FOR = 60000 // an unanswered alarm stops by itself after a minute
 const LATE = 60000 // a timer that ended longer ago than this (app closed) does not ring any more
 const SAY_EVERY = 12000 // while an alarm rings, its name is said again this often
 const VOICE_KEY = 'qdplus_timer_voice'
+const VOICE_CFG_KEY = 'qdplus_timer_voice_cfg' // { lang: 'device' | 'recipe' | 'es-ES'…, voiceURI }
 
 function load() {
   try { return JSON.parse(localStorage.getItem(KEY) || '[]').filter((t) => t && t.id) } catch (_) { return [] }
@@ -26,15 +27,17 @@ let timers = load()
 let dockOpen = false
 let big = false
 let voiceOn = (() => { try { return localStorage.getItem(VOICE_KEY) !== 'off' } catch (_) { return true } })()
+let voiceCfg = (() => { try { return { lang: 'device', voiceURI: '', ...JSON.parse(localStorage.getItem(VOICE_CFG_KEY) || '{}') } } catch (_) { return { lang: 'device', voiceURI: '' } } })()
+let voicesVersion = 0 // bumps when the device's voice list arrives (it loads late in some browsers)
 let now = Date.now()
-let snapshot = { timers, now, dockOpen, big, voiceOn }
+let snapshot = { timers, now, dockOpen, big, voiceOn, voiceCfg, voicesVersion }
 const listeners = new Set()
 let ticker = null
 let lastBeep = 0
 let lastSaid = 0
 
 function emit() {
-  snapshot = { timers, now, dockOpen, big, voiceOn }
+  snapshot = { timers, now, dockOpen, big, voiceOn, voiceCfg, voicesVersion }
   listeners.forEach((l) => l())
 }
 function commit(next) {
@@ -78,6 +81,10 @@ function ensureTicker() {
 }
 if (typeof window !== 'undefined') {
   ensureTicker()
+  if (window.speechSynthesis) {
+    window.speechSynthesis.getVoices()
+    window.speechSynthesis.addEventListener?.('voiceschanged', () => { voicesVersion += 1; emit() })
+  }
   // Another tab changed the timers.
   window.addEventListener('storage', (e) => { if (e.key === KEY) { timers = load(); ensureTicker(); emit() } })
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { tick(); syncWakeLock() } })
@@ -107,19 +114,65 @@ function beep() {
 }
 // ── Voice: the timer says what it is ("Lievito madre") ──
 const spoken = (t) => t.name || t.label || 'Timer'
-function pickVoice(lang) {
-  const voices = window.speechSynthesis?.getVoices?.() || []
-  const base = (lang || '').slice(0, 2)
-  return voices.find((v) => v.lang === lang) || voices.find((v) => v.lang?.startsWith(base)) || null
+
+// Devices ship joke voices (Albert, Bad News, Zarvox…) and old robotic ones next to good ones.
+// Never pick those by ourselves; prefer the natural ones (Premium, Enhanced, Siri, Google…).
+// Joke and robotic voices, by name in the languages a Mac or iPhone can be set to (their names
+// are translated with the system: "Bad News" is "Malas noticias" on a Mac in Spanish).
+const NOVELTY = new RegExp('^(' + [
+  'albert', 'bahh', 'boing', 'bubbles', 'bells', 'cellos', 'good news', 'bad news', 'jester', 'junior', 'organ', 'pipe organ', 'ralph',
+  'superstar', 'trinoids', 'whisper', 'wobble', 'zarvox', 'fred', 'kathy', 'princess', 'deranged', 'hysterical',
+  'buenas noticias', 'malas noticias', 'bufon', 'burbujas', 'campanas', 'organo', 'superestrella', 'susurro', 'violonchelos',
+  'buone notizie', 'cattive notizie', 'giullare', 'bolle', 'campane', 'sussurro', 'violoncelli',
+  'bonnes nouvelles', 'mauvaises nouvelles', 'bouffon', 'bulles', 'cloches', 'orgue', 'chuchotement', 'violoncelles',
+  'gute nachrichten', 'schlechte nachrichten', 'narr', 'blasen', 'glocken', 'orgel', 'flustern', 'celli',
+  'eddy', 'flo', 'grandma', 'grandpa', 'reed', 'rocko', 'sandy', 'shelley',
+].join('|') + ')\\b', 'i')
+const NICE = /\b(premium|enhanced|mejorada|neural|natural|siri|google|online)\b/i
+const KNOWN_GOOD = /^(m[oó]nica|paulina|jorge|marisol|juan|diego|isabela|francisca|montse|alice|federica|luca|paola|samantha|ava|allison|evan|zoe|nathan|susan|tom|daniel|karen|moira|tessa|rishi|amelie|am[eé]lie|thomas|jacques|anna|petra|markus|helena|luciana|joana)\b/i
+const plain = (name) => String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+export function voiceQuality(v) {
+  const n = plain(v.name)
+  if (NOVELTY.test(n)) return 'novelty'
+  if (NICE.test(n)) return 'premium'
+  if (KNOWN_GOOD.test(v.name) || KNOWN_GOOD.test(n)) return 'good'
+  return 'basic'
 }
-function say(t) {
-  if (!voiceOn || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return
+const RANK = { premium: 3, good: 2, basic: 1, novelty: 0 }
+export function voicesFor(lang) {
+  const base = (lang || '').slice(0, 2).toLowerCase()
+  return (window.speechSynthesis?.getVoices?.() || [])
+    .filter((v) => (v.lang || '').toLowerCase().replace('_', '-').startsWith(base))
+    .map((v) => ({ v, q: voiceQuality(v) }))
+    .sort((a, b) => RANK[b.q] - RANK[a.q] || (b.v.lang === lang) - (a.v.lang === lang) || (b.v.localService === false) - (a.v.localService === false))
+}
+// The language the timers speak: the device's own by default (a Spanish-speaking cook hears
+// "lievito madre" said the Spanish way), or the recipe's, or one chosen.
+export function voiceLang(t) {
+  if (voiceCfg.lang === 'recipe' && t?.lang) return t.lang
+  if (voiceCfg.lang && voiceCfg.lang !== 'device' && voiceCfg.lang !== 'recipe') return voiceCfg.lang
+  return navigator.language || 'en-US'
+}
+function pickVoice(lang) {
+  const all = window.speechSynthesis?.getVoices?.() || []
+  const chosen = voiceCfg.voiceURI && all.find((v) => v.voiceURI === voiceCfg.voiceURI)
+  if (chosen && chosen.lang.slice(0, 2).toLowerCase() === lang.slice(0, 2).toLowerCase()) return chosen
+  const best = voicesFor(lang).find((x) => x.q !== 'novelty')
+  return best ? best.v : null
+}
+function speakText(text, lang) {
+  if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return
   try {
-    const u = new SpeechSynthesisUtterance(spoken(t))
-    if (t.lang) { u.lang = t.lang; const v = pickVoice(t.lang); if (v) u.voice = v }
-    u.rate = 0.95
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = lang
+    const v = pickVoice(lang)
+    if (v) u.voice = v
+    u.rate = 1
     window.speechSynthesis.speak(u)
   } catch (_) { /* no voice on this device */ }
+}
+function say(t) {
+  if (voiceOn) speakText(spoken(t), voiceLang(t))
 }
 // iPhone and iPad only let a page speak after it has spoken during a tap: do that, silently.
 function unlockVoice() {
@@ -194,7 +247,19 @@ export function stopRinging(id) {
   edit(id, (t) => ({ ...t, ringing: false }))
 }
 export const renameTimer = (id, name) => edit(id, (t) => ({ ...t, name: String(name || '').trim() }))
-export function sayName(id) { const t = timers.find((x) => x.id === id); if (t) { unlockVoice(); const was = voiceOn; voiceOn = true; say(t); voiceOn = was } }
+export function sayName(id) {
+  const t = timers.find((x) => x.id === id)
+  if (t) { window.speechSynthesis?.cancel?.(); speakText(spoken(t), voiceLang(t)) }
+}
+export function setVoiceCfg(patch) {
+  voiceCfg = { ...voiceCfg, ...patch }
+  try { localStorage.setItem(VOICE_CFG_KEY, JSON.stringify(voiceCfg)) } catch (_) { /* ignore */ }
+  emit()
+}
+export function testVoice(text = 'Lievito madre') {
+  window.speechSynthesis?.cancel?.()
+  speakText(text, voiceLang(null))
+}
 export function setVoiceOn(on) {
   voiceOn = on
   try { localStorage.setItem(VOICE_KEY, on ? 'on' : 'off') } catch (_) { /* ignore */ }

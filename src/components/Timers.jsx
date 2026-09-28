@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Maximize2, Minimize2, Pause, Play, RotateCcw, Timer as TimerIcon, Volume2, VolumeX, X } from 'lucide-react'
-import Menu, { useMenuClose } from './ui/Menu.jsx'
+import Menu, { MenuItem, MenuLabel, MenuSep, MenuToggle, useMenuClose } from './ui/Menu.jsx'
 import {
   addTime, clearFinished, fmtClock, pauseTimer, remaining, removeTimer, renameTimer, resetTimer, restartTimer, resumeTimer,
-  sayName, setBig, setDockOpen, setVoiceOn, startTimer, stopRinging, useTimers,
+  sayName, setBig, setDockOpen, setVoiceCfg, setVoiceOn, startTimer, stopRinging, testVoice, useTimers, voiceLang, voicesFor,
 } from '../lib/timers.js'
 import { fmtDuration, parseDurationInput } from '../lib/durations.js'
 
@@ -56,12 +56,7 @@ export function TimerDock() {
         <b>Timers</b>
         <span className="sp" />
         {timers.some((t) => t.state === 'done' && !t.ringing) && <button className="Q-link" onClick={clearFinished}>Clear finished</button>}
-        <button
-          className={`Q-icon-btn${voiceOn ? '' : ' off'}`} onClick={() => setVoiceOn(!voiceOn)}
-          title={voiceOn ? 'Voice on: a timer says its name when it ends' : 'Voice off'} aria-label={voiceOn ? 'Turn the voice off' : 'Turn the voice on'} aria-pressed={voiceOn}
-        >
-          {voiceOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
-        </button>
+        <VoiceMenu />
         <button className="Q-icon-btn" onClick={() => setBig(!big)} title={big ? 'Back to the small panel' : 'Timer mode: big, for the kitchen'} aria-label={big ? 'Smaller' : 'Timer mode'}>
           {big ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
@@ -87,6 +82,50 @@ export function TimerDock() {
         </div>
       </form>
     </div>
+  )
+}
+
+// ── The voice: on/off, language, which of the device's voices, and a test ──
+const LANGS = [['es-ES', 'Español'], ['it-IT', 'Italiano'], ['en-US', 'English'], ['fr-FR', 'Français'], ['de-DE', 'Deutsch']]
+function langName(code) {
+  try { return new Intl.DisplayNames([navigator.language || 'en'], { type: 'language' }).of(code.slice(0, 2)) } catch (_) { return code }
+}
+function VoiceMenu() {
+  const { voiceOn, voiceCfg } = useTimers() // re-renders when the device's voices arrive too
+  const lang = voiceLang(null)
+  const voices = voicesFor(lang).filter((x) => x.q !== 'novelty')
+  const hasNice = voices.some((x) => x.q === 'premium' || x.q === 'good')
+  const pickLang = (l) => setVoiceCfg({ lang: l, voiceURI: '' })
+  return (
+    <Menu
+      width={270}
+      trigger={(p) => (
+        <button className={`Q-icon-btn${voiceOn ? '' : ' off'}`} onClick={p.toggle} title="Voice: timers say their name when they end" aria-label="Voice settings">
+          {voiceOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
+        </button>
+      )}
+    >
+      <MenuToggle checked={voiceOn} onChange={setVoiceOn}>Say the timer’s name when it ends</MenuToggle>
+      <MenuSep />
+      <MenuLabel>Language</MenuLabel>
+      <MenuItem keepOpen checked={voiceCfg.lang === 'device'} onClick={() => pickLang('device')}>This device ({langName(navigator.language || 'en')})</MenuItem>
+      <MenuItem keepOpen checked={voiceCfg.lang === 'recipe'} onClick={() => pickLang('recipe')}>The recipe’s language</MenuItem>
+      {LANGS.map(([code, label]) => <MenuItem key={code} keepOpen checked={voiceCfg.lang === code} onClick={() => pickLang(code)}>{label}</MenuItem>)}
+      <MenuSep />
+      <MenuLabel>Voice</MenuLabel>
+      <div className="Q-menu-scroll short">
+        <MenuItem keepOpen checked={!voiceCfg.voiceURI} onClick={() => { setVoiceCfg({ voiceURI: '' }); testVoice() }}>Best available</MenuItem>
+        {voices.map(({ v, q }) => (
+          <MenuItem key={v.voiceURI} keepOpen checked={voiceCfg.voiceURI === v.voiceURI} hint={q === 'premium' ? 'Natural' : v.lang} onClick={() => { setVoiceCfg({ voiceURI: v.voiceURI }); testVoice() }}>
+            {v.name.replace(/\s*\(.*\)$/, '')}
+          </MenuItem>
+        ))}
+        {!voices.length && <div className="Q-menu-note">No voice for this language on this device.</div>}
+      </div>
+      <MenuSep />
+      <MenuItem keepOpen checked={false} onClick={() => testVoice()}>Test: “Lievito madre”</MenuItem>
+      {!hasNice && <div className="Q-menu-note">For a more natural sound, add a Premium or Enhanced voice in this device’s settings (Mac/iPhone: Accessibility → Spoken Content → Voices).</div>}
+    </Menu>
   )
 }
 
