@@ -1,21 +1,21 @@
 import Modal from './ui/Modal.jsx'
-import { THEMES, TEXT_SIZES, useSettings } from '../lib/settings.js'
+import { THEMES, TEXT_SIZES, loadThemeFonts, useSettings } from '../lib/settings.js'
 import { LANGS } from '../lib/constants.js'
 import { INSTALL_HELP, useInstall } from '../lib/install.js'
 import { saveDisplayName, signOut } from '../lib/auth.js'
 import { toast } from './ui/Toaster.jsx'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 function ThemeCard({ theme, active, onPick }) {
   const [bg, surface, accent, ink] = theme.colors
   return (
     <button type="button" className={`Q-theme-card${active ? ' active' : ''}`} onClick={onPick} aria-pressed={active}>
-      <div className={`Q-theme-prev font-${theme.font}`} style={{ background: bg, color: ink }}>
+      <div className="Q-theme-prev" style={{ background: bg, color: ink }}>
         <div className="Q-theme-prev-side" style={{ background: surface }}>
           <i style={{ background: accent }} /><i /><i />
         </div>
         <div className="Q-theme-prev-main">
-          <b>Brioche</b>
+          <b style={{ fontFamily: theme.heading, fontWeight: theme.headingWeight || 600 }}>Brioche</b>
           <span style={{ background: ink }} />
           <span style={{ background: ink }} />
           <em style={{ background: accent }} />
@@ -30,6 +30,8 @@ function ThemeCard({ theme, active, onPick }) {
 export default function SettingsModal({ onClose, uncategorizedCount, categorizing, onAutoCategorize, recipeCount, user, profile, onProfile }) {
   const { settings, update } = useSettings()
   const install = useInstall()
+  // Show every template in its own fonts while choosing.
+  useEffect(() => { THEMES.forEach(loadThemeFonts) }, [])
   const [name, setName] = useState(profile?.display_name || '')
   const [savingName, setSavingName] = useState(false)
   async function saveName() {
@@ -71,9 +73,14 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
       <section className="Q-set-sec">
         <h3>Template</h3>
         <p className="Q-set-help">Changes colours and typography across the whole app. Saved on this device.</p>
-        <div className="Q-theme-grid">
-          {THEMES.map((t) => <ThemeCard key={t.id} theme={t} active={settings.theme === t.id} onPick={() => update({ theme: t.id })} />)}
-        </div>
+        {[['Light', THEMES.filter((t) => !t.dark)], ['Dark', THEMES.filter((t) => t.dark)]].map(([label, list]) => (
+          <div key={label}>
+            <div className="Q-theme-group">{label}</div>
+            <div className="Q-theme-grid">
+              {list.map((t) => <ThemeCard key={t.id} theme={t} active={settings.theme === t.id} onPick={() => update({ theme: t.id })} />)}
+            </div>
+          </div>
+        ))}
       </section>
 
       <section className="Q-set-sec">

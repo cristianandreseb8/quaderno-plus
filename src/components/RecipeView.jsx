@@ -26,13 +26,15 @@ export default function RecipeView({
   recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant, inSession, onToggleSession,
   canEdit: canEditProp = true, ownerName = null, onShare = null, guest = false,
   isFavorite = false, onToggleFavorite = null, liked = false, onToggleLike = null, collections = [], onToggleCollection = null,
+  // In a cooking session: { factor, progress: { ing, steps }, onFactor, onToggleIng, onToggleStep, onClear, onOpenRecipe, onRemove }.
+  // Ticks and the batch size are then the session's — saved, and shared with its shopping list.
+  cook = null,
 }) {
   const canEdit = canEditProp && !guest
   const { settings, update: updateSettings } = useSettings()
   const [tab, setTab] = useState('recipe')
   const [lightboxSrc, setLightboxSrc] = useState(null)
-  const [checked, setChecked] = useState(new Set())
-  const [highlightedSteps, setHighlightedSteps] = useState(new Set())
+  const [localChecked, setLocalChecked] = useState(new Set())
   const [showPct, setShowPct] = useState(false)
   const [customBaseGrams, setCustomBaseGrams] = useState('')
   const [pctMode, setPctMode] = useState('baker')
@@ -45,7 +47,7 @@ export default function RecipeView({
   const [scaleTotal, setScaleTotal] = useState('')
   const [scaleIngName, setScaleIngName] = useState('')
   const [scaleIngGrams, setScaleIngGrams] = useState('')
-  const [appliedScale, setAppliedScale] = useState(null)
+  const [localScale, setLocalScale] = useState(null)
   const [translating, setTranslating] = useState(false)
   const [translated, setTranslated] = useState(null)
   const [targetLang, setTargetLang] = useState(settings.translateLang || 'English')
@@ -56,10 +58,23 @@ export default function RecipeView({
   const addNoteRef = useRef(null)
 
   useEffect(() => {
-    setChecked(new Set()); setHighlightedSteps(new Set()); setAppliedScale(null); setTranslated(null)
+    setLocalChecked(new Set()); setLocalScale(null); setTranslated(null)
     setShowScale(false); setTab('recipe'); setAddingVideo(false)
     setCustomBaseGrams('')
   }, [recipe.id])
+
+  const cookIng = cook?.progress?.ing
+  const inCook = !!cook
+  const checked = useMemo(() => (inCook ? new Set(cookIng || []) : localChecked), [inCook, cookIng, localChecked])
+  const cookFactor = cook ? Number(cook.factor) || 1 : 1
+  const appliedScale = cook ? (cookFactor !== 1 ? { factor: cookFactor, label: '×' + +cookFactor.toFixed(2) } : null) : localScale
+  function setAppliedScale(s) {
+    if (cook) cook.onFactor(s ? s.factor : 1)
+    else { setLocalScale(s); setLocalChecked(new Set()) }
+  }
+  function clearTicked() {
+    if (cook) cook.onClear('ing'); else setLocalChecked(new Set())
+  }
 
   const displayR = translated || recipe
   const originalThumbnail = recipe.thumbnail
@@ -70,17 +85,23 @@ export default function RecipeView({
   const langsOrdered = useMemo(() => [settings.translateLang, ...LANGS.filter((l) => l !== settings.translateLang)].filter(Boolean), [settings.translateLang])
 
   function handleIngToggle(rawIdx) {
-    setChecked((prev) => {
+    if (cook) { cook.onToggleIng(rawIdx); return }
+    setLocalChecked((prev) => {
       const next = new Set(prev)
       if (next.has(rawIdx)) next.delete(rawIdx); else next.add(rawIdx)
-      const names = []
-      ;(viewR.ingredients || []).forEach((ing, i) => { if (next.has(i) && !/^##?\s+/.test(ing)) names.push(parseIng(ing).name) })
-      const steps = new Set()
-      names.forEach((n) => findStepsForIng(n, viewR.steps || []).forEach((i) => steps.add(i)))
-      setHighlightedSteps(steps)
       return next
     })
   }
+  // Outside a session, ticking an ingredient lights up the steps that use it. In a session the
+  // ticks mean "weighed and ready", and the steps show their own progress instead.
+  const highlightedSteps = useMemo(() => {
+    const steps = new Set()
+    if (inCook) return steps
+    ;(viewR.ingredients || []).forEach((ing, i) => {
+      if (checked.has(i) && !/^##?\s+/.test(ing)) findStepsForIng(parseIng(ing).name, viewR.steps || []).forEach((st) => steps.add(st))
+    })
+    return steps
+  }, [inCook, checked, viewR])
 
   function applyScale() {
     let factor = 0, label = ''
@@ -108,7 +129,7 @@ export default function RecipeView({
       }
       factor = tg / cur
     }
-    setAppliedScale({ factor, label }); setShowScale(false); setChecked(new Set()); setHighlightedSteps(new Set())
+    setAppliedScale({ factor, label }); setShowScale(false)
   }
 
   async function translateTo(lang) {
@@ -288,20 +309,35 @@ export default function RecipeView({
 
   const stepList = numberSteps(viewR.steps)
   const videos = Array.isArray(recipe.videos) ? recipe.videos : []
+  // Session progress on the method: finished steps and the next one to do.
+  const doneSteps = new Set(cook?.progress?.steps || [])
+  const realSteps = stepList.map((st, i) => ({ ...st, i })).filter((st) => st.text && !st.header)
+  const nextStep = cook ? realSteps.find(({ i }) => !doneSteps.has(i))?.i : null
+  const doneCount = realSteps.filter(({ i }) => doneSteps.has(i)).length
+  const ingCount = sections.reduce((n, sec) => n + sec.items.length, 0)
   const blocks = [
     {
-      id: 'ingredients', title: 'Ingredients', content: ingredientsContent,
-      summary: totalGrams > 0 ? `${totalGrams.toFixed(0)} g` : '',
-      actions: checked.size > 0 && <button className="Q-link" onClick={() => { setChecked(new Set()); setHighlightedSteps(new Set()) }}>Clear {checked.size} ticked</button>,
+      id: 'ingredients', title: cook ? 'Mise en place' : 'Ingredients', content: ingredientsContent,
+      summary: cook ? `${checked.size} of ${ingCount} ready` : totalGrams > 0 ? `${totalGrams.toFixed(0)} g` : '',
+      actions: checked.size > 0 && <button className="Q-link" onClick={clearTicked}>Clear {checked.size} ticked</button>,
     },
     stepList.some((st) => st.n) && {
-      id: 'method', title: 'Method', summary: `${stepList.filter((st) => st.n).length} steps`,
-      actions: highlightedSteps.size > 0 && <em className="Q-hl-note">{highlightedSteps.size === 1 ? '1 step uses' : `${highlightedSteps.size} steps use`} the ticked ingredients</em>,
+      id: 'method', title: 'Method', summary: cook ? `${doneCount} of ${realSteps.length}` : `${realSteps.length} steps`,
+      actions: cook
+        ? doneCount > 0 && <button className="Q-link" onClick={() => cook.onClear('steps')}>Clear {doneCount} done</button>
+        : highlightedSteps.size > 0 && <em className="Q-hl-note">{highlightedSteps.size === 1 ? '1 step uses' : `${highlightedSteps.size} steps use`} the ticked ingredients</em>,
       content: (
-        <ol className="Q-steps">
+        <ol className={`Q-steps${cook ? ' Q-cook-steps' : ''}`}>
           {stepList.map((st, i) => {
             if (!st.text) return null
             if (st.header) return <li key={i} className="Q-step-h">{st.text}</li>
+            if (cook) {
+              return (
+                <li key={i} data-n={st.n} className={`${doneSteps.has(i) ? 'done' : ''}${i === nextStep ? ' next' : ''}`} onClick={() => cook.onToggleStep(i)}>
+                  {st.text}
+                </li>
+              )
+            }
             return <li key={i} data-n={st.n} className={highlightedSteps.has(i) ? 'highlighted' : ''}>{st.text}</li>
           })}
         </ol>
@@ -332,7 +368,10 @@ export default function RecipeView({
     if (b.collapsed.video) updateSettings({ blocks: { ...b, collapsed: { ...b.collapsed, video: false } } })
   }
 
-  const meta = [viewR.time, viewR.servings, viewR.source, ownerName && `by ${ownerName}`].filter(Boolean)
+  const meta = [
+    cook && (realSteps.length ? `${doneCount} of ${realSteps.length} steps done` : 'No method written'),
+    viewR.time, viewR.servings, viewR.source, ownerName && `by ${ownerName}`,
+  ].filter(Boolean)
   const hasNotes = parseTabs(recipe.notes_pad).some((t) => String(t.content || '').trim()) || parseMediaLibrary(recipe.media_library || '').length > 0
   const tabs = TABS.filter(([k]) => (k === 'notes' ? canEdit || hasNotes : k === 'ai' ? !guest : true))
   const vis = recipe.visibility || 'private'
@@ -361,12 +400,14 @@ export default function RecipeView({
         {recipe.thumbnail && <img src={recipe.thumbnail} className="Q-recipe-thumb" onClick={() => setLightboxSrc(recipe.thumbnail)} alt={recipe.title} />}
       </div>
 
+      {cook && realSteps.length > 0 && <div className="Q-meter"><i style={{ width: `${(doneCount / realSteps.length) * 100}%` }} /></div>}
+
       {appliedScale && (
         <div className="Q-banner">
-          <span>Scaled {appliedScale.label}</span>
+          <span>{cook ? `This session makes ${appliedScale.label}` : `Scaled ${appliedScale.label}`}</span>
           <span className="sp" />
           <button onClick={saveCurrentAsNew}>Save as new</button>
-          <button onClick={() => { setAppliedScale(null); setChecked(new Set()); setHighlightedSteps(new Set()) }}>Reset</button>
+          <button onClick={() => setAppliedScale(null)}>Reset</button>
         </div>
       )}
       {translated && (
@@ -433,6 +474,13 @@ export default function RecipeView({
                     {canEdit && <MenuItem checked={false} onClick={() => { setTab('recipe'); setAddingVideo(true); unfoldVideo() }}>Add video</MenuItem>}
                     <MenuItem checked={false} onClick={() => onCopy(recipe, null)}>{canEdit ? 'Duplicate' : 'Save a copy to my recipes'}</MenuItem>
                     <MenuItem checked={false} keepOpen hint={<ChevronRight size={14} />} onClick={() => setMenuView('copy')}>{canEdit ? 'Duplicate translated' : 'Save a translated copy'}</MenuItem>
+                  </>
+                )}
+                {cook && (
+                  <>
+                    <MenuSep />
+                    <MenuItem checked={false} onClick={cook.onOpenRecipe}>Show in recipe list</MenuItem>
+                    <MenuItem checked={false} onClick={cook.onRemove}>Remove from session</MenuItem>
                   </>
                 )}
                 {canEdit && (<><MenuSep /><MenuItem danger checked={false} onClick={onDelete}>Delete recipe</MenuItem></>)}

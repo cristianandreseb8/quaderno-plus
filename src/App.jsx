@@ -13,7 +13,7 @@ import GuestBrowser from './components/GuestBrowser.jsx'
 import Modal from './components/ui/Modal.jsx'
 import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
-import { addRecipe, buildShoppingList, removeRecipe, resetTicks, useSession } from './lib/session.js'
+import { addRecipe, buildShoppingList, clearProgress, removeRecipe, resetTicks, setFactor, toggleProgress, useSession } from './lib/session.js'
 import { numberSteps } from './lib/recipeCalc.js'
 import { INSTALL_HELP, useInstall } from './lib/install.js'
 
@@ -43,7 +43,6 @@ const AppAIChat = lazyRetry(() => import('./components/AppAIChat.jsx'))
 const SettingsModal = lazyRetry(() => import('./components/SettingsModal.jsx'))
 const PdfImport = lazyRetry(() => import('./components/PdfImport.jsx'))
 const ShoppingList = lazyRetry(() => import('./components/session/ShoppingList.jsx'))
-const CookView = lazyRetry(() => import('./components/session/CookView.jsx'))
 const RecipePicker = lazyRetry(() => import('./components/session/RecipePicker.jsx'))
 const ShareModal = lazyRetry(() => import('./components/ShareModal.jsx'))
 const isPhone = () => window.matchMedia('(max-width: 760px)').matches
@@ -534,6 +533,31 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   const cookEntry = view === 'session' && sessSel && sessSel !== 'shopping' ? sessionEntries.find((e) => e.id === sessSel) : null
   const cookRecipe = cookEntry ? recipesById.get(cookEntry.id) : null
 
+  // The session opens its recipes on the full recipe screen too, so load the complete row.
+  const cookLiteId = cookRecipe?._lite ? cookRecipe.id : null
+  useEffect(() => {
+    if (!cookLiteId) return undefined
+    let cancelled = false
+    dbLoadOne(cookLiteId)
+      .then((full) => { if (!cancelled) setRecipes((p) => p.map((x) => (x.id === full.id && x._lite ? full : x))) })
+      .catch((e) => { if (!cancelled) toast.error('Could not open the recipe: ' + e.message) })
+    return () => { cancelled = true }
+  }, [cookLiteId])
+
+  // What the recipe screen needs about a recipe, wherever it is opened (recipes or session).
+  const recipeProps = (r) => ({
+    recipe: r, onUpdate: updateRecipe, onDelete: () => deleteRecipe(r.id), allRecipes: recipes,
+    canEdit: isMine(r), ownerName: isMine(r) ? null : ownerName(r), onShare: () => setShareFor(r),
+    isFavorite: favorites.has(r.id), onToggleFavorite: () => toggleFavorite(r.id),
+    liked: collections.some((c) => c.name === LIKED_NAME && c.items.includes(r.id)), onToggleLike: () => toggleLike(r.id),
+    collections: collections.map((c) => ({ id: c.id, name: c.name, has: c.items.includes(r.id) })),
+    onToggleCollection: (id) => {
+      if (!id) { setNameModal({ kind: 'new', addRecipe: r.id }); return }
+      const col = collections.find((c) => c.id === id)
+      if (col) toggleInCollection(col, r.id)
+    },
+  })
+
   async function installApp() {
     if (install.canPrompt) {
       const ok = await install.prompt()
@@ -754,18 +778,8 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                     {mode === 'view' && sel && sel._lite && <div className="Q-view-loading"><div /><div /><div /></div>}
                     {mode === 'view' && sel && !sel._lite && (
                       <RecipeView
-                        key={sel.id} recipe={sel} onEdit={() => setMode('edit')} onDelete={() => deleteRecipe(sel.id)} onUpdate={updateRecipe}
-                        allRecipes={recipes} onCopy={copyRecipe} onSaveVariant={saveVariant}
+                        key={sel.id} {...recipeProps(sel)} onEdit={() => setMode('edit')} onCopy={copyRecipe} onSaveVariant={saveVariant}
                         inSession={sessionIds.has(sel.id)} onToggleSession={() => toggleFromRecipe(sel.id)}
-                        canEdit={isMine(sel)} ownerName={isMine(sel) ? null : ownerName(sel)} onShare={() => setShareFor(sel)}
-                        isFavorite={favorites.has(sel.id)} onToggleFavorite={() => toggleFavorite(sel.id)}
-                        liked={collections.some((c) => c.name === LIKED_NAME && c.items.includes(sel.id))} onToggleLike={() => toggleLike(sel.id)}
-                        collections={collections.map((c) => ({ id: c.id, name: c.name, has: c.items.includes(sel.id) }))}
-                        onToggleCollection={(id) => {
-                          if (!id) { setNameModal({ kind: 'new', addRecipe: sel.id }); return }
-                          const col = collections.find((c) => c.id === id)
-                          if (col) toggleInCollection(col, sel.id)
-                        }}
                       />
                     )}
                   </>
@@ -781,11 +795,23 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                       </div>
                     )
                 )}
-                {view === 'session' && cookRecipe && (
-                  <CookView
-                    key={cookRecipe.id} recipe={cookRecipe} entry={cookEntry} progress={session?.progress?.[cookRecipe.id]} change={changeSession}
-                    onOpenRecipe={() => openRecipe(cookRecipe.id)} onRemove={() => toggleInSession(cookRecipe.id, false)}
-                    onVideos={isMine(cookRecipe) ? (v) => updateRecipe({ ...cookRecipe, videos: v }) : null}
+                {view === 'session' && cookRecipe && cookRecipe._lite && <div className="Q-view-loading"><div /><div /><div /></div>}
+                {view === 'session' && cookRecipe && !cookRecipe._lite && (
+                  <RecipeView
+                    key={'cook-' + cookRecipe.id} {...recipeProps(cookRecipe)}
+                    onEdit={() => { switchView('recipes'); setSelId(cookRecipe.id); setMode('edit') }}
+                    onCopy={(r, lang) => { switchView('recipes'); copyRecipe(r, lang) }}
+                    onSaveVariant={(r, label) => { switchView('recipes'); saveVariant(r, label) }}
+                    cook={{
+                      factor: cookEntry.factor,
+                      progress: session?.progress?.[cookRecipe.id],
+                      onFactor: (f) => changeSession(setFactor(cookRecipe.id, f)),
+                      onToggleIng: (i) => changeSession(toggleProgress(cookRecipe.id, 'ing', i)),
+                      onToggleStep: (i) => changeSession(toggleProgress(cookRecipe.id, 'steps', i)),
+                      onClear: (kind) => changeSession(clearProgress(cookRecipe.id, kind)),
+                      onOpenRecipe: () => openRecipe(cookRecipe.id),
+                      onRemove: () => toggleInSession(cookRecipe.id, false),
+                    }}
                   />
                 )}
               </Suspense>

@@ -193,4 +193,7 @@ export const toggleProgress = (recipeId, kind, idx) => (s) => {
   const nextList = list.includes(idx) ? list.filter((i) => i !== idx) : [...list, idx]
   return { ...s, progress: { ...s.progress, [recipeId]: { ...cur, [kind]: nextList } } }
 }
+export const clearProgress = (recipeId, kind) => (s) => ({
+  ...s, progress: { ...s.progress, [recipeId]: { ...(s.progress[recipeId] || { ing: [], steps: [] }), [kind]: [] } },
+})
 export const resetTicks = () => (s) => ({ ...s, shopping: { ...s.shopping, have: {}, extra: s.shopping.extra.map((e) => ({ ...e, have: false })) }, progress: {} })

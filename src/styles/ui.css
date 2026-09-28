@@ -86,7 +86,7 @@
 .Q-set-label { font-size: 14px; font-weight: 600; }
 .Q-set-check { cursor: pointer; }
 .Q-set-foot { text-align: center; font-size: 12px; color: var(--faint); padding-top: 4px; }
-.Q-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 14px; }
+.Q-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 10px; }
 .Q-theme-card { background: var(--surface); border: 1.5px solid var(--rule); border-radius: 13px; padding: 7px; text-align: left; cursor: pointer; transition: border-color .12s, box-shadow .12s, transform .12s; }
 .Q-theme-card:hover { border-color: var(--rule-strong); transform: translateY(-1px); }
 .Q-theme-card.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -98,10 +98,7 @@
 .Q-theme-prev-main span { display: block; height: 4px; border-radius: 2px; opacity: .22; width: 85%; }
 .Q-theme-prev-main span + span { width: 60%; }
 .Q-theme-prev-main em { display: block; height: 9px; width: 42%; border-radius: 5px; margin-top: auto; }
-.font-serif b { font-family: "Iowan Old Style", Georgia, serif; font-weight: 600; }
-.font-didone b { font-family: Didot, "Bodoni 72", Georgia, serif; font-weight: 600; }
-.font-sans b { font-family: system-ui, sans-serif; font-weight: 650; }
-.font-sans-bold b { font-family: system-ui, sans-serif; font-weight: 800; }
+.Q-theme-group { margin: 18px 2px 0; font: 700 10.5px var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
 .Q-theme-name { font-size: 13.5px; font-weight: 700; margin: 9px 3px 1px; }
 .Q-theme-desc { font-size: 11.5px; color: var(--muted); margin: 0 3px 3px; line-height: 1.35; }
 
