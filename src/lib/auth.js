@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { supabase } from './supabase.js'
+import { storedSession, supabase } from './supabase.js'
 
-// Session + profile of the signed-in user. `loading` is true until Supabase has restored any
-// saved session, so the app never flashes the sign-in screen for someone already signed in.
+// Session + profile of the signed-in user. Someone signed in on this device gets the workspace
+// straight away from the saved session (Supabase refreshes the token meanwhile, and signs them
+// out if that fails); otherwise `loading` is true until Supabase has looked.
 export function useAuth() {
-  const [session, setSession] = useState(undefined)
+  const [session, setSession] = useState(() => storedSession() || undefined)
   const [profile, setProfile] = useState(null)
   const [recovering, setRecovering] = useState(false)
 
@@ -51,7 +52,11 @@ export async function signUp(name, email, password) {
   return !!data.session
 }
 
-export async function signOut() { await supabase.auth.signOut() }
+export async function signOut() {
+  // The recipe list kept on this device for a fast start goes with the account.
+  try { Object.keys(localStorage).filter((k) => k.startsWith('qdplus_list_')).forEach((k) => localStorage.removeItem(k)) } catch (_) { /* ignore */ }
+  await supabase.auth.signOut()
+}
 
 export async function sendPasswordReset(email) {
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: redirect() })

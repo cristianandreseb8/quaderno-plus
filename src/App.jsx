@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowUpDown, MoreHorizontal, Plus, Search, Star, X } from 'lucide-react'
-import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadByIds, dbLoadOne, dbLoadPublic } from './lib/db.js'
+import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadByIds, dbLoadOne, dbLoadPublic, dbLoadThumbs } from './lib/db.js'
+import { readList, writeList } from './lib/listCache.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { SettingsContext, applySettings, loadSettings, saveSettings, useSettings } from './lib/settings.js'
 import { setNewPassword, signOut, useAuth } from './lib/auth.js'
@@ -72,9 +73,16 @@ const SORTS = [
 ]
 
 function Workspace({ user, profile, setProfile, invite, openId }) {
-  const [recipes, setRecipes] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [selId, setSelId] = useState(null)
+  // Open with the list kept on this device, if any; the database refreshes it right after.
+  const [cached] = useState(() => readList(user.id))
+  const [recipes, setRecipes] = useState(() => cached?.recipes || [])
+  const [loading, setLoading] = useState(!cached)
+  const [fresh, setFresh] = useState(false) // the database's list has arrived
+  const [selId, setSelId] = useState(() => {
+    if (!cached || openId || invite || isPhone()) return null
+    const lastId = localStorage.getItem('qdplus_last_recipe')
+    return lastId && cached.recipes.some((r) => r.id === lastId) ? lastId : cached.recipes[0]?.id || null
+  })
   const [mode, setMode] = useState('view')
   const [editorStart, setEditorStart] = useState('blank')
   const [q, setQ] = useState('')
@@ -91,8 +99,8 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   const { settings, update: updateSettings } = useSettings()
   const uid = user.id
   const [scope, setScope] = useState(() => localStorage.getItem('qdplus_scope') || 'library') // see SCOPES
-  const [collections, setCollections] = useState([]) // [{ id, name, items: [recipe ids, newest first] }]
-  const [favorites, setFavorites] = useState(() => new Set())
+  const [collections, setCollections] = useState(() => cached?.collections || []) // [{ id, name, items: [recipe ids, newest first] }]
+  const [favorites, setFavorites] = useState(() => cached?.favorites || new Set())
   const [publicLoading, setPublicLoading] = useState(false)
   const [nameModal, setNameModal] = useState(null) // { kind: 'new' | 'rename', id?, name?, addRecipe?, open? }
   const recipesRef = useRef(recipes)
@@ -131,16 +139,42 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
       const extra = [...new Set([...cols.flatMap((c) => c.items), ...favs, ...(target ? [target] : [])])].filter((id) => !have.has(id))
       extra.forEach((id) => requestedRef.current.add(id))
       const all = extra.length ? [...data, ...(await dbLoadByIds(extra).catch(() => []))] : data
-      setRecipes(all)
+      setRecipes((prev) => {
+        // Over the list shown from this device: keep a recipe already opened (unless it changed
+        // since), the thumbnails already shown, and other people's public recipes being browsed.
+        const old = new Map(prev.map((r) => [r.id, r]))
+        const next = all.map((r) => {
+          const o = old.get(r.id)
+          if (o && !o._lite && o.updated_at === r.updated_at) return o
+          return o?.thumbnail && !r.thumbnail ? { ...r, thumbnail: o.thumbnail } : r
+        })
+        const ids = new Set(next.map((r) => r.id))
+        return [...next, ...prev.filter((r) => !ids.has(r.id) && r.owner_id !== uid && r.visibility === 'public')]
+      })
+      setFresh(true)
       if (target && all.some((r) => r.id === target)) { setSelId(target); return }
+      // On phones the list is the home screen; only auto-open a recipe on wide screens.
       const lastId = localStorage.getItem('qdplus_last_recipe')
       const restored = lastId && data.some((r) => r.id === lastId) ? lastId : data[0]?.id || null
-      // On phones the list is the home screen; only auto-open a recipe on wide screens.
-      setSelId(window.matchMedia('(max-width: 760px)').matches ? null : restored)
+      setSelId((cur) => (cur && all.some((r) => r.id === cur) ? cur : isPhone() ? null : restored))
+      // Then the photo thumbnails, which are most of the list's size.
+      dbLoadThumbs(uid)
+        .then((thumbs) => setRecipes((p) => p.map((r) => (thumbs[r.id] && r.thumbnail !== thumbs[r.id] ? { ...r, thumbnail: thumbs[r.id] } : r))))
+        .catch(() => { /* the list works without them */ })
     })()
-      .catch((e) => toast.error('Could not load recipes: ' + e.message))
+      .catch((e) => toast.error(cached ? 'Showing the recipes saved on this device — could not refresh them: ' + e.message : 'Could not load recipes: ' + e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  // Keep the list on this device for the next start (a moment after changes settle).
+  useEffect(() => {
+    if (!fresh) return undefined
+    const t = setTimeout(() => {
+      const kept = new Set([...favorites, ...collections.flatMap((c) => c.items)])
+      writeList(uid, recipes.filter((r) => r.owner_id === uid || r.visibility === 'shared' || kept.has(r.id)), favorites, collections)
+    }, 1500)
+    return () => clearTimeout(t)
+  }, [fresh, recipes, favorites, collections])
 
   useEffect(() => {
     if (mode === 'view' && selId) localStorage.setItem('qdplus_last_recipe', selId)
@@ -166,8 +200,8 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   }, [scope, q, loading])
 
   useEffect(() => {
-    if (!loading && scope.startsWith('col:') && !collections.some((c) => 'col:' + c.id === scope)) pickScope('library')
-  }, [loading, scope, collections])
+    if (fresh && scope.startsWith('col:') && !collections.some((c) => 'col:' + c.id === scope)) pickScope('library')
+  }, [fresh, scope, collections])
 
   // Shortcuts from the installed app's icon menu: /?new=blank|pdf, /?view=session
   useEffect(() => {

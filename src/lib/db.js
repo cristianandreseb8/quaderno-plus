@@ -3,12 +3,16 @@ import { supabase } from './supabase.js'
 // The list only needs light columns. The heavy ones — original source photos and the media
 // library (audio/video/images as data URLs) — are ~14 MB across the library and made the
 // full select brush against the statement timeout, so they load per recipe on open.
+// The library list also leaves out the photo thumbnails (loaded right after it, see
+// dbLoadThumbs) and the old R&D data, which only the full recipe needs.
 const HEAVY = ['source_photos', 'media_library']
-const LITE_COLUMNS = [
+const LIST_COLUMNS = [
   'id', 'created_at', 'updated_at', 'title', 'category', 'time_estimate', 'servings', 'notes', 'source',
-  'ingredients', 'steps', 'notes_pad', 'thumbnail', 'id_data', 'fixed_lang', 'copied_from', 'is_favorite', 'videos',
+  'ingredients', 'steps', 'notes_pad', 'fixed_lang', 'copied_from', 'is_favorite', 'videos',
   'owner_id', 'visibility',
 ].join(',')
+// Short lists (public recipes, a collection's) come with their thumbnails.
+const LITE_COLUMNS = `${LIST_COLUMNS},thumbnail`
 // Display name of whoever owns the recipe (shown on shared and public recipes).
 const OWNER = 'owner:profiles!recipes_owner_profile_fk(display_name)'
 
@@ -24,18 +28,18 @@ function toDb(r) {
     ingredients: r.ingredients || [],
     steps: r.steps || [],
     notes_pad: r.notes_pad || '',
-    thumbnail: r.thumbnail || '',
-    id_data: r.id_data || '',
     fixed_lang: r.fixed_lang || null,
     copied_from: r.copied_from || null,
     is_favorite: r.is_favorite || false,
     videos: Array.isArray(r.videos) ? r.videos : [],
   }
-  // Never write heavy columns for a list-only ("lite") row: their value was never loaded,
-  // and writing the default would wipe the saved photos and media.
+  // Never write heavy columns for a list-only ("lite") row: their value was never loaded (or
+  // only partly), and writing the default would wipe the saved photos, media and R&D data.
   if (!r._lite) {
     row.source_photos = r.source_photos || []
     row.media_library = r.media_library || ''
+    row.thumbnail = r.thumbnail || ''
+    row.id_data = r.id_data || ''
   }
   return row
 }
@@ -53,6 +57,7 @@ function fromDb(r, lite = false) {
     videos: Array.isArray(r.videos) ? r.videos : [],
   }
   if (lite) {
+    delete rec.id_data
     rec._lite = true
     HEAVY.forEach((k) => { delete rec[k] })
   } else {
@@ -76,9 +81,16 @@ async function withRetry(fn) {
 // The library: your own recipes and the ones shared with you. Other people's public recipes
 // are not part of it — they load on demand (dbLoadPublic) or when kept in a collection.
 export async function dbLoad(uid) {
-  const data = await withRetry(() => supabase.from('recipes').select(`${LITE_COLUMNS},${OWNER}`)
+  const data = await withRetry(() => supabase.from('recipes').select(`${LIST_COLUMNS},${OWNER}`)
     .or(`owner_id.eq.${uid},visibility.eq.shared`).order('created_at', { ascending: false }))
   return (data || []).map((r) => fromDb(r, true))
+}
+
+// The library's photo thumbnails, once the list is already on screen: { id: thumbnail }.
+export async function dbLoadThumbs(uid) {
+  const data = await withRetry(() => supabase.from('recipes').select('id,thumbnail')
+    .or(`owner_id.eq.${uid},visibility.eq.shared`).neq('thumbnail', ''))
+  return Object.fromEntries((data || []).filter((r) => r.thumbnail).map((r) => [r.id, r.thumbnail]))
 }
 
 // Specific recipes (kept in a collection, starred, in the session), in batches.
