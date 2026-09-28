@@ -1,5 +1,6 @@
 import Modal from './ui/Modal.jsx'
 import { THEMES, TEXT_SIZES, loadThemeFonts, useSettings } from '../lib/settings.js'
+import { setVoiceCfg, speak, useTimers, voiceLang } from '../lib/timers.js'
 import { LANGS } from '../lib/constants.js'
 import { INSTALL_HELP, useInstall } from '../lib/install.js'
 import { saveDisplayName, signOut } from '../lib/auth.js'
@@ -24,6 +25,42 @@ function ThemeCard({ theme, active, onPick }) {
       <div className="Q-theme-name">{theme.name}</div>
       <div className="Q-theme-desc">{theme.desc}</div>
     </button>
+  )
+}
+
+// How fast chef mode and the timers speak (kept with the rest of the voice choices, per device).
+const SAMPLE = {
+  es: 'Paso 2. Dejar fermentar 4.5–6 h a 28 °C.',
+  it: 'Passo 2. Lasciar lievitare 4.5–6 h a 28 °C.',
+  fr: 'Étape 2. Laisser pousser 4.5–6 h à 28 °C.',
+  de: 'Schritt 2. 4.5–6 h bei 28 °C gehen lassen.',
+  en: 'Step 2. Let it rise 4.5–6 h at 28 °C.',
+}
+function VoiceSettings() {
+  const { voiceCfg } = useTimers()
+  const rate = voiceCfg.rate || 0.85
+  const word = rate < 0.75 ? 'Very slow' : rate < 0.9 ? 'Slow' : rate <= 1.05 ? 'Normal' : rate <= 1.2 ? 'Fast' : 'Very fast'
+  const test = () => { const lang = voiceLang(null); speak(SAMPLE[lang.slice(0, 2)] || SAMPLE.en, lang, { interrupt: true }) }
+  return (
+    <section className="Q-set-sec">
+      <h3>Voice</h3>
+      <div className="Q-set-row">
+        <div>
+          <div className="Q-set-label">Speed</div>
+          <div className="Q-set-help">How fast chef mode reads the steps and timers say their name.</div>
+        </div>
+        <button type="button" className="btn ghost sm" onClick={test}>Test</button>
+      </div>
+      <div className="Q-voice-rate">
+        <span>Slower</span>
+        <input
+          type="range" min="0.6" max="1.3" step="0.05" value={rate} aria-label="Voice speed"
+          onChange={(e) => setVoiceCfg({ rate: +e.target.value })} onPointerUp={test} onKeyUp={test}
+        />
+        <span>Faster</span>
+        <b>{word}</b>
+      </div>
+    </section>
   )
 }
 
@@ -107,6 +144,8 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
           </div>
         </div>
       </section>
+
+      <VoiceSettings />
 
       <section className="Q-set-sec">
         <h3>Recipes</h3>

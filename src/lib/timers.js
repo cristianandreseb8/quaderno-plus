@@ -28,7 +28,8 @@ let timers = load()
 let dockOpen = false
 let big = false
 let voiceOn = (() => { try { return localStorage.getItem(VOICE_KEY) !== 'off' } catch (_) { return true } })()
-let voiceCfg = (() => { try { return { lang: 'device', voiceURI: '', ...JSON.parse(localStorage.getItem(VOICE_CFG_KEY) || '{}') } } catch (_) { return { lang: 'device', voiceURI: '' } } })()
+const DEFAULT_RATE = 0.85 // a little slower than normal speech: easier to follow while working
+let voiceCfg = (() => { try { return { lang: 'device', voiceURI: '', rate: DEFAULT_RATE, ...JSON.parse(localStorage.getItem(VOICE_CFG_KEY) || '{}') } } catch (_) { return { lang: 'device', voiceURI: '', rate: DEFAULT_RATE } } })()
 let voicesVersion = 0 // bumps when the device's voice list arrives (it loads late in some browsers)
 let now = Date.now()
 let snapshot = { timers, now, dockOpen, big, voiceOn, voiceCfg, voicesVersion }
@@ -161,8 +162,9 @@ function pickVoice(lang) {
   const best = voicesFor(lang).find((x) => x.q !== 'novelty')
   return best ? best.v : null
 }
-// Everything is said slightly slow, with symbols in words ("12 h" → "12 hours", "30°" → "30 degrees Celsius").
-function speakText(text, lang, rate = 0.9) {
+// Everything is said at the chosen speed (Settings → Voice), with symbols in words
+// ("12 h" → "12 hours", "30°" → "30 degrees Celsius").
+function speakText(text, lang, rate = voiceCfg.rate || DEFAULT_RATE) {
   if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return
   try {
     const u = new SpeechSynthesisUtterance(forSpeech(text, lang))

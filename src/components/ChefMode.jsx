@@ -14,7 +14,6 @@ const PHRASES = {
   de: { step: 'Schritt', next: 'Nächster Schritt', done: 'Rezept fertig' },
 }
 const VOICE_KEY = 'qdplus_chef_voice'
-const CHEF_RATE = 0.82 // steps are read calmly, to be followed while working
 // A timer belongs to a step if its key is the step's, or the step's plus a duration.
 const ofStep = (key, tkey) => key === tkey || String(key || '').startsWith(`${tkey}:`)
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
@@ -38,9 +37,9 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
   function sayStep(p, force = false) {
     if (!(voiceOn || force)) return
     const s = steps[p]
-    if (!s) { speak(P.done, lang, { interrupt: true, rate: CHEF_RATE }); return }
+    if (!s) { speak(P.done, lang, { interrupt: true }); return }
     const newPart = s.part && (p === 0 || steps[p - 1]?.part !== s.part)
-    speak(`${P.step} ${s.n}. ${newPart ? `${s.part}. ` : ''}${s.text}`, lang, { interrupt: true, rate: CHEF_RATE })
+    speak(`${P.step} ${s.n}. ${newPart ? `${s.part}. ` : ''}${s.text}`, lang, { interrupt: true })
   }
   useEffect(() => { sayStep(pos) }, [pos, voiceOn])
   useEffect(() => () => stopSpeaking(), [])
