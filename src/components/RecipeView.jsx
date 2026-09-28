@@ -340,10 +340,18 @@ export default function RecipeView({
       tkey: `${recipe.id}:step:${i}`,
     }
   }
-  const stepTimers = (st, i) => {
+  // A step's written times become chips in its text; a step without one gets a small timer
+  // beside it (on a touch screen it opens the step's options, like holding the step down).
+  const touch = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
+  const stepBody = (st, i) => {
     const { label, name, durs, tkey } = stepInfo(st, i)
-    if (!durs.length) return <TimerMenu className="hover-only" tkey={tkey} label={label} name={name} {...timerBase} />
-    return durs.map((d) => <TimerChip key={d.ms} tkey={`${tkey}:${d.ms}`} label={label} name={name} ms={d.ms} text={d.label} {...timerBase} />)
+    if (durs.length) return <span className="Q-step-text">{st.text}{durs.map((d) => <TimerChip key={d.ms} tkey={`${tkey}:${d.ms}`} label={label} name={name} ms={d.ms} text={d.label} {...timerBase} />)}</span>
+    return (
+      <>
+        <span className="Q-step-text">{st.text}</span>
+        <TimerMenu className="side" tkey={tkey} label={label} name={name} onSheet={touch ? () => setStepSheet({ i }) : null} {...timerBase} />
+      </>
+    )
   }
   // Hold a step (or part) down on a phone — or right-click it — for its options, a timer first.
   const holdToOpen = (i) => ({
@@ -382,12 +390,12 @@ export default function RecipeView({
             if (st.header) return <li key={i} className="Q-step-h" {...holdToOpen(i)}>{st.text}<TimerMenu tkey={`${recipe.id}:part:${i}`} label={st.text} name={cleanName(st.text) || st.text} {...timerBase} /></li>
             if (cook) {
               return (
-                <li key={i} data-n={st.n} className={`${doneSteps.has(i) ? 'done' : ''}${i === nextStep ? ' next' : ''}`} onClick={() => cook.onToggleStep(i)} {...holdToOpen(i)}>
-                  {st.text}{stepTimers(st, i)}
+                <li key={i} data-n={st.n} className={`Q-step${doneSteps.has(i) ? ' done' : ''}${i === nextStep ? ' next' : ''}`} onClick={() => cook.onToggleStep(i)} {...holdToOpen(i)}>
+                  {stepBody(st, i)}
                 </li>
               )
             }
-            return <li key={i} data-n={st.n} className={highlightedSteps.has(i) ? 'highlighted' : ''} {...holdToOpen(i)}>{st.text}{stepTimers(st, i)}</li>
+            return <li key={i} data-n={st.n} className={`Q-step${highlightedSteps.has(i) ? ' highlighted' : ''}`} {...holdToOpen(i)}>{stepBody(st, i)}</li>
           })}
         </ol>
       ),

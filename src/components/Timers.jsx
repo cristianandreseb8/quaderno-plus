@@ -205,7 +205,8 @@ export function TimerPresets({ label, name, lang, recipeId, recipeTitle, tkey = 
   return <Presets onPick={(duration) => startTimer({ key: tkey, label: label || name || fmtDuration(duration), name, lang, recipeId, recipeTitle, duration })} />
 }
 
-export function TimerMenu({ label, name, lang, recipeId, recipeTitle, tkey, className = '' }) {
+// `onSheet`: on a touch screen, open the step's options sheet instead of a small menu.
+export function TimerMenu({ label, name, lang, recipeId, recipeTitle, tkey, className = '', onSheet = null }) {
   const { timers, now } = useTimers()
   const t = tkey && timers.find((x) => x.key === tkey && x.state !== 'idle')
   return (
@@ -213,7 +214,9 @@ export function TimerMenu({ label, name, lang, recipeId, recipeTitle, tkey, clas
     <span className={`Q-tmenu-wrap ${className}`} onClick={(e) => e.stopPropagation()}>
       {t && t.state !== 'done'
         ? <button type="button" className={`Q-tchip ${t.state}${t.ringing ? ' ringing' : ''}`} onClick={() => setDockOpen(true)}><TimerIcon size={12} />{fmtClock(remaining(t, now))}</button>
-        : (
+        : onSheet
+          ? <button type="button" className="Q-step-tbtn" onClick={onSheet} title={`Timer: ${name || label}`} aria-label={`Timer for ${name || label}`}><TimerIcon size={14} /></button>
+          : (
           <Menu
             width={236} align="start"
             trigger={(p) => <button type="button" className="Q-step-tbtn" onClick={p.toggle} title={`Timer: ${label}`} aria-label={`Timer for ${label}`}><TimerIcon size={13} /></button>}
@@ -221,7 +224,7 @@ export function TimerMenu({ label, name, lang, recipeId, recipeTitle, tkey, clas
             <div className="Q-menu-label">Timer · {name || label}</div>
             <TimerPresets label={label} name={name} lang={lang} recipeId={recipeId} recipeTitle={recipeTitle} tkey={tkey} />
           </Menu>
-        )}
+          )}
     </span>
   )
 }

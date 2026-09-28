@@ -87,9 +87,13 @@
 .Q-tmenu-wrap { display: inline-flex; vertical-align: middle; }
 .Q-step-tbtn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 6px; padding: 0; border: none; border-radius: 6px; background: none; color: var(--faint); cursor: pointer; }
 .Q-step-tbtn:hover { background: var(--hover); color: var(--accent); }
-.Q-steps li:not(.Q-step-h) .Q-tmenu-wrap.hover-only { opacity: 0; transition: opacity .12s; }
-.Q-steps li:hover .Q-tmenu-wrap.hover-only, .Q-steps li .Q-tmenu-wrap.hover-only:focus-within { opacity: 1; }
-@media (hover: none) { .Q-steps li .Q-tmenu-wrap.hover-only { display: none; } }
+/* Steps: the text, and beside it a small timer that is always there (faint until pointed at). */
+.Q-steps li.Q-step { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; align-items: start; }
+.Q-tmenu-wrap.side { margin-top: -.05em; }
+.Q-tmenu-wrap.side .Q-step-tbtn { margin-left: 0; width: 28px; height: 26px; color: var(--faint); opacity: .7; }
+.Q-steps li:hover .Q-tmenu-wrap.side .Q-step-tbtn { opacity: 1; }
+.Q-tmenu-wrap.side .Q-step-tbtn:hover { color: var(--accent); }
+.Q-tmenu-wrap.side .Q-tchip { margin-left: 0; }
 .Q-tmenu { padding: 4px 6px 6px; }
 .Q-tmenu-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
 .Q-tmenu form { display: flex; gap: 6px; }
