@@ -1,5 +1,5 @@
 @media (max-width: 1020px) {
-  .Q-body { grid-template-columns: 264px minmax(0, 1fr); }
+  .Q-body { --side-w: 264px; }
   .Q-pane { padding: 24px 26px 110px; }
 }
 @media (max-width: 760px) {

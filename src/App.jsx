@@ -564,12 +564,6 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
     <>
       <div className="Q" data-open={isOpen ? '1' : '0'} data-side={sidebarOpen ? '1' : '0'}>
         <header className="Q-top">
-          <button
-            className="Q-hbtn icon Q-side-toggle" onClick={() => toggleSidebarRef.current()}
-            title={sidebarOpen ? 'Hide the recipe list (⌘\\)' : 'Show the recipe list (⌘\\)'} aria-label={sidebarOpen ? 'Hide the recipe list' : 'Show the recipe list'}
-          >
-            {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-          </button>
           <div className="Q-brand">Quaderno<b>+</b></div>
           {importStatus && (
             <button className="Q-import-pill" onClick={() => setImportOpen(true)} title="Show PDF import">
@@ -602,6 +596,13 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
         </header>
 
         <div className="Q-body">
+          {/* Sits on the line between the list and the recipe (or on the left edge when the list is hidden). */}
+          <button
+            className="Q-side-toggle" onClick={() => toggleSidebarRef.current()}
+            title={sidebarOpen ? 'Hide the recipe list (⌘\\)' : 'Show the recipe list (⌘\\)'} aria-label={sidebarOpen ? 'Hide the recipe list' : 'Show the recipe list'}
+          >
+            {sidebarOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
+          </button>
           <aside className="Q-side">
             <div className="Q-side-switch" role="tablist">
               <button role="tab" aria-selected={view === 'recipes'} className={view === 'recipes' ? 'on' : ''} onClick={() => switchView('recipes')}>Recipes</button>
