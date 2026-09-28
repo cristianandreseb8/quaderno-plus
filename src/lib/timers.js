@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { forSpeech } from './speechText.js'
 
 // Kitchen timers, shared by the whole app: one general timer or many at once — per recipe
 // (each preparation in a session), per part of a method, per step. They live on this device
@@ -160,14 +161,15 @@ function pickVoice(lang) {
   const best = voicesFor(lang).find((x) => x.q !== 'novelty')
   return best ? best.v : null
 }
-function speakText(text, lang) {
+// Everything is said slightly slow, with symbols in words ("12 h" → "12 hours", "30°" → "30 degrees Celsius").
+function speakText(text, lang, rate = 0.9) {
   if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return
   try {
-    const u = new SpeechSynthesisUtterance(text)
+    const u = new SpeechSynthesisUtterance(forSpeech(text, lang))
     u.lang = lang
     const v = pickVoice(lang)
     if (v) u.voice = v
-    u.rate = 1
+    u.rate = rate
     window.speechSynthesis.speak(u)
   } catch (_) { /* no voice on this device */ }
 }
@@ -254,10 +256,10 @@ export function sayName(id) {
   if (t) { window.speechSynthesis?.cancel?.(); speakText(spoken(t), voiceLang(t)) }
 }
 // Say any text (chef mode reads the steps) — in the given language, with the best voice for it.
-export function speak(text, lang, { interrupt = false } = {}) {
+export function speak(text, lang, { interrupt = false, rate } = {}) {
   if (interrupt) window.speechSynthesis?.cancel?.()
   unlockVoice()
-  speakText(text, lang)
+  speakText(text, lang, rate)
 }
 export const stopSpeaking = () => window.speechSynthesis?.cancel?.()
 
