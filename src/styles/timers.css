@@ -27,12 +27,17 @@
 .Q-timer { padding: 10px 8px 8px; border-radius: 12px; }
 .Q-timer + .Q-timer { border-top: 1px solid var(--rule); border-radius: 0; }
 .Q-timer-main { display: flex; align-items: baseline; gap: 10px; }
-.Q-timer-label { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-timer-text { flex: 1; min-width: 0; }
+.Q-timer-name { display: block; max-width: 100%; padding: 0; border: none; background: none; color: var(--ink); font: 600 14.5px var(--sans); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
+.Q-timer-name:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+.Q-timer-rename { width: 100%; height: 26px; padding: 0 6px; border: 1px solid var(--accent); border-radius: 6px; background: var(--bg); font: 600 14px var(--sans); }
+.Q-timer-label { min-width: 0; margin-top: 1px; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-timers-head .Q-icon-btn.off { color: var(--faint); }
 .Q-timer-clock { font: 600 22px var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 .Q-timer.paused .Q-timer-clock, .Q-timer.idle .Q-timer-clock { color: var(--faint); }
 .Q-timer.done .Q-timer-clock { font-size: 15px; color: var(--green); }
 .Q-timer.ringing { animation: qring 1s steps(1) infinite; border-radius: 12px; }
-.Q-timer.ringing .Q-timer-clock, .Q-timer.ringing .Q-timer-label { color: inherit; }
+.Q-timer.ringing .Q-timer-clock, .Q-timer.ringing .Q-timer-label, .Q-timer.ringing .Q-timer-name { color: inherit; }
 .Q-timer-bar { height: 3px; margin: 6px 0 4px; border-radius: 2px; background: var(--rule); overflow: hidden; }
 .Q-timer-bar i { display: block; height: 100%; background: var(--accent); transition: width .3s linear; }
 .Q-timer-actions { display: flex; align-items: center; gap: 2px; }
@@ -58,7 +63,8 @@
 .Q-timers.big .Q-timers-gh { grid-column: 1 / -1; padding: 10px 4px 0; font-size: 12px; }
 .Q-timers.big .Q-timer { border: 1px solid var(--rule); border-radius: 16px; padding: 18px 18px 12px; background: var(--bg); }
 .Q-timers.big .Q-timer-main { flex-direction: column; align-items: flex-start; gap: 2px; }
-.Q-timers.big .Q-timer-label { font-size: 15px; }
+.Q-timers.big .Q-timer-name { font-size: clamp(18px, 2.4vw, 24px); }
+.Q-timers.big .Q-timer-label { font-size: 13px; }
 .Q-timers.big .Q-timer-clock { font-size: clamp(44px, 7vw, 76px); line-height: 1.05; }
 .Q-timers.big .Q-timer.done .Q-timer-clock { font-size: clamp(28px, 4vw, 40px); }
 .Q-timers.big .Q-timers-new { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; }

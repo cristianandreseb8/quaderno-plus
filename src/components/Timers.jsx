@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Maximize2, Minimize2, Pause, Play, RotateCcw, Timer as TimerIcon, X } from 'lucide-react'
+import { Maximize2, Minimize2, Pause, Play, RotateCcw, Timer as TimerIcon, Volume2, VolumeX, X } from 'lucide-react'
 import Menu, { useMenuClose } from './ui/Menu.jsx'
 import {
-  addTime, clearFinished, fmtClock, pauseTimer, remaining, removeTimer, resetTimer, restartTimer, resumeTimer,
-  setBig, setDockOpen, startTimer, stopRinging, useTimers,
+  addTime, clearFinished, fmtClock, pauseTimer, remaining, removeTimer, renameTimer, resetTimer, restartTimer, resumeTimer,
+  sayName, setBig, setDockOpen, setVoiceOn, startTimer, stopRinging, useTimers,
 } from '../lib/timers.js'
 import { fmtDuration, parseDurationInput } from '../lib/durations.js'
 
@@ -13,7 +13,8 @@ const presetLabel = (min) => (min < 60 ? `${min} min` : `${+(min / 60).toFixed(1
 export function TimersButton() {
   const { timers, now, dockOpen } = useTimers()
   const running = timers.filter((t) => t.state === 'running')
-  const ringing = timers.some((t) => t.ringing)
+  const ringingTimer = timers.find((t) => t.ringing)
+  const ringing = !!ringingTimer
   const soonest = running.reduce((a, t) => (!a || t.endsAt < a.endsAt ? t : a), null)
   return (
     <button
@@ -21,7 +22,7 @@ export function TimersButton() {
       onClick={() => setDockOpen(!dockOpen)} title="Timers" aria-label="Timers"
     >
       <TimerIcon size={17} />
-      {ringing ? <span className="t">Time's up</span> : soonest && <span className="t">{fmtClock(remaining(soonest, now))}</span>}
+      {ringing ? <span className="t">{ringingTimer.name || 'Time’s up'}</span> : soonest && <span className="t">{fmtClock(remaining(soonest, now))}</span>}
       {running.length > 1 && <span className="n">{running.length}</span>}
     </button>
   )
@@ -29,7 +30,7 @@ export function TimersButton() {
 
 // ── The timers panel (and, enlarged, the kitchen "timer mode") ──
 export function TimerDock() {
-  const { timers, now, dockOpen, big } = useTimers()
+  const { timers, now, dockOpen, big, voiceOn } = useTimers()
   const [amount, setAmount] = useState('')
   const [name, setName] = useState('')
   if (!dockOpen) return null
@@ -45,7 +46,7 @@ export function TimerDock() {
   groups.sort((a, b) => (a.title ? 1 : 0) - (b.title ? 1 : 0))
   const ms = parseDurationInput(amount)
   function start(duration) {
-    startTimer({ label: name.trim() || fmtDuration(duration), duration })
+    startTimer({ name: name.trim(), label: name.trim() || fmtDuration(duration), lang: navigator.language || '', duration })
     setName(''); setAmount('')
   }
 
@@ -55,6 +56,12 @@ export function TimerDock() {
         <b>Timers</b>
         <span className="sp" />
         {timers.some((t) => t.state === 'done' && !t.ringing) && <button className="Q-link" onClick={clearFinished}>Clear finished</button>}
+        <button
+          className={`Q-icon-btn${voiceOn ? '' : ' off'}`} onClick={() => setVoiceOn(!voiceOn)}
+          title={voiceOn ? 'Voice on: a timer says its name when it ends' : 'Voice off'} aria-label={voiceOn ? 'Turn the voice off' : 'Turn the voice on'} aria-pressed={voiceOn}
+        >
+          {voiceOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
+        </button>
         <button className="Q-icon-btn" onClick={() => setBig(!big)} title={big ? 'Back to the small panel' : 'Timer mode: big, for the kitchen'} aria-label={big ? 'Smaller' : 'Timer mode'}>
           {big ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
@@ -84,12 +91,20 @@ export function TimerDock() {
 }
 
 function TimerRow({ t, now }) {
+  const [editing, setEditing] = useState(false)
   const left = remaining(t, now)
   const pct = t.duration ? Math.min(100, (1 - left / t.duration) * 100) : 100
+  const context = t.name && t.label !== t.name ? t.label : ''
+  const save = (v) => { renameTimer(t.id, v); setEditing(false) }
   return (
     <div className={`Q-timer ${t.state}${t.ringing ? ' ringing' : ''}`}>
       <div className="Q-timer-main">
-        <div className="Q-timer-label" title={t.label}>{t.label}</div>
+        <div className="Q-timer-text">
+          {editing
+            ? <input className="Q-timer-rename" autoFocus defaultValue={t.name || t.label} onBlur={(e) => save(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save(e.target.value); if (e.key === 'Escape') setEditing(false) }} aria-label="What the timer says" />
+            : <button type="button" className="Q-timer-name" onClick={() => setEditing(true)} title="Tap to change what the timer says">{t.name || t.label}</button>}
+          {context && <div className="Q-timer-label" title={context}>{context}</div>}
+        </div>
         <div className="Q-timer-clock">{t.state === 'done' ? (t.ringing ? 'Time’s up' : 'Done') : fmtClock(left)}</div>
       </div>
       <div className="Q-timer-bar"><i style={{ width: `${pct}%` }} /></div>
@@ -101,6 +116,7 @@ function TimerRow({ t, now }) {
         <button onClick={() => addTime(t.id, 60000)} title="Add a minute">+1 min</button>
         {(t.state === 'running' || t.state === 'paused') && <button onClick={() => resetTimer(t.id)} title="Reset" aria-label="Reset"><RotateCcw size={14} /></button>}
         <span className="sp" />
+        <button onClick={() => sayName(t.id)} title={`Hear it: “${t.name || t.label}”`} aria-label="Hear what it says"><Volume2 size={14} /></button>
         <button onClick={() => removeTimer(t.id)} title="Remove" aria-label="Remove"><X size={15} /></button>
       </div>
     </div>
@@ -108,14 +124,14 @@ function TimerRow({ t, now }) {
 }
 
 // ── A time written in a step ("40 min"): tap to start it; while it runs it counts down ──
-export function TimerChip({ tkey, label, recipeId, recipeTitle, ms, text }) {
+export function TimerChip({ tkey, label, name, lang, recipeId, recipeTitle, ms, text }) {
   const { timers, now } = useTimers()
   const t = timers.find((x) => x.key === tkey)
   const live = t && t.state !== 'idle'
   function onClick(e) {
     e.stopPropagation()
     if (t?.ringing) { stopRinging(t.id); return }
-    if (!live || t.state === 'done') startTimer({ key: tkey, label, recipeId, recipeTitle, duration: ms })
+    if (!live || t.state === 'done') startTimer({ key: tkey, label, name, lang, recipeId, recipeTitle, duration: ms })
     else setDockOpen(true)
   }
   const title = !live ? `Start a ${text} timer` : t.state === 'done' ? 'Start it again' : 'Show timers'
@@ -146,11 +162,11 @@ function Presets({ onPick }) {
   )
 }
 
-export function TimerPresets({ label, recipeId, recipeTitle, tkey = null }) {
-  return <Presets onPick={(duration) => startTimer({ key: tkey, label: label || fmtDuration(duration), recipeId, recipeTitle, duration })} />
+export function TimerPresets({ label, name, lang, recipeId, recipeTitle, tkey = null }) {
+  return <Presets onPick={(duration) => startTimer({ key: tkey, label: label || name || fmtDuration(duration), name, lang, recipeId, recipeTitle, duration })} />
 }
 
-export function TimerMenu({ label, recipeId, recipeTitle, tkey, className = '' }) {
+export function TimerMenu({ label, name, lang, recipeId, recipeTitle, tkey, className = '' }) {
   const { timers, now } = useTimers()
   const t = tkey && timers.find((x) => x.key === tkey && x.state !== 'idle')
   return (
@@ -163,8 +179,8 @@ export function TimerMenu({ label, recipeId, recipeTitle, tkey, className = '' }
             width={236} align="start"
             trigger={(p) => <button type="button" className="Q-step-tbtn" onClick={p.toggle} title={`Timer: ${label}`} aria-label={`Timer for ${label}`}><TimerIcon size={13} /></button>}
           >
-            <div className="Q-menu-label">Timer · {label}</div>
-            <TimerPresets label={label} recipeId={recipeId} recipeTitle={recipeTitle} tkey={tkey} />
+            <div className="Q-menu-label">Timer · {name || label}</div>
+            <TimerPresets label={label} name={name} lang={lang} recipeId={recipeId} recipeTitle={recipeTitle} tkey={tkey} />
           </Menu>
         )}
     </span>

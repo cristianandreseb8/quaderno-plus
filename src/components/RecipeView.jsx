@@ -17,6 +17,7 @@ import NotesPanel from './NotesPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
 import { TimerChip, TimerMenu, TimerPresets } from './Timers.jsx'
 import { findDurations } from '../lib/durations.js'
+import { cleanName, guessLang, stepName } from '../lib/timerNames.js'
 
 const TABS = [
   ['recipe', 'Recipe'],
@@ -82,6 +83,8 @@ export default function RecipeView({
   const originalThumbnail = recipe.thumbnail
   const viewR = useMemo(() => (appliedScale ? scaleRecipe(displayR, appliedScale.factor) : displayR), [displayR, appliedScale])
   const sections = useMemo(() => parseSections(viewR.ingredients || []), [viewR])
+  const ingNames = useMemo(() => (viewR.ingredients || []).filter((l) => !/^##?\s+/.test(l)).map((l) => splitIngLine(l).name), [viewR])
+  const timerLang = useMemo(() => guessLang([...(viewR.steps || []), ...(viewR.ingredients || [])].join(' ')), [viewR])
   const totalGrams = useMemo(() => getTotalGrams(viewR.ingredients || []), [viewR])
   const pctOpts = useMemo(() => ({ showPct, pctMode, pctBase, appliedScaleLabel: appliedScale?.label }), [showPct, pctMode, pctBase, appliedScale])
   const langsOrdered = useMemo(() => [settings.translateLang, ...LANGS.filter((l) => l !== settings.translateLang)].filter(Boolean), [settings.translateLang])
@@ -320,13 +323,17 @@ export default function RecipeView({
   // Timers: a written time in a step becomes a chip; other steps and each part get a timer menu.
   const partOf = []
   stepList.reduce((part, st, i) => { partOf[i] = st.header ? st.text : part; return partOf[i] }, '')
-  const timerBase = { recipeId: recipe.id, recipeTitle: recipe.title || 'Recipe' }
+  // Each timer is named for what it is about — the step's ingredient ("Cebolla"), else its part
+  // ("Lievito madre"), else the recipe — and says that name, in the recipe's language, when it ends.
+  const recipeName = cleanName(viewR.title) || viewR.title || 'Recipe'
+  const timerBase = { recipeId: recipe.id, recipeTitle: recipe.title || 'Recipe', lang: timerLang }
   const stepTimers = (st, i) => {
     const short = st.text.length > 42 ? st.text.slice(0, 40).trimEnd() + '…' : st.text
     const label = [partOf[i], `Step ${st.n}`].filter(Boolean).join(' · ') + ` — ${short}`
+    const name = stepName(st.text, ingNames, cleanName(partOf[i]) || recipeName)
     const durs = findDurations(st.text).slice(0, 3)
-    if (!durs.length) return <TimerMenu className="hover-only" tkey={`${recipe.id}:step:${i}`} label={label} {...timerBase} />
-    return durs.map((d) => <TimerChip key={d.ms} tkey={`${recipe.id}:step:${i}:${d.ms}`} label={label} ms={d.ms} text={d.label} {...timerBase} />)
+    if (!durs.length) return <TimerMenu className="hover-only" tkey={`${recipe.id}:step:${i}`} label={label} name={name} {...timerBase} />
+    return durs.map((d) => <TimerChip key={d.ms} tkey={`${recipe.id}:step:${i}:${d.ms}`} label={label} name={name} ms={d.ms} text={d.label} {...timerBase} />)
   }
   const blocks = [
     {
@@ -343,7 +350,7 @@ export default function RecipeView({
         <ol className={`Q-steps${cook ? ' Q-cook-steps' : ''}`}>
           {stepList.map((st, i) => {
             if (!st.text) return null
-            if (st.header) return <li key={i} className="Q-step-h">{st.text}<TimerMenu tkey={`${recipe.id}:part:${i}`} label={st.text} {...timerBase} /></li>
+            if (st.header) return <li key={i} className="Q-step-h">{st.text}<TimerMenu tkey={`${recipe.id}:part:${i}`} label={st.text} name={cleanName(st.text) || st.text} {...timerBase} /></li>
             if (cook) {
               return (
                 <li key={i} data-n={st.n} className={`${doneSteps.has(i) ? 'done' : ''}${i === nextStep ? ' next' : ''}`} onClick={() => cook.onToggleStep(i)}>
@@ -525,7 +532,7 @@ export default function RecipeView({
               <>
                 <MenuItem icon={ChevronLeft} keepOpen onClick={() => setMenuView('main')}>Timer for this recipe</MenuItem>
                 <MenuSep />
-                <TimerPresets recipeId={recipe.id} recipeTitle={recipe.title || 'Recipe'} />
+                <TimerPresets name={recipeName} recipeId={recipe.id} recipeTitle={recipe.title || 'Recipe'} lang={timerLang} />
               </>
             )}
             {menuView === 'collections' && (
