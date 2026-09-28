@@ -19,6 +19,7 @@ import { TimerChip, TimerMenu, TimerPresets } from './Timers.jsx'
 import { findDurations } from '../lib/durations.js'
 import { cleanName, guessLang, stepName } from '../lib/timerNames.js'
 import StepSheet from './StepSheet.jsx'
+import ChefMode from './ChefMode.jsx'
 
 const TABS = [
   ['recipe', 'Recipe'],
@@ -59,13 +60,14 @@ export default function RecipeView({
   const [menuView, setMenuView] = useState('main') // main | translate | export | copy | collections | timer
   const [addingVideo, setAddingVideo] = useState(false)
   const [stepSheet, setStepSheet] = useState(null) // { i } — the step or part held down
+  const [chef, setChef] = useState(false) // chef mode: guided, one step at a time
   const press = useRef(null)
   const exportNotes = settings.exportNotes
   const addNoteRef = useRef(null)
 
   useEffect(() => {
     setLocalChecked(new Set()); setLocalScale(null); setTranslated(null)
-    setShowScale(false); setTab('recipe'); setAddingVideo(false)
+    setShowScale(false); setTab('recipe'); setAddingVideo(false); setChef(false)
     setCustomBaseGrams('')
   }, [recipe.id])
 
@@ -494,6 +496,7 @@ export default function RecipeView({
               {inSession ? <><Check size={14} strokeWidth={2.6} /> In session</> : 'Add to session'}
             </button>
           )}
+          {cook && stepList.some((st) => st.n) && <button className="Q-textbtn" onClick={() => setChef(true)}>Chef mode</button>}
           {canEdit && onShare && <button className="Q-textbtn" onClick={onShare}>Share</button>}
           {canEdit && <button className="Q-textbtn" onClick={onEdit}>Edit</button>}
           {!canEdit && !guest && onToggleLike && <button className={`Q-textbtn${liked ? ' on' : ''}`} onClick={onToggleLike} title={liked ? 'Remove from Recipes I like' : 'Keep it in Recipes I like'}>{liked ? 'Liked' : 'Like'}</button>}
@@ -514,6 +517,7 @@ export default function RecipeView({
                     <MenuSep />
                   </>
                 )}
+                {stepList.some((st) => st.n) && <MenuItem checked={false} onClick={() => { setTab('recipe'); setChef(true) }}>Chef mode</MenuItem>}
                 <MenuItem checked={!!appliedScale} hint={appliedScale?.label} onClick={() => { setTab('recipe'); setShowScale(true) }}>Scale</MenuItem>
                 <MenuItem checked={showPct} onClick={() => { setTab('recipe'); setShowPct(!showPct) }}>Baker's %</MenuItem>
                 {!guest && <MenuItem checked={!!translated} keepOpen hint={<>{translated ? targetLang : ''}<ChevronRight size={14} /></>} onClick={() => setMenuView('translate')}>Translate</MenuItem>}
@@ -601,6 +605,13 @@ export default function RecipeView({
       {tab === 'notes' && <NotesPanel recipe={recipe} onSave={handleSaveNotes} onSaveMedia={handleSaveMedia} onAddNote={addNoteRef} readOnly={!canEdit} />}
       {tab === 'ai' && <AIAssistant recipe={viewR} onAction={handleAssistantAction} onRequestSaveNote={handleRequestSaveNote} />}
       {lightboxSrc && <div className="Q-lightbox" onClick={() => setLightboxSrc(null)}><img src={lightboxSrc} alt="" /></div>}
+      {chef && (
+        <ChefMode
+          title={viewR.title || 'Recipe'} lang={timerLang} timerBase={timerBase} sections={sections}
+          steps={stepList.map((st, i) => ({ ...st, i })).filter((st) => st.n).map((st) => ({ i: st.i, n: st.n, text: st.text, part: partOf[st.i] || '', info: stepInfo(st, st.i) }))}
+          cook={cook} doneSteps={doneSteps} onTimerOptions={(i) => setStepSheet({ i })} onClose={() => setChef(false)}
+        />
+      )}
       {stepSheet && stepList[stepSheet.i] && (() => {
         const st = stepList[stepSheet.i]
         const info = stepInfo(st, stepSheet.i)

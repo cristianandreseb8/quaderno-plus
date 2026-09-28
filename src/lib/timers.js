@@ -175,9 +175,11 @@ function say(t) {
   if (voiceOn) speakText(spoken(t), voiceLang(t))
 }
 // iPhone and iPad only let a page speak after it has spoken during a tap: do that, silently.
+let voiceUnlocked = false
 function unlockVoice() {
   try {
-    if (!window.speechSynthesis) return
+    if (!window.speechSynthesis || voiceUnlocked) return
+    voiceUnlocked = true
     window.speechSynthesis.getVoices() // starts loading the voices, which some browsers do lazily
     const u = new SpeechSynthesisUtterance(' ')
     u.volume = 0
@@ -251,6 +253,14 @@ export function sayName(id) {
   const t = timers.find((x) => x.id === id)
   if (t) { window.speechSynthesis?.cancel?.(); speakText(spoken(t), voiceLang(t)) }
 }
+// Say any text (chef mode reads the steps) — in the given language, with the best voice for it.
+export function speak(text, lang, { interrupt = false } = {}) {
+  if (interrupt) window.speechSynthesis?.cancel?.()
+  unlockVoice()
+  speakText(text, lang)
+}
+export const stopSpeaking = () => window.speechSynthesis?.cancel?.()
+
 export function setVoiceCfg(patch) {
   voiceCfg = { ...voiceCfg, ...patch }
   try { localStorage.setItem(VOICE_CFG_KEY, JSON.stringify(voiceCfg)) } catch (_) { /* ignore */ }
