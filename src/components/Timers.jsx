@@ -7,7 +7,7 @@ import {
 } from '../lib/timers.js'
 import { fmtDuration, parseDurationInput } from '../lib/durations.js'
 
-const presetLabel = (min) => (min < 60 ? `${min} min` : `${+(min / 60).toFixed(1)} h`)
+export const presetLabel = (min) => (min < 60 ? `${min} min` : `${+(min / 60).toFixed(1)} h`)
 
 // ── Top bar: opens the timers; shows the next one to finish while any runs ──
 export function TimersButton() {

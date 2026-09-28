@@ -18,6 +18,7 @@ import AIAssistant from './AIAssistant.jsx'
 import { TimerChip, TimerMenu, TimerPresets } from './Timers.jsx'
 import { findDurations } from '../lib/durations.js'
 import { cleanName, guessLang, stepName } from '../lib/timerNames.js'
+import StepSheet from './StepSheet.jsx'
 
 const TABS = [
   ['recipe', 'Recipe'],
@@ -57,6 +58,8 @@ export default function RecipeView({
   const [exporting, setExporting] = useState(false)
   const [menuView, setMenuView] = useState('main') // main | translate | export | copy | collections | timer
   const [addingVideo, setAddingVideo] = useState(false)
+  const [stepSheet, setStepSheet] = useState(null) // { i } — the step or part held down
+  const press = useRef(null)
   const exportNotes = settings.exportNotes
   const addNoteRef = useRef(null)
 
@@ -327,14 +330,40 @@ export default function RecipeView({
   // ("Lievito madre"), else the recipe — and says that name, in the recipe's language, when it ends.
   const recipeName = cleanName(viewR.title) || viewR.title || 'Recipe'
   const timerBase = { recipeId: recipe.id, recipeTitle: recipe.title || 'Recipe', lang: timerLang }
-  const stepTimers = (st, i) => {
+  const stepInfo = (st, i) => {
+    if (st.header) return { label: st.text, name: cleanName(st.text) || st.text, durs: [], tkey: `${recipe.id}:part:${i}` }
     const short = st.text.length > 42 ? st.text.slice(0, 40).trimEnd() + '…' : st.text
-    const label = [partOf[i], `Step ${st.n}`].filter(Boolean).join(' · ') + ` — ${short}`
-    const name = stepName(st.text, ingNames, cleanName(partOf[i]) || recipeName)
-    const durs = findDurations(st.text).slice(0, 3)
-    if (!durs.length) return <TimerMenu className="hover-only" tkey={`${recipe.id}:step:${i}`} label={label} name={name} {...timerBase} />
-    return durs.map((d) => <TimerChip key={d.ms} tkey={`${recipe.id}:step:${i}:${d.ms}`} label={label} name={name} ms={d.ms} text={d.label} {...timerBase} />)
+    return {
+      label: [partOf[i], `Step ${st.n}`].filter(Boolean).join(' · ') + ` — ${short}`,
+      name: stepName(st.text, ingNames, cleanName(partOf[i]) || recipeName),
+      durs: findDurations(st.text).slice(0, 3),
+      tkey: `${recipe.id}:step:${i}`,
+    }
   }
+  const stepTimers = (st, i) => {
+    const { label, name, durs, tkey } = stepInfo(st, i)
+    if (!durs.length) return <TimerMenu className="hover-only" tkey={tkey} label={label} name={name} {...timerBase} />
+    return durs.map((d) => <TimerChip key={d.ms} tkey={`${tkey}:${d.ms}`} label={label} name={name} ms={d.ms} text={d.label} {...timerBase} />)
+  }
+  // Hold a step (or part) down on a phone — or right-click it — for its options, a timer first.
+  const holdToOpen = (i) => ({
+    onPointerDown: (e) => {
+      if ((e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('button, a, input')) return
+      clearTimeout(press.current?.timer)
+      const p = { x: e.clientX, y: e.clientY, fired: false }
+      p.timer = setTimeout(() => { p.fired = true; navigator.vibrate?.(12); setStepSheet({ i }) }, 480)
+      press.current = p
+    },
+    onPointerMove: (e) => {
+      const p = press.current
+      if (p && !p.fired && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) { clearTimeout(p.timer); press.current = null }
+    },
+    onPointerUp: () => { const p = press.current; if (p && !p.fired) { clearTimeout(p.timer); press.current = null } },
+    onPointerCancel: () => { if (press.current) clearTimeout(press.current.timer); press.current = null },
+    onContextMenu: (e) => { if (e.target.closest('button, a, input')) return; e.preventDefault(); if (press.current) clearTimeout(press.current.timer); setStepSheet({ i }) },
+    // The release after a hold is not a tap: it must not tick the step.
+    onClickCapture: (e) => { if (press.current?.fired) { e.stopPropagation(); e.preventDefault(); press.current = null } },
+  })
   const blocks = [
     {
       id: 'ingredients', title: cook ? 'Mise en place' : 'Ingredients', content: ingredientsContent,
@@ -350,15 +379,15 @@ export default function RecipeView({
         <ol className={`Q-steps${cook ? ' Q-cook-steps' : ''}`}>
           {stepList.map((st, i) => {
             if (!st.text) return null
-            if (st.header) return <li key={i} className="Q-step-h">{st.text}<TimerMenu tkey={`${recipe.id}:part:${i}`} label={st.text} name={cleanName(st.text) || st.text} {...timerBase} /></li>
+            if (st.header) return <li key={i} className="Q-step-h" {...holdToOpen(i)}>{st.text}<TimerMenu tkey={`${recipe.id}:part:${i}`} label={st.text} name={cleanName(st.text) || st.text} {...timerBase} /></li>
             if (cook) {
               return (
-                <li key={i} data-n={st.n} className={`${doneSteps.has(i) ? 'done' : ''}${i === nextStep ? ' next' : ''}`} onClick={() => cook.onToggleStep(i)}>
+                <li key={i} data-n={st.n} className={`${doneSteps.has(i) ? 'done' : ''}${i === nextStep ? ' next' : ''}`} onClick={() => cook.onToggleStep(i)} {...holdToOpen(i)}>
                   {st.text}{stepTimers(st, i)}
                 </li>
               )
             }
-            return <li key={i} data-n={st.n} className={highlightedSteps.has(i) ? 'highlighted' : ''}>{st.text}{stepTimers(st, i)}</li>
+            return <li key={i} data-n={st.n} className={highlightedSteps.has(i) ? 'highlighted' : ''} {...holdToOpen(i)}>{st.text}{stepTimers(st, i)}</li>
           })}
         </ol>
       ),
@@ -564,6 +593,21 @@ export default function RecipeView({
       {tab === 'notes' && <NotesPanel recipe={recipe} onSave={handleSaveNotes} onSaveMedia={handleSaveMedia} onAddNote={addNoteRef} readOnly={!canEdit} />}
       {tab === 'ai' && <AIAssistant recipe={viewR} onAction={handleAssistantAction} onRequestSaveNote={handleRequestSaveNote} />}
       {lightboxSrc && <div className="Q-lightbox" onClick={() => setLightboxSrc(null)}><img src={lightboxSrc} alt="" /></div>}
+      {stepSheet && stepList[stepSheet.i] && (() => {
+        const st = stepList[stepSheet.i]
+        const info = stepInfo(st, stepSheet.i)
+        const actions = []
+        if (cook && !st.header) actions.push({ label: doneSteps.has(stepSheet.i) ? 'Mark as not done' : 'Mark as done', onClick: () => cook.onToggleStep(stepSheet.i) })
+        actions.push({ label: 'Copy the text', onClick: () => { navigator.clipboard?.writeText(st.text).then(() => toast('Copied'), () => {}) } })
+        return (
+          <StepSheet
+            title={st.header ? st.text : `Step ${st.n}`} subtitle={st.header ? null : st.text}
+            durations={info.durs} tkeyBase={info.tkey} actions={actions}
+            timer={{ label: info.label, name: info.name, ...timerBase }}
+            onClose={() => setStepSheet(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
