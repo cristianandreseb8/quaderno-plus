@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowUpDown, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Star, X } from 'lucide-react'
+import { ArrowLeft, ArrowUpDown, MoreHorizontal, Plus, Search, Star, X } from 'lucide-react'
 import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadByIds, dbLoadOne, dbLoadPublic } from './lib/db.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { SettingsContext, applySettings, loadSettings, saveSettings, useSettings } from './lib/settings.js'
@@ -11,6 +11,8 @@ import {
 import AuthScreen from './components/AuthScreen.jsx'
 import GuestBrowser from './components/GuestBrowser.jsx'
 import Modal from './components/ui/Modal.jsx'
+import SideRail from './components/ui/SideRail.jsx'
+import { RecipeTimerBadge, TimerDock, TimersButton } from './components/Timers.jsx'
 import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
 import { addRecipe, buildShoppingList, clearProgress, removeRecipe, resetTicks, setFactor, toggleProgress, useSession } from './lib/session.js'
@@ -595,6 +597,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
             </button>
           )}
           <div className="Q-top-right">
+            <TimersButton />
             <button className="Q-hbtn Q-top-wide" onClick={() => setShowAppAI(true)}>Assistant</button>
             <Menu className="Q-top-wide" width={200} trigger={(p) => <button className="Q-hbtn icon" onClick={p.toggle} aria-label="More" title="More"><MoreHorizontal size={18} /></button>}>
               {moreItems(false)}
@@ -619,14 +622,8 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
           </div>
         </header>
 
-        <div className="Q-body">
-          {/* Sits on the line between the list and the recipe (or on the left edge when the list is hidden). */}
-          <button
-            className="Q-side-toggle" onClick={() => toggleSidebarRef.current()}
-            title={sidebarOpen ? 'Hide the recipe list (⌘\\)' : 'Show the recipe list (⌘\\)'} aria-label={sidebarOpen ? 'Hide the recipe list' : 'Show the recipe list'}
-          >
-            {sidebarOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
-          </button>
+        <div className="Q-body" style={settings.sideWidth ? { '--side-w': `${settings.sideWidth}px` } : undefined}>
+          <SideRail open={sidebarOpen} onChange={({ open, width }) => updateSettings({ sidebar: open, ...(width ? { sideWidth: width } : {}) })} />
           <aside className="Q-side">
             <div className="Q-side-switch" role="tablist">
               <button role="tab" aria-selected={view === 'recipes'} className={view === 'recipes' ? 'on' : ''} onClick={() => switchView('recipes')}>Recipes</button>
@@ -714,6 +711,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                             : [`by ${ownerName(r)}`, r.category].filter(Boolean).join(' · ')}
                         </span>
                       </div>
+                      <RecipeTimerBadge recipeId={r.id} />
                       {sessionIds.has(r.id) && <span className="Q-dot" title="In the session" />}
                       <button
                         className={`Q-fav${favorites.has(r.id) ? ' on' : ''}`} title={favorites.has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
@@ -752,6 +750,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                         <h4>{r.title}</h4>
                         <span>{(Number(e.factor) || 1) !== 1 ? `×${+Number(e.factor).toFixed(2)} · ` : ''}{st.total ? `${st.done} of ${st.total} steps` : 'No method'}</span>
                       </div>
+                      <RecipeTimerBadge recipeId={r.id} />
                       {st.total > 0 && st.done === st.total && <span className="Q-done-mark">Done</span>}
                     </div>
                   )
@@ -867,6 +866,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
             />
           </Suspense>
         )}
+        <TimerDock />
         {nameModal && (
           <NameModal
             title={nameModal.kind === 'rename' ? 'Rename collection' : 'New collection'}

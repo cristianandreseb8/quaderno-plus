@@ -135,16 +135,22 @@
 .Q-main { overflow: auto; min-width: 0; container-type: inline-size; container-name: main; scroll-behavior: smooth; }
 .Q-pane { max-width: 880px; margin: 0 auto; padding: 30px 40px 120px; }
 .Q-pane:has(.Q-blocks.split) { max-width: 1180px; }
-/* The list's show/hide handle, centred on the line between the list and the recipe. */
-.Q-side-toggle {
-  position: absolute; z-index: 5; top: 18px; left: var(--side-w); transform: translateX(-50%);
-  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0;
-  border: 1px solid var(--rule); border-radius: 50%; background: var(--bg); color: var(--muted); cursor: pointer;
+/* The line between the list and the recipe: drag to resize (↔ cursor), middle button to hide. */
+.Q-rail { position: absolute; z-index: 6; top: 0; bottom: 0; left: var(--side-w); width: 12px; margin-left: -6px; cursor: col-resize; touch-action: none; }
+.Q-rail::before { content: ''; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; background: var(--accent); opacity: 0; transition: opacity .15s; }
+.Q-rail:hover::before, .Q-rail.dragging::before { opacity: .6; }
+.Q-rail-btn {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 38px; padding: 0;
+  border: 1px solid var(--rule); border-radius: 999px; background: var(--bg); color: var(--muted); cursor: pointer;
   transition: color .12s, border-color .12s, background .12s;
 }
-.Q-side-toggle:hover { color: var(--ink); border-color: var(--rule-strong); background: var(--surface); }
-/* List hidden: a small tab on the left edge. */
-.Q[data-side="0"] .Q-side-toggle { left: 0; transform: none; width: 22px; height: 28px; border-left: none; border-radius: 0 8px 8px 0; }
+.Q-rail-btn:hover { color: var(--ink); border-color: var(--rule-strong); background: var(--surface); }
+/* List hidden: the line is the left edge; drag it right to bring the list back. */
+.Q[data-side="0"] .Q-rail { left: 0; margin-left: 0; }
+.Q[data-side="0"] .Q-rail::before { left: 0; }
+.Q[data-side="0"] .Q-rail-btn { left: 0; transform: translateY(-50%); border-left: none; border-radius: 0 10px 10px 0; }
+body.Q-resizing, body.Q-resizing * { cursor: col-resize !important; user-select: none !important; }
 @media (min-width: 761px) {
   .Q[data-side="0"] .Q-body { grid-template-columns: minmax(0, 1fr); }
   .Q[data-side="0"] .Q-side { display: none; }

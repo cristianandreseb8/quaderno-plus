@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { ArrowLeft, Search, X } from 'lucide-react'
 import { dbLoadOne, dbLoadPublic } from '../lib/db.js'
 import AuthScreen from './AuthScreen.jsx'
+import { TimerDock, TimersButton } from './Timers.jsx'
 
 const RecipeView = lazy(() => import('./RecipeView.jsx'))
 const isPhone = () => window.matchMedia('(max-width: 760px)').matches
@@ -66,6 +67,7 @@ export default function GuestBrowser({ openId, onSignIn }) {
       <header className="Q-top">
         <div className="Q-brand">Quaderno<b>+</b></div>
         <div className="Q-top-right">
+          <TimersButton />
           <button className="btn primary sm" onClick={onSignIn}>Sign in</button>
         </div>
       </header>
@@ -113,6 +115,7 @@ export default function GuestBrowser({ openId, onSignIn }) {
           </div>
         </main>
       </div>
+      <TimerDock />
     </div>
   )
 }

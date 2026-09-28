@@ -80,6 +80,7 @@ export const DEFAULTS = {
   translateLang: 'English',
   exportNotes: false,
   sidebar: true,
+  sideWidth: null, // px, once the list has been resized by dragging its edge
   blocks: DEFAULT_BLOCKS,
 }
 

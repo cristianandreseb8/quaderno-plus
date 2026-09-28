@@ -67,6 +67,9 @@ export default function Menu({ trigger, children, align = 'end', width = 220, cl
   )
 }
 
+// For custom content inside a menu (buttons, a small form) that should close it when used.
+export const useMenuClose = () => useContext(MenuCtx).close
+
 export function MenuItem({ icon: Icon, children, hint, onClick, danger, checked, disabled, keepOpen }) {
   const { close } = useContext(MenuCtx)
   return (

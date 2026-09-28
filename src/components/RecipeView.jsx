@@ -15,6 +15,8 @@ import Blocks from './ui/Blocks.jsx'
 import VideoBlock from './VideoBlock.jsx'
 import NotesPanel from './NotesPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
+import { TimerChip, TimerMenu, TimerPresets } from './Timers.jsx'
+import { findDurations } from '../lib/durations.js'
 
 const TABS = [
   ['recipe', 'Recipe'],
@@ -52,7 +54,7 @@ export default function RecipeView({
   const [translated, setTranslated] = useState(null)
   const [targetLang, setTargetLang] = useState(settings.translateLang || 'English')
   const [exporting, setExporting] = useState(false)
-  const [menuView, setMenuView] = useState('main') // main | translate | export | copy | collections
+  const [menuView, setMenuView] = useState('main') // main | translate | export | copy | collections | timer
   const [addingVideo, setAddingVideo] = useState(false)
   const exportNotes = settings.exportNotes
   const addNoteRef = useRef(null)
@@ -315,6 +317,17 @@ export default function RecipeView({
   const nextStep = cook ? realSteps.find(({ i }) => !doneSteps.has(i))?.i : null
   const doneCount = realSteps.filter(({ i }) => doneSteps.has(i)).length
   const ingCount = sections.reduce((n, sec) => n + sec.items.length, 0)
+  // Timers: a written time in a step becomes a chip; other steps and each part get a timer menu.
+  const partOf = []
+  stepList.reduce((part, st, i) => { partOf[i] = st.header ? st.text : part; return partOf[i] }, '')
+  const timerBase = { recipeId: recipe.id, recipeTitle: recipe.title || 'Recipe' }
+  const stepTimers = (st, i) => {
+    const short = st.text.length > 42 ? st.text.slice(0, 40).trimEnd() + '…' : st.text
+    const label = [partOf[i], `Step ${st.n}`].filter(Boolean).join(' · ') + ` — ${short}`
+    const durs = findDurations(st.text).slice(0, 3)
+    if (!durs.length) return <TimerMenu className="hover-only" tkey={`${recipe.id}:step:${i}`} label={label} {...timerBase} />
+    return durs.map((d) => <TimerChip key={d.ms} tkey={`${recipe.id}:step:${i}:${d.ms}`} label={label} ms={d.ms} text={d.label} {...timerBase} />)
+  }
   const blocks = [
     {
       id: 'ingredients', title: cook ? 'Mise en place' : 'Ingredients', content: ingredientsContent,
@@ -330,15 +343,15 @@ export default function RecipeView({
         <ol className={`Q-steps${cook ? ' Q-cook-steps' : ''}`}>
           {stepList.map((st, i) => {
             if (!st.text) return null
-            if (st.header) return <li key={i} className="Q-step-h">{st.text}</li>
+            if (st.header) return <li key={i} className="Q-step-h">{st.text}<TimerMenu tkey={`${recipe.id}:part:${i}`} label={st.text} {...timerBase} /></li>
             if (cook) {
               return (
                 <li key={i} data-n={st.n} className={`${doneSteps.has(i) ? 'done' : ''}${i === nextStep ? ' next' : ''}`} onClick={() => cook.onToggleStep(i)}>
-                  {st.text}
+                  {st.text}{stepTimers(st, i)}
                 </li>
               )
             }
-            return <li key={i} data-n={st.n} className={highlightedSteps.has(i) ? 'highlighted' : ''}>{st.text}</li>
+            return <li key={i} data-n={st.n} className={highlightedSteps.has(i) ? 'highlighted' : ''}>{st.text}{stepTimers(st, i)}</li>
           })}
         </ol>
       ),
@@ -461,6 +474,7 @@ export default function RecipeView({
                 <MenuItem checked={showPct} onClick={() => { setTab('recipe'); setShowPct(!showPct) }}>Baker's %</MenuItem>
                 {!guest && <MenuItem checked={!!translated} keepOpen hint={<>{translated ? targetLang : ''}<ChevronRight size={14} /></>} onClick={() => setMenuView('translate')}>Translate</MenuItem>}
                 <MenuItem checked={false} keepOpen hint={<ChevronRight size={14} />} onClick={() => setMenuView('export')}>Export</MenuItem>
+                <MenuItem checked={false} keepOpen hint={<ChevronRight size={14} />} onClick={() => setMenuView('timer')}>Timer</MenuItem>
                 {!guest && onToggleCollection && (
                   <>
                     <MenuSep />
@@ -505,6 +519,13 @@ export default function RecipeView({
                 <MenuItem checked={false} disabled={exporting} onClick={() => runExport('xls')}>Excel</MenuItem>
                 <MenuSep />
                 <MenuToggle checked={exportNotes} onChange={(v) => updateSettings({ exportNotes: v })}>Include notes</MenuToggle>
+              </>
+            )}
+            {menuView === 'timer' && (
+              <>
+                <MenuItem icon={ChevronLeft} keepOpen onClick={() => setMenuView('main')}>Timer for this recipe</MenuItem>
+                <MenuSep />
+                <TimerPresets recipeId={recipe.id} recipeTitle={recipe.title || 'Recipe'} />
               </>
             )}
             {menuView === 'collections' && (
