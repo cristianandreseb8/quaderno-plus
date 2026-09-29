@@ -169,6 +169,8 @@ export function forSpeech(text, lang = 'en') {
   // Other ranges between numbers: "pH 4.0–4.3" → "pH between 4.0 and 4.3".
   t = t.replace(new RegExp(`(${NUM})\\s*[–-]\\s*(${NUM})`, 'g'), (_, a, b) => RANGE + w.between(a, b))
   t = t.replace(/\s&\s/g, ` ${w.and} `)
+  // "Sal/pimienta/comino" is a list: "sal, pimienta, comino".
+  t = t.replace(/(\p{L})\s*\/\s*(?=\p{L})/gu, '$1, ')
   // Arrows and bullets are pauses, not words.
   t = t.replace(/\s*(→|->|⇒|•|·)\s*/g, ', ')
   // A range says the approximation itself: drop "circa / about / unos" and a bare "a / at / per"

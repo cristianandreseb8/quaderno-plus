@@ -32,16 +32,55 @@ export function cleanName(text) {
   return cap(s)
 }
 
-// Does a step mention this ingredient? The whole name ("lievito madre"), else its first word the
-// step uses ("cebolla" for "cebolla blanca mediana", "ajo" for "dientes de ajo") — never a word
-// too general to mean it ("dough"). Returns what matched, or null.
+// Measures and descriptions are not what an ingredient is: "un chorrito vino blanco" is wine, not a
+// "chorrito" (so "un chorrito de crema" is not wine), "cebolla picada" is onion, not "picada".
+const MEASURE = new Set([
+  'un', 'una', 'unos', 'unas', 'uno', 'poco', 'poca', 'algo', 'opcional', 'optional', 'facoltativo', 'facultatif', 'gusto', 'taste', 'needed', 'necesario',
+  'chorrito', 'chorritos', 'pizca', 'pizcas', 'punado', 'punados', 'cucharada', 'cucharadas', 'cucharadita', 'cucharaditas', 'cda', 'cdas', 'cdta', 'cdtas',
+  'taza', 'tazas', 'tz', 'vaso', 'vasos', 'copa', 'gota', 'gotas', 'trozo', 'trozos', 'rodaja', 'rodajas', 'lamina', 'laminas', 'loncha', 'lonchas',
+  'rebanada', 'rebanadas', 'hoja', 'hojas', 'ramita', 'ramitas', 'rama', 'ramas', 'manojo', 'atado', 'diente', 'dientes', 'unidad', 'unidades', 'ud', 'uds',
+  'lata', 'latas', 'sobre', 'sobres', 'paquete', 'bolsa', 'pieza', 'piezas', 'cubo', 'cubos', 'juliana',
+  'splash', 'dash', 'drizzle', 'pinch', 'handful', 'bunch', 'sprig', 'sprigs', 'clove', 'cloves', 'slice', 'slices', 'piece', 'pieces', 'can', 'cans',
+  'jar', 'packet', 'stick', 'sticks', 'knob', 'leaf', 'leaves', 'glass', 'cup', 'cups', 'tsp', 'tbsp', 'spoon', 'spoons', 'some', 'little',
+  'pizzico', 'cucchiaio', 'cucchiai', 'cucchiaino', 'cucchiaini', 'bicchiere', 'spruzzo', 'filo', 'noce', 'manciata', 'mazzetto', 'rametto',
+  'spicchio', 'spicchi', 'foglia', 'foglie', 'pezzo', 'pezzi', 'fetta', 'fette',
+  'pincee', 'cuillere', 'cuilleres', 'trait', 'filet', 'poignee', 'brin', 'brins', 'gousse', 'gousses', 'feuille', 'feuilles', 'verre', 'tranche', 'tranches',
+  'prise', 'schuss', 'spritzer', 'handvoll', 'bund', 'zweig', 'zehe', 'zehen', 'blatt', 'blatter', 'glas', 'becher', 'dose', 'packchen', 'scheibe', 'scheiben',
+])
+const DESCRIPTOR = new Set([
+  'picada', 'picado', 'picadas', 'picados', 'molida', 'molido', 'fresca', 'fresco', 'frescas', 'frescos', 'blanca', 'blanco', 'blancas', 'blancos',
+  'roja', 'rojo', 'verde', 'verdes', 'amarilla', 'amarillo', 'negra', 'negro', 'grande', 'grandes', 'pequena', 'pequeno', 'pequenas', 'pequenos',
+  'mediana', 'mediano', 'caliente', 'fria', 'frio', 'entero', 'entera', 'enteros', 'enteras', 'rallado', 'rallada', 'cortado', 'cortada', 'finamente',
+  'fino', 'fina', 'sellada', 'derretida', 'derretido', 'madura', 'maduro', 'seca', 'seco', 'dulce', 'picante', 'ahumado', 'ahumada', 'natural',
+  'chopped', 'minced', 'diced', 'sliced', 'grated', 'fresh', 'dried', 'ground', 'large', 'small', 'medium', 'whole', 'red', 'green', 'black',
+  'hot', 'cold', 'warm', 'softened', 'melted', 'fine', 'finely', 'roughly', 'ripe', 'raw', 'cooked', 'toasted', 'unsalted', 'salted',
+  'tritato', 'tritata', 'bianco', 'bianca', 'grosso', 'piccolo', 'piccola', 'intero', 'intera', 'caldo', 'calda', 'freddo', 'fredda', 'fuso',
+  'hache', 'hachee', 'frais', 'fraiche', 'blanc', 'grand', 'grande', 'petit', 'petite', 'entier', 'entiere', 'chaud', 'froid', 'fondu',
+  'gehackt', 'frisch', 'frische', 'weiss', 'gross', 'klein', 'ganz', 'warm', 'kalt', 'geschmolzen',
+])
+const SKIP = (w) => w.length < 3 || STOP.has(w) || WEAK.has(w) || MEASURE.has(w) || DESCRIPTOR.has(w) || /^\d/.test(w)
+// What an ingredient line names, without quantities, notes and leading measures:
+// "opcional 50 ml crema blanca" → "crema blanca", "a 3 dientes de ajos" → "ajos".
+export function ingredientKey(raw) {
+  const words = norm(String(raw).replace(/\([^)]*\)/g, ' ').split(/[,;—]/)[0]).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean)
+  while (words.length && (SKIP(words[0]) && !WEAK.has(words[0]))) words.shift()
+  return words.join(' ')
+}
+// A word, or its singular / plural, in the step: "ajos" / "ajo", "salsa" / "salsas".
+function wordIn(text, w) {
+  const forms = [w, w.replace(/es$/, ''), w.replace(/s$/, ''), `${w}s`, `${w}es`].filter((f) => f.length >= 3)
+  return forms.find((f) => text.includes(` ${f} `)) ? w : null
+}
+
+// Does a step mention this ingredient? The whole name ("lievito madre", "crema blanca"), else its
+// first real word the step uses ("cebolla" for "cebolla blanca mediana", "ajo" for "dientes de ajo")
+// — never a measure, a description or a word too general to mean it. Returns what matched, or null.
 function matchIngredient(text, raw) {
-  const core = norm(String(raw).replace(/\([^)]*\)/g, ' ').split(/[,;—]/)[0]).replace(/[^a-z0-9]+/g, ' ').trim()
-  if (!core) return null
-  const words = core.split(' ')
-  const phrase = words.slice(0, 3).join(' ')
+  const key = ingredientKey(raw)
+  if (!key) return null
+  const phrase = key.split(' ').slice(0, 3).join(' ')
   if (text.includes(` ${phrase} `)) return phrase
-  return words.find((w) => w.length >= 3 && !STOP.has(w) && !WEAK.has(w) && !/^\d/.test(w) && text.includes(` ${w} `)) || null
+  return key.split(' ').find((w) => !SKIP(w) && wordIn(text, w)) || null
 }
 const asWords = (s) => ` ${norm(s).replace(/[^a-z0-9]+/g, ' ')} `
 
@@ -64,8 +103,7 @@ export function stepSubject(stepText, ingredientNames) {
 // ("cebolla" for "cebolla blanca mediana") among what is left.
 export function mentionedIngredients(stepText, ingredientNames) {
   let text = asWords(stepText)
-  const core = (raw) => norm(String(raw).replace(/\([^)]*\)/g, ' ').split(/[,;—]/)[0]).replace(/[^a-z0-9]+/g, ' ').trim()
-  const items = ingredientNames.map((raw, i) => ({ i, phrase: core(raw).split(' ').slice(0, 3).join(' ') })).filter((x) => x.phrase)
+  const items = ingredientNames.map((raw, i) => { const key = ingredientKey(raw); return { i, key, phrase: key.split(' ').slice(0, 3).join(' ') } }).filter((x) => x.phrase)
   const out = []
   const byLength = [...new Set(items.map((x) => x.phrase))].sort((a, b) => b.length - a.length)
   for (const phrase of byLength) {
@@ -75,7 +113,7 @@ export function mentionedIngredients(stepText, ingredientNames) {
   }
   for (const x of items) {
     if (out.some((o) => o.i === x.i)) continue
-    const word = x.phrase.split(' ').find((w) => w.length >= 3 && !STOP.has(w) && !WEAK.has(w) && !/^\d/.test(w) && text.includes(` ${w} `))
+    const word = x.key.split(' ').find((w) => !SKIP(w) && wordIn(text, w))
     if (word) out.push({ i: x.i, hit: word, full: false })
   }
   return out.sort((a, b) => a.i - b.i)

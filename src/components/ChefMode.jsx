@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, ListChecks, Pause, Play, Timer as TimerIcon,
 import {
   addTime, fmtClock, pauseTimer, remaining, resumeTimer, speak, startTimer, stopRinging, stopSpeaking, useTimers, voiceLang,
 } from '../lib/timers.js'
-import { cleanName, mentionedIngredients } from '../lib/timerNames.js'
+import { cleanName, ingredientKey, mentionedIngredients } from '../lib/timerNames.js'
 import { splitIngLine } from '../lib/recipeCalc.js'
 import { hasFlourWord } from '../lib/constants.js'
 
@@ -22,8 +22,6 @@ const wide = () => window.matchMedia('(min-width: 900px)').matches
 // A timer belongs to a step if its key is the step's, or the step's plus a duration.
 const ofStep = (key, tkey) => key === tkey || String(key || '').startsWith(`${tkey}:`)
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
-// An ingredient's name without its notes: "cebolla blanca mediana (aprox. 180 g)" → "cebolla blanca mediana".
-const coreName = (name) => norm(String(name || '').replace(/\([^)]*\)/g, ' ').split(/[,;—]/)[0])
 // Lines kept for the end ("icing sugar, to finish"), and steps that do the finishing.
 const FINISH_LINE = /\b(to finish|for finishing|to serve|for dusting|to dust|to garnish|to decorate|para decorar|para terminar|al servir|para servir|per finire|per decorare|per servire|pour finir|pour décorer|pour servir|zum bestreuen|zum garnieren|zum servieren)\b/i
 const FINISH_STEP = /\b(top|tops|topping|finish|dust|sprinkle|decorate|garnish|serve|espolvorear|espolvorea|decorar|decora|terminar|servir|spolverare|spolverizzare|decorare|guarnire|cospargere|saupoudrer|décorer|garnir|servir|bestreuen|garnieren|verzieren)\b/i
@@ -87,7 +85,7 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
       else if (g.some((l) => l.d.qty)) g = g.filter((l) => l.d.qty)
       const mine = g.filter((l) => l.si === own)
       if (mine.length) return mine.map((l) => ({ ...l, showPart: false }))
-      const exact = g.filter((l) => coreName(l.d.name) === hit)
+      const exact = g.filter((l) => ingredientKey(l.d.name) === hit)
       const pick = exact.length ? exact : g
       return pick.map((l) => ({ ...l, showPart: pick.length > 1 }))
     }).sort((a, b) => a.raw - b.raw)
@@ -100,8 +98,9 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
     const s = steps[p]
     if (!s) { speak(P.done, lang, { interrupt: true }); return }
     const newPart = s.part && (p === 0 || steps[p - 1]?.part !== s.part)
-    const uses = usedBy(s).filter((u) => u.d.qty).slice(0, 6)
-    const need = uses.length ? ` ${P.need}: ${uses.map((u) => `${u.d.qty} ${u.d.name}`).join(', ')}.` : ''
+    // Every ingredient the step uses — also those "a gusto", which have no quantity.
+    const uses = usedBy(s).slice(0, 8)
+    const need = uses.length ? ` ${P.need}: ${uses.map((u) => [u.d.qty, u.d.name].filter(Boolean).join(' ')).join(', ')}.` : ''
     speak(`${P.step} ${s.n}. ${newPart ? `${s.part}. ` : ''}${s.text}${need}`, lang, { interrupt: true })
   }
   useEffect(() => { sayStep(pos) }, [pos, voiceOn])
