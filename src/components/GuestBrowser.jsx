@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { ArrowLeft, Search, X } from 'lucide-react'
 import { dbLoadOne, dbLoadPublic } from '../lib/db.js'
+import { recipePath } from '../lib/sharing.js'
 import AuthScreen from './AuthScreen.jsx'
 import { TimerDock, TimersButton } from './Timers.jsx'
 
@@ -16,9 +17,12 @@ export default function GuestBrowser({ openId, onSignIn }) {
   const [full, setFull] = useState({})
   const [missing, setMissing] = useState(false)
 
+  // The address bar names the open recipe, so it can be shared from the browser with its preview.
   useEffect(() => {
-    if (openId) window.history.replaceState(null, '', window.location.pathname)
-  }, [openId])
+    const want = recipePath(selId)
+    if (window.location.pathname + window.location.search !== want) window.history.replaceState(null, '', want)
+  }, [selId])
+  useEffect(() => { document.title = full[selId]?.title ? `${full[selId].title} · Quaderno+` : 'Quaderno+' }, [selId, full])
 
   useEffect(() => {
     let cancelled = false

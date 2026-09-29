@@ -6,6 +6,20 @@
   directory = "netlify/functions"
 
 # Shared links get the recipe's title and photo in the page (link previews): netlify/functions/share.mjs
+# /r/<recipe id> and /i/<invite token>, whatever else is in the query ("?v=…", tracking)…
+[[redirects]]
+  from = "/r/:id"
+  to = "/.netlify/functions/share?r=:id"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/i/:token"
+  to = "/.netlify/functions/share?invite=:token"
+  status = 200
+  force = true
+
+# …and the older /?r=<id> and /?invite=<token> links.
 [[redirects]]
   from = "/"
   to = "/.netlify/functions/share?r=:r"

@@ -5,7 +5,7 @@ import { readList, writeList } from './lib/listCache.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { SettingsContext, applySettings, loadSettings, saveSettings, useSettings } from './lib/settings.js'
 import { setNewPassword, signOut, useAuth } from './lib/auth.js'
-import { VISIBILITY, acceptInvite } from './lib/sharing.js'
+import { VISIBILITY, acceptInvite, linkTarget, recipePath } from './lib/sharing.js'
 import {
   LIKED_NAME, addToCollection, createCollection, deleteCollection, loadCollections, loadFavorites, removeFromCollection, renameCollection, setFavorite,
 } from './lib/collections.js'
@@ -144,7 +144,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
         } catch (e) { toast.error('Could not open the invite: ' + e.message) }
         try { sessionStorage.removeItem('qdplus_invite') } catch (_) { /* ignore */ }
       }
-      if (invite || openId) window.history.replaceState(null, '', window.location.pathname)
+      if (invite || openId) window.history.replaceState(null, '', '/')
       const [data, cols, favs] = await Promise.all([
         dbLoad(uid),
         loadCollections().catch(() => []),
@@ -197,6 +197,18 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
     if (mode === 'view' && selId) localStorage.setItem('qdplus_last_recipe', selId)
   }, [selId, mode])
 
+  // The address bar names the open recipe (/r/<id>), so a link copied or shared from the browser
+  // opens it — with its title and photo in WhatsApp and the like when it is public — and a reload
+  // stays on it. (Waits for the first load, which reads and clears the link it was opened with.)
+  useEffect(() => {
+    if (loading) return
+    const id = view === 'recipes' ? (mode === 'view' ? selId : null) : sessSel !== 'shopping' ? sessSel : null
+    const want = recipePath(id)
+    if (window.location.pathname + window.location.search !== want) window.history.replaceState(null, '', want)
+    const title = id && recipesRef.current.find((r) => r.id === id)?.title
+    document.title = title ? `${title} · Quaderno+` : 'Quaderno+'
+  }, [loading, view, mode, selId, sessSel])
+
   // A session can hold someone else's public recipe that is not in the library.
   useEffect(() => {
     if (!loading && session?.recipes?.length) ensureLoaded(session.recipes.map((e) => e.id))
@@ -228,7 +240,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
     if (v === 'session') { setView('session'); setSessSel(lastSessSel() || (isPhone() ? null : 'shopping')) }
     if (next === 'pdf') setImportOpen(true)
     else if (next) { setView('recipes'); setEditorStart(next === 'blank' ? 'blank' : next); setMode('new'); setSelId(null) }
-    window.history.replaceState(null, '', window.location.pathname)
+    window.history.replaceState(null, '', '/')
   }, [])
 
   // The list holds "lite" rows; fetch the full recipe (photos, media) when one is opened.
@@ -999,11 +1011,11 @@ export default function App() {
   const settingsCtx = useMemo(() => ({ settings, update: updateSettings }), [settings, updateSettings])
 
   const auth = useAuth()
-  const [params] = useState(() => new URLSearchParams(window.location.search))
-  const openId = params.get('r')
+  const [target] = useState(() => linkTarget())
+  const openId = target.openId
   // Keep an invite token across the sign-in / sign-up round trip.
   const [invite] = useState(() => {
-    const t = params.get('invite')
+    const t = target.invite
     try { if (t) sessionStorage.setItem('qdplus_invite', t); return t || sessionStorage.getItem('qdplus_invite') } catch (_) { return t }
   })
   // Guests browse public recipes without an account; a public link opens straight into that.

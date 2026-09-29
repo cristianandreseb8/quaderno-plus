@@ -28,8 +28,9 @@ const html = (page) => new Response(page, {
 
 export default async (req) => {
   const url = new URL(req.url)
-  const id = url.searchParams.get('r')
-  const token = id ? null : url.searchParams.get('invite')
+  // /r/<id> and /i/<token> (rewritten here with the id in the query), or the older /?r= and /?invite=.
+  const id = url.searchParams.get('r') || /\/r\/([0-9a-f-]{36})/i.exec(url.pathname)?.[1] || null
+  const token = id ? null : url.searchParams.get('invite') || /\/i\/([A-Za-z0-9]{32,80})/.exec(url.pathname)?.[1] || null
   const p = id || token ? await preview(id, token).catch(() => null) : null
   const photo = /^data:(image\/[a-z+.-]+);base64,(.+)$/is.exec(p?.thumbnail || '')
 
@@ -42,7 +43,7 @@ export default async (req) => {
 
   const page = await fetch(new URL('/index.html', url.origin)).then((r) => r.text())
   if (!p) return html(page)
-  const link = `${url.origin}/?${id ? `r=${id}` : `invite=${token}`}`
+  const link = `${url.origin}/${id ? `r/${id}` : `i/${token}`}`
   const about = [p.category, p.servings, p.owner_name && `by ${p.owner_name}`].filter(Boolean).join(' · ')
   const description = token ? `${about ? about + ' — ' : ''}shared with you on Quaderno+` : about || 'A recipe on Quaderno+'
   const image = photo

@@ -64,9 +64,9 @@ export default function ShareModal({ recipe, fromName, onClose, onVisibility }) 
 
       {level === 'public' && (
         <div className="Q-share-box">
-          <code>{recipeLink(recipe.id)}</code>
-          {canShare && <button className="btn ghost sm" onClick={() => shareSheet(recipe.title, recipeLink(recipe.id))}>Share…</button>}
-          <button className="btn primary sm" onClick={() => copy(recipeLink(recipe.id), 'Link')}>Copy link</button>
+          <code>{recipeLink(recipe.id, recipe)}</code>
+          {canShare && <button className="btn ghost sm" onClick={() => shareSheet(recipe.title, recipeLink(recipe.id, recipe))}>Share…</button>}
+          <button className="btn primary sm" onClick={() => copy(recipeLink(recipe.id, recipe), 'Link')}>Copy link</button>
         </div>
       )}
 

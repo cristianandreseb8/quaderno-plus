@@ -20,10 +20,10 @@ self.addEventListener('activate', (event) => {
 
 // Fresh from the network; the saved copy if the network fails — or, with `waitMs`, if it is
 // slower than that (a weak phone connection should not keep the app from opening).
-async function networkFirst(request, cacheName, fallbackUrl, waitMs = 0) {
+async function networkFirst(request, cacheName, fallbackUrl, waitMs = 0, save = true) {
   const cache = await caches.open(cacheName)
   const network = fetch(request).then((res) => {
-    if (res.ok) cache.put(fallbackUrl || request, res.clone())
+    if (res.ok && save) cache.put(fallbackUrl || request, res.clone())
     return res
   })
   const saved = waitMs ? await cache.match(fallbackUrl || request) : null
@@ -56,9 +56,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url)
 
   // App page: fresh when online, the last copy when offline or after 3 s of a slow network
-  // (the fresh one is still saved for next time).
+  // (the fresh one is still saved for next time). Only the plain page is saved: a shared recipe
+  // link (/r/…, /i/…) carries that recipe's title and photo for link previews.
   if (req.mode === 'navigate') {
-    event.respondWith(networkFirst(req, SHELL, '/', 3000))
+    event.respondWith(networkFirst(req, SHELL, '/', 3000, url.pathname === '/' && !url.search))
     return
   }
   // Built files and icons: hashed names, safe to keep.

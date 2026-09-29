@@ -4,8 +4,25 @@ import { supabase } from './supabase.js'
 export const VISIBILITY = { private: 'Private', shared: 'Invite only', public: 'Public' }
 
 // Links people can open: a public recipe (anyone), or a personal invite (one person).
-export const recipeLink = (id) => `${window.location.origin}/?r=${id}`
-export const inviteLink = (token) => `${window.location.origin}/?invite=${token}`
+// With the recipe, the link carries a short version: WhatsApp and the like keep a link's preview
+// for good, so a new photo or title needs a link they have not seen yet.
+export const recipeLink = (id, recipe = null) => {
+  const v = recipe ? `${Date.parse(recipe.updated_at || '') || 0}:${String(recipe.title || '').length}:${String(recipe.thumbnail || '').length}` : ''
+  let h = 0
+  for (let i = 0; i < v.length; i++) h = (h * 31 + v.charCodeAt(i)) >>> 0
+  return `${window.location.origin}/r/${id}${v ? `?v=${h.toString(36).slice(0, 5)}` : ''}`
+}
+export const inviteLink = (token) => `${window.location.origin}/i/${token}`
+
+// The recipe or invite a link opens: /r/<id> and /i/<token>, or the older /?r=<id> and /?invite=<token>.
+export function linkTarget(loc = window.location) {
+  const q = new URLSearchParams(loc.search)
+  const r = /^\/r\/([0-9a-f-]{36})\/?$/i.exec(loc.pathname)
+  const i = /^\/i\/([A-Za-z0-9]{32,80})\/?$/.exec(loc.pathname)
+  return { openId: q.get('r') || r?.[1] || null, invite: q.get('invite') || i?.[1] || null }
+}
+// What the address bar shows for an open recipe (nothing open: the app's home).
+export const recipePath = (id) => (id ? `/r/${id}` : '/')
 
 export async function setVisibility(id, visibility) {
   const { error } = await supabase.from('recipes').update({ visibility }).eq('id', id)
