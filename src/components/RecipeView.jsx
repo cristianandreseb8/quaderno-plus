@@ -385,7 +385,7 @@ export default function RecipeView({
     const names = (s.src.recipe.ingredients || []).filter((l) => !/^##?\s+/.test(l)).map((l) => splitIngLine(l).name)
     return {
       label: [s.src.title, s.part, `Step ${s.n}`].filter(Boolean).join(' · ') + ` — ${short}`,
-      name: stepName(s.text, names, cleanName(s.part) || cleanName(s.src.title) || recipeName),
+      name: stepName(s.text, names, cleanName(s.src.title) || cleanName(s.part) || recipeName),
       durs: findDurations(s.text).slice(0, 3),
       tkey: `${recipe.id}:${String(s.key).replace(/:(\d+)$/, ':step:$1')}`,
     }
@@ -425,20 +425,29 @@ export default function RecipeView({
             {list.length ? (cook ? `${done} of ${list.length} steps` : `${list.length} step${list.length === 1 ? '' : 's'}`) : 'No method'}
             {list.length > 0 && <ChevronDown size={14} />}
           </button>
+          <TimerMenu tkey={`${recipe.id}:${c.sub.id}:part`} label={c.sub.title} name={cleanName(c.sub.title) || c.sub.title} {...timerBase} />
         </div>
         {open && list.length > 0 && (
           <ol className={`Q-steps Q-sub-steps${cook ? ' Q-cook-steps' : ''}`}>
             {list.flatMap((s) => {
               const where = [s.src.id !== c.sub.id && s.src.title, s.part].filter(Boolean).join(' · ')
-              const head = where && where !== label ? [<li key={`h-${s.key}`} className="Q-step-h">{where}</li>] : []
+              const head = where && where !== label ? [(
+                <li key={`h-${s.key}`} className="Q-step-h">
+                  {where}
+                  <TimerMenu tkey={`${recipe.id}:${s.src.id}:part:${where}`} label={where} name={cleanName(s.part) || cleanName(where) || where} {...timerBase} />
+                </li>
+              )] : []
               label = where || label
+              // Timers as on this recipe's own steps (chefSteps holds their names and keys).
+              const cs = chefSteps.find((x) => x.i === s.key)
               return [...head, (
                 <li
                   key={s.key} data-n={s.n}
                   className={`Q-step${cook && doneSteps.has(s.key) ? ' done' : ''}${cook && s.key === nextStep ? ' next' : ''}`}
                   onClick={cook ? () => cook.onToggleStep(s.key) : undefined}
+                  {...(cs ? holdToOpen(null, cs) : {})}
                 >
-                  <span className="Q-step-text">{s.text}</span>
+                  {cs ? timedText(s.text, cs.info, { ext: cs }) : <span className="Q-step-text">{s.text}</span>}
                 </li>
               )]
             })}
@@ -451,23 +460,24 @@ export default function RecipeView({
   // A step's written times become chips in its text; a step without one gets a small timer
   // beside it (on a touch screen it opens the step's options, like holding the step down).
   const touch = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
-  const stepBody = (st, i) => {
-    const { label, name, durs, tkey } = stepInfo(st, i)
-    if (durs.length) return <span className="Q-step-text">{st.text}{durs.map((d) => <TimerChip key={d.ms} tkey={`${tkey}:${d.ms}`} label={label} name={name} ms={d.ms} text={d.label} {...timerBase} />)}</span>
+  const timedText = (text, { label, name, durs, tkey }, sheet) => {
+    if (durs.length) return <span className="Q-step-text">{text}{durs.map((d) => <TimerChip key={d.ms} tkey={`${tkey}:${d.ms}`} label={label} name={name} ms={d.ms} text={d.label} {...timerBase} />)}</span>
     return (
       <>
-        <span className="Q-step-text">{st.text}</span>
-        <TimerMenu className="side" tkey={tkey} label={label} name={name} onSheet={touch ? () => setStepSheet({ i }) : null} {...timerBase} />
+        <span className="Q-step-text">{text}</span>
+        <TimerMenu className="side" tkey={tkey} label={label} name={name} onSheet={touch ? () => setStepSheet(sheet) : null} {...timerBase} />
       </>
     )
   }
+  const stepBody = (st, i) => timedText(st.text, stepInfo(st, i), { i })
   // Hold a step (or part) down on a phone — or right-click it — for its options, a timer first.
-  const holdToOpen = (i) => ({
+  // A step of a linked recipe passes itself as `ext` (see chefSteps).
+  const holdToOpen = (i, ext = null) => ({
     onPointerDown: (e) => {
       if ((e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('button, a, input')) return
       clearTimeout(press.current?.timer)
       const p = { x: e.clientX, y: e.clientY, fired: false }
-      p.timer = setTimeout(() => { p.fired = true; navigator.vibrate?.(12); setStepSheet({ i }) }, 480)
+      p.timer = setTimeout(() => { p.fired = true; navigator.vibrate?.(12); setStepSheet(ext ? { ext } : { i }) }, 480)
       press.current = p
     },
     onPointerMove: (e) => {
@@ -476,7 +486,7 @@ export default function RecipeView({
     },
     onPointerUp: () => { const p = press.current; if (p && !p.fired) { clearTimeout(p.timer); press.current = null } },
     onPointerCancel: () => { if (press.current) clearTimeout(press.current.timer); press.current = null },
-    onContextMenu: (e) => { if (e.target.closest('button, a, input')) return; e.preventDefault(); if (press.current) clearTimeout(press.current.timer); setStepSheet({ i }) },
+    onContextMenu: (e) => { if (e.target.closest('button, a, input')) return; e.preventDefault(); if (press.current) clearTimeout(press.current.timer); setStepSheet(ext ? { ext } : { i }) },
     // The release after a hold is not a tap: it must not tick the step.
     onClickCapture: (e) => { if (press.current?.fired) { e.stopPropagation(); e.preventDefault(); press.current = null } },
   })
