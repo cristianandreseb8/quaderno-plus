@@ -126,6 +126,9 @@
 .Q-chef-portion { display: block; font-size: 12px; font-style: normal; color: var(--muted); margin-top: 1px; }
 .Q-chef-uses b.vague { font-weight: 600; font-style: italic; }
 .Q-chef-src { color: var(--accent); }
+.Q-chef-uses.made { margin-top: 14px; }
+.Q-chef-uses.fresh + .Q-chef-uses.made { margin-top: 16px; }
+.Q-chef-uses li.Q-chef-uses-label { display: block; padding: 0 2px; background: none; cursor: default; font: 700 11.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .Q-chef-prep-mark { color: var(--accent); font-weight: 700; text-align: center; }
 .Q-chef-uses li.prep { cursor: default; background: transparent; border: 1px dashed var(--rule-strong); }
 .Q-chef-reading { margin-top: 12px; font-size: 13px; color: var(--muted); animation: qpulse 1.6s ease-in-out infinite; }
