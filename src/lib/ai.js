@@ -50,5 +50,8 @@ export const describeIngredient = (name, ingredientType) =>
 export const extractPdfRecipes = (params) => invoke({ type: 'extract_pdf', ...params })
 export const pdfOutline = (params) => invoke({ type: 'pdf_outline', ...params })
 export const pdfRecipe = (params) => invoke({ type: 'pdf_recipe', ...params })
+// Short texts into another language ("Papel de horno" → "baking paper"); unchanged when they
+// already are in it, or are a brand or a proper name.
+export const translateStrings = (items, targetLang) => invoke({ type: 'translate_strings', items, target_lang: targetLang })
 // Spelling and grammar: items [{ id, text }] in, only the corrected ones [{ id, text }] back.
 export const proofreadTexts = (items) => invoke({ type: 'proofread', items })

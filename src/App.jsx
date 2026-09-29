@@ -72,6 +72,10 @@ const SORTS = [
   ['favorites', 'Favorites first'],
 ]
 
+// The session's last screen on this device ('shopping' or a recipe id).
+const SESS_SEL_KEY = 'qdplus_sess_sel'
+const lastSessSel = () => { try { return localStorage.getItem(SESS_SEL_KEY) || null } catch (_) { return null } }
+
 function Workspace({ user, profile, setProfile, invite, openId }) {
   // Open with the list kept on this device, if any; the database refreshes it right after.
   const [cached] = useState(() => readList(user.id))
@@ -108,11 +112,24 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   const requestedRef = useRef(new Set())
   const [shareFor, setShareFor] = useState(null)
   const [view, setView] = useState(() => localStorage.getItem('qdplus_view') || 'recipes') // 'recipes' | 'session'
-  const [sessSel, setSessSel] = useState(() => (isPhone() ? null : 'shopping')) // 'shopping' | recipe id
+  // What the session shows: 'shopping' or a recipe id. The last one is kept on the device, so the
+  // session reopens on the recipe being cooked — also after leaving it or closing the app.
+  const [sessSel, setSessSel] = useState(() => lastSessSel() || (isPhone() ? null : 'shopping'))
   const [showPicker, setShowPicker] = useState(false)
   const searchRef = useRef(null)
   const toggleSidebarRef = useRef(() => {})
-  const { session, change: changeSession, finish: finishSession } = useSession(toast.error)
+  const { session, loaded: sessionLoaded, change: changeSession, finish: finishSession } = useSession(toast.error)
+  useEffect(() => {
+    if (!sessSel) return
+    try { localStorage.setItem(SESS_SEL_KEY, sessSel) } catch (_) { /* ignore */ }
+  }, [sessSel])
+  // A recipe no longer in the session: back to the shopping list (the list of the session on a phone).
+  useEffect(() => {
+    if (!sessionLoaded || !sessSel || sessSel === 'shopping') return
+    if ((session?.recipes || []).some((e) => e.id === sessSel)) return
+    try { localStorage.removeItem(SESS_SEL_KEY) } catch (_) { /* ignore */ }
+    setSessSel(isPhone() ? null : 'shopping')
+  }, [sessionLoaded, session, sessSel])
   const install = useInstall()
 
 
@@ -208,7 +225,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
     const params = new URLSearchParams(window.location.search)
     const next = params.get('new'), v = params.get('view')
     if (!next && !v) return
-    if (v === 'session') { setView('session'); if (!isPhone()) setSessSel('shopping') }
+    if (v === 'session') { setView('session'); setSessSel(lastSessSel() || (isPhone() ? null : 'shopping')) }
     if (next === 'pdf') setImportOpen(true)
     else if (next) { setView('recipes'); setEditorStart(next === 'blank' ? 'blank' : next); setMode('new'); setSelId(null) }
     window.history.replaceState(null, '', window.location.pathname)
@@ -515,7 +532,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   function switchView(v) {
     setView(v)
     try { localStorage.setItem('qdplus_view', v) } catch (_) { /* ignore */ }
-    if (v === 'session' && !isPhone() && !sessSel) setSessSel('shopping')
+    if (v === 'session' && !sessSel) setSessSel(lastSessSel() || (isPhone() ? null : 'shopping'))
   }
   function startNew(kind) {
     if (kind === 'pdf') { setImportOpen(true); return }
@@ -559,6 +576,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   async function endSession() {
     if (!window.confirm('Finish this session? Its shopping list and progress are archived and a fresh session starts.')) return
     await finishSession(); setSessSel(isPhone() ? null : 'shopping')
+    try { localStorage.removeItem(SESS_SEL_KEY) } catch (_) { /* ignore */ }
     toast('Session finished')
   }
 

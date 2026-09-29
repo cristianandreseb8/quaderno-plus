@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase.js'
 import { fmtQty, isRefLine, isSectionHeader, linkOf, parseIng, stripLinks } from './recipeCalc.js'
 import { linkFactor, resolveLink } from './links.js'
+import { isUnitWord } from './grams.js'
 
 // ── Shopping list aggregation ───────────────────────────────────────────────
 // Metric units collapse to one base unit so "1 kg flour" and "250 g flour" add up;
@@ -60,6 +61,8 @@ export function buildShoppingList(sessionRecipes, recipesById) {
     const stages = stageLabels(all)
     for (const line of lines) {
       const p = parseIng(line)
+      // "1 vanilla bean" is one "vanilla bean", not 1 "vanilla" of bean.
+      if (p.unit && p.unit !== '%' && !isUnitWord(p.unit)) { p.name = `${p.unit} ${p.name}`; p.unit = '' }
       const [unit, mult] = TO_BASE[p.unit] || [p.unit, 1]
       let name = p.qty == null ? stripLinks(line).trim() : p.name
       const m = name.match(TRAILING)
@@ -202,7 +205,8 @@ export const setQtyOverride = (key, text) => (s) => {
   if (text == null || text === '') delete qty[key]; else qty[key] = text
   return { ...s, shopping: { ...s.shopping, qty } }
 }
-export const addExtra = (text) => (s) => ({ ...s, shopping: { ...s.shopping, extra: [...s.shopping.extra, { id: Math.random().toString(36).slice(2, 10), text, have: false }] } })
+export const addExtra = (text, id = Math.random().toString(36).slice(2, 10), more = {}) => (s) => ({ ...s, shopping: { ...s.shopping, extra: [...s.shopping.extra, { id, text, have: false, ...more }] } })
+export const updateExtra = (id, patch) => (s) => ({ ...s, shopping: { ...s.shopping, extra: s.shopping.extra.map((e) => (e.id === id ? { ...e, ...patch } : e)) } })
 export const toggleExtra = (id) => (s) => ({ ...s, shopping: { ...s.shopping, extra: s.shopping.extra.map((e) => (e.id === id ? { ...e, have: !e.have } : e)) } })
 export const removeExtra = (id) => (s) => ({ ...s, shopping: { ...s.shopping, extra: s.shopping.extra.filter((e) => e.id !== id) } })
 export const toggleProgress = (recipeId, kind, idx) => (s) => {

@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import { addExtra, buildShoppingList, formatQty, removeExtra, setQtyOverride, shortTitle, toggleExtra, toggleHave } from '../../lib/session.js'
+import { addExtra, buildShoppingList, formatQty, removeExtra, setQtyOverride, shortTitle, toggleExtra, toggleHave, updateExtra } from '../../lib/session.js'
+import { translateStrings } from '../../lib/ai.js'
+import { guessLang } from '../../lib/timerNames.js'
 import { toast } from '../ui/Toaster.jsx'
+
+const LANG_NAME = { 'en-US': 'English', 'es-ES': 'Spanish', 'it-IT': 'Italian', 'fr-FR': 'French', 'de-DE': 'German' }
 
 function QtyField({ value, computed, onCommit }) {
   const [text, setText] = useState(value)
@@ -26,6 +30,31 @@ export default function ShoppingList({ session, recipesById, change }) {
   const [stay, setStay] = useState(() => new Set())
   const items = useMemo(() => buildShoppingList(session.recipes, recipesById), [session.recipes, recipesById])
   const { have, qty: overrides, extra } = session.shopping
+
+  // The list speaks the recipes' language, and items typed in another one join it: "Papel de
+  // horno" in an English list becomes "baking paper" (Undo keeps it as typed).
+  const listLang = useMemo(() => {
+    const text = session.recipes.flatMap(({ id }) => {
+      const r = recipesById.get(id)
+      return r ? [...(r.ingredients || []), ...(r.steps || [])] : []
+    }).join(' ')
+    return text.trim() ? guessLang(text) : null
+  }, [session.recipes, recipesById])
+  const tried = useRef(new Set())
+  useEffect(() => {
+    if (!listLang || !LANG_NAME[listLang]) return
+    const todo = extra.filter((e) => e.lang !== listLang && !e.keep && !tried.current.has(`${e.id}|${listLang}`))
+    if (!todo.length) return
+    todo.forEach((e) => tried.current.add(`${e.id}|${listLang}`))
+    translateStrings(todo.map((e) => e.text), LANG_NAME[listLang]).then(({ items = [] } = {}) => {
+      todo.forEach((e, i) => {
+        const t = String(items[i] || '').trim()
+        const changed = t && t.toLowerCase() !== String(e.text).trim().toLowerCase()
+        change(updateExtra(e.id, changed ? { text: t, orig: e.orig || e.text, lang: listLang } : { lang: listLang }))
+        if (changed) toast(`“${e.text}” → “${t}”`, { action: { label: 'Undo', onClick: () => change(updateExtra(e.id, { text: e.text, keep: true })) } })
+      })
+    }).catch(() => { /* offline: it stays as typed and is tried again next time */ })
+  }, [listLang, extra])
 
   const rows = [
     ...items.map((it) => ({ ...it, kind: 'recipe', done: !!have[it.key] })),
