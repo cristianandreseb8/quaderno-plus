@@ -32,23 +32,53 @@ export function cleanName(text) {
   return cap(s)
 }
 
+// Does a step mention this ingredient? The whole name ("lievito madre"), else its first word the
+// step uses ("cebolla" for "cebolla blanca mediana", "ajo" for "dientes de ajo") — never a word
+// too general to mean it ("dough"). Returns what matched, or null.
+function matchIngredient(text, raw) {
+  const core = norm(String(raw).replace(/\([^)]*\)/g, ' ').split(/[,;—]/)[0]).replace(/[^a-z0-9]+/g, ' ').trim()
+  if (!core) return null
+  const words = core.split(' ')
+  const phrase = words.slice(0, 3).join(' ')
+  if (text.includes(` ${phrase} `)) return phrase
+  return words.find((w) => w.length >= 3 && !STOP.has(w) && !WEAK.has(w) && !/^\d/.test(w) && text.includes(` ${w} `)) || null
+}
+const asWords = (s) => ` ${norm(s).replace(/[^a-z0-9]+/g, ' ')} `
+
 // The ingredient a step is about: "Sofreír la cebolla 10 minutos" → "Cebolla". A step that
 // works with several ingredients is about the dough or part it belongs to, so none is returned.
 export function stepSubject(stepText, ingredientNames) {
-  const text = ` ${norm(stepText).replace(/[^a-z0-9]+/g, ' ')} `
+  const text = asWords(stepText)
   const found = []
   for (const raw of ingredientNames) {
-    const core = norm(String(raw).replace(/\([^)]*\)/g, ' ').split(/[,;—]/)[0]).replace(/[^a-z0-9]+/g, ' ').trim()
-    if (!core) continue
-    const words = core.split(' ')
-    // The whole name ("lievito madre"), else its first word the step uses ("cebolla" for
-    // "cebolla blanca mediana", "ajo" for "dientes de ajo").
-    const phrase = words.slice(0, 3).join(' ')
-    const word = words.find((w) => w.length >= 3 && !STOP.has(w) && !WEAK.has(w) && !/^\d/.test(w) && text.includes(` ${w} `))
-    const hit = text.includes(` ${phrase} `) ? phrase : word || null
+    const hit = matchIngredient(text, raw)
     if (hit && !found.some((f) => f === hit || f.includes(hit) || hit.includes(f))) found.push(hit)
   }
   return found.length === 1 ? cap(found[0]) : ''
+}
+
+// Every ingredient a step mentions: [{ i, hit, full }] — i indexes `ingredientNames`; lines naming the
+// same thing share their `hit` (so the caller can pick the one from the right part); `full` when the
+// whole name is in the step. Longer names are found first and their words set aside, so "icing
+// sugar" and "pearl sugar" are two things and neither is plain "sugar"; then single words
+// ("cebolla" for "cebolla blanca mediana") among what is left.
+export function mentionedIngredients(stepText, ingredientNames) {
+  let text = asWords(stepText)
+  const core = (raw) => norm(String(raw).replace(/\([^)]*\)/g, ' ').split(/[,;—]/)[0]).replace(/[^a-z0-9]+/g, ' ').trim()
+  const items = ingredientNames.map((raw, i) => ({ i, phrase: core(raw).split(' ').slice(0, 3).join(' ') })).filter((x) => x.phrase)
+  const out = []
+  const byLength = [...new Set(items.map((x) => x.phrase))].sort((a, b) => b.length - a.length)
+  for (const phrase of byLength) {
+    if (!text.includes(` ${phrase} `)) continue
+    items.filter((x) => x.phrase === phrase).forEach((x) => out.push({ i: x.i, hit: phrase, full: true }))
+    text = text.split(` ${phrase} `).join(' | ')
+  }
+  for (const x of items) {
+    if (out.some((o) => o.i === x.i)) continue
+    const word = x.phrase.split(' ').find((w) => w.length >= 3 && !STOP.has(w) && !WEAK.has(w) && !/^\d/.test(w) && text.includes(` ${w} `))
+    if (word) out.push({ i: x.i, hit: word, full: false })
+  }
+  return out.sort((a, b) => a.i - b.i)
 }
 
 // "BROWN THE RABBIT" → "Brown the rabbit" (only titles written in capitals change).

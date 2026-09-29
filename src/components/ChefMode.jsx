@@ -4,19 +4,31 @@ import { ChevronLeft, ChevronRight, ListChecks, Pause, Play, Timer as TimerIcon,
 import {
   addTime, fmtClock, pauseTimer, remaining, resumeTimer, speak, startTimer, stopRinging, stopSpeaking, useTimers, voiceLang,
 } from '../lib/timers.js'
+import { cleanName, mentionedIngredients } from '../lib/timerNames.js'
+import { splitIngLine } from '../lib/recipeCalc.js'
+import { hasFlourWord } from '../lib/constants.js'
 
 // Words the guide says, in the recipe's language (the step text is read in it too).
 const PHRASES = {
-  es: { step: 'Paso', next: 'Siguiente paso', done: 'Receta terminada' },
-  it: { step: 'Passo', next: 'Passo successivo', done: 'Ricetta finita' },
-  en: { step: 'Step', next: 'Next step', done: 'Recipe finished' },
-  fr: { step: 'Étape', next: 'Étape suivante', done: 'Recette terminée' },
-  de: { step: 'Schritt', next: 'Nächster Schritt', done: 'Rezept fertig' },
+  es: { step: 'Paso', next: 'Siguiente paso', done: 'Receta terminada', need: 'Necesitas' },
+  it: { step: 'Passo', next: 'Passo successivo', done: 'Ricetta finita', need: 'Ti servono' },
+  en: { step: 'Step', next: 'Next step', done: 'Recipe finished', need: 'You need' },
+  fr: { step: 'Étape', next: 'Étape suivante', done: 'Recette terminée', need: 'Il vous faut' },
+  de: { step: 'Schritt', next: 'Nächster Schritt', done: 'Rezept fertig', need: 'Du brauchst' },
 }
 const VOICE_KEY = 'qdplus_chef_voice'
+const INGS_KEY = 'qdplus_chef_ings' // the ingredient list beside the step, on wide screens
+const wide = () => window.matchMedia('(min-width: 900px)').matches
 // A timer belongs to a step if its key is the step's, or the step's plus a duration.
 const ofStep = (key, tkey) => key === tkey || String(key || '').startsWith(`${tkey}:`)
-const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
+// An ingredient's name without its notes: "cebolla blanca mediana (aprox. 180 g)" → "cebolla blanca mediana".
+const coreName = (name) => norm(String(name || '').replace(/\([^)]*\)/g, ' ').split(/[,;—]/)[0])
+// Lines kept for the end ("icing sugar, to finish"), and steps that do the finishing.
+const FINISH_LINE = /\b(to finish|for finishing|to serve|for dusting|to dust|to garnish|to decorate|para decorar|para terminar|al servir|para servir|per finire|per decorare|per servire|pour finir|pour décorer|pour servir|zum bestreuen|zum garnieren|zum servieren)\b/i
+const FINISH_STEP = /\b(top|tops|topping|finish|dust|sprinkle|decorate|garnish|serve|espolvorear|espolvorea|decorar|decora|terminar|servir|spolverare|spolverizzare|decorare|guarnire|cospargere|saupoudrer|décorer|garnir|servir|bestreuen|garnieren|verzieren)\b/i
+// "flour" in a step means the flour of that part, whatever its name ("Caputo Manitoba Oro").
+const FLOUR_WORD = /\b(flours?|farina|farine|harinas?|mehl|semola|semolina)\b/
 
 // Chef mode: the recipe one step at a time, full screen. Big text, Next / Back (or swipe), the
 // step's timer at hand, and — if wanted — the step read aloud. In a session, Next also ticks the
@@ -25,7 +37,9 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
   const first = cook ? steps.findIndex((s) => !doneSteps.has(s.i)) : 0
   const [pos, setPos] = useState(first < 0 ? steps.length : first) // steps.length = finished
   const [voiceOn, setVoiceOn] = useState(() => { try { return localStorage.getItem(VOICE_KEY) === 'on' } catch (_) { return false } })
-  const [showIngs, setShowIngs] = useState(false)
+  const [showIngs, setShowIngs] = useState(() => { try { return wide() && localStorage.getItem(INGS_KEY) !== 'off' } catch (_) { return wide() } })
+  const [localTicks, setLocalTicks] = useState(() => new Set()) // mise en place outside a session
+  const ingsRef = useRef(null)
   const [nudge, setNudge] = useState(false) // a timer of this step ended: time to move on
   const { timers, now } = useTimers()
   const P = PHRASES[(lang || 'en').slice(0, 2)] || PHRASES.en
@@ -33,13 +47,62 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
   const finished = pos >= steps.length
   const recipeId = timerBase.recipeId
 
-  // What to say on arriving at a step: its number, the part when a new one starts, the text.
+  // Every ingredient line of the recipe, and the part a step belongs to.
+  const lines = sections.flatMap((sec, si) => sec.items.map((line, ii) => ({ si, raw: sec.rawIndices[ii], part: sec.name || '', d: splitIngLine(line) })))
+  // The ingredient part a step belongs to: "Lievito madre management" is the "Lievito madre —
+  // single refresh (…)" part — compared without the words around them.
+  const partKey = (name) => norm(cleanName(name) || name)
+  const partIndex = (s) => {
+    if (!s?.part) return -1
+    const want = partKey(s.part)
+    return sections.findIndex((sec) => sec.name && (partKey(sec.name) === want || partKey(sec.name).includes(want) || want.includes(partKey(sec.name))))
+  }
+  // The ingredients a step uses, with their (scaled) quantities: from its own part when that part
+  // has them ("flour" in "First dough" is the first dough's flour), otherwise the line named exactly
+  // that ("flour", not "almond flour"), otherwise every candidate with its part's name.
+  function usedBy(s) {
+    if (!s) return []
+    const groups = new Map()
+    const add = (hit, line, full) => {
+      if (!groups.has(hit)) groups.set(hit, [])
+      const g = groups.get(hit)
+      const had = g.find((x) => x.line === line)
+      if (had) had.full = had.full || full; else g.push({ line, full })
+    }
+    mentionedIngredients(s.text, lines.map((l) => l.d.name)).forEach(({ i, hit, full }) => add(hit, lines[i], full))
+    const flour = norm(s.text).match(FLOUR_WORD)
+    if (flour) {
+      const key = [...groups.keys()].find((k) => FLOUR_WORD.test(k)) || flour[1]
+      lines.filter((l) => hasFlourWord(l.d.name) && !/\b(almond|hazelnut|pistachio|coconut|rice|corn|chickpea|mandorl|nocciol|almendra|avellana|mandel|hasel)/i.test(l.d.name)).forEach((l) => add(key, l, true))
+    }
+    const own = partIndex(s)
+    const finishing = FINISH_STEP.test(s.text)
+    return [...groups.entries()].flatMap(([hit, entries]) => {
+      // The whole name beats one of its words; a finishing step takes the lines kept for the end
+      // ("icing sugar, to finish"), any other step the ones with a quantity ("60 g icing sugar").
+      let g = entries.some((e) => e.full) ? entries.filter((e) => e.full) : entries
+      g = g.map((e) => e.line)
+      const forEnd = g.filter((l) => FINISH_LINE.test(l.d.name))
+      if (finishing && forEnd.length) g = forEnd
+      else if (g.some((l) => l.d.qty)) g = g.filter((l) => l.d.qty)
+      const mine = g.filter((l) => l.si === own)
+      if (mine.length) return mine.map((l) => ({ ...l, showPart: false }))
+      const exact = g.filter((l) => coreName(l.d.name) === hit)
+      const pick = exact.length ? exact : g
+      return pick.map((l) => ({ ...l, showPart: pick.length > 1 }))
+    }).sort((a, b) => a.raw - b.raw)
+  }
+
+  // What to say on arriving at a step: its number, the part when a new one starts, the text, and
+  // how much of each ingredient it uses ("Necesitas: 1 cebolla blanca mediana").
   function sayStep(p, force = false) {
     if (!(voiceOn || force)) return
     const s = steps[p]
     if (!s) { speak(P.done, lang, { interrupt: true }); return }
     const newPart = s.part && (p === 0 || steps[p - 1]?.part !== s.part)
-    speak(`${P.step} ${s.n}. ${newPart ? `${s.part}. ` : ''}${s.text}`, lang, { interrupt: true })
+    const uses = usedBy(s).filter((u) => u.d.qty).slice(0, 6)
+    const need = uses.length ? ` ${P.need}: ${uses.map((u) => `${u.d.qty} ${u.d.name}`).join(', ')}.` : ''
+    speak(`${P.step} ${s.n}. ${newPart ? `${s.part}. ` : ''}${s.text}${need}`, lang, { interrupt: true })
   }
   useEffect(() => { sayStep(pos) }, [pos, voiceOn])
   useEffect(() => () => stopSpeaking(), [])
@@ -107,6 +170,17 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
     }
   }
 
+  const ticked = cook ? new Set(cook.progress?.ing || []) : localTicks
+  function toggleTick(raw) {
+    if (cook) { cook.onToggleIng(raw); return }
+    setLocalTicks((prev) => { const n = new Set(prev); if (n.has(raw)) n.delete(raw); else n.add(raw); return n })
+  }
+  function toggleIngs() {
+    const on = !showIngs
+    setShowIngs(on)
+    if (wide()) { try { localStorage.setItem(INGS_KEY, on ? 'on' : 'off') } catch (_) { /* ignore */ } }
+  }
+
   function toggleVoice() {
     const on = !voiceOn
     setVoiceOn(on)
@@ -122,9 +196,15 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
   }
   const stepTimers = step ? timers.filter((t) => ofStep(t.key, step.info.tkey) && t.state !== 'idle') : []
 
-  // The ingredients of the part this step belongs to (all of them if no part matches).
-  const partSection = step && sections.find((sec) => sec.name && step.part && (norm(sec.name).includes(norm(step.part)) || norm(step.part).includes(norm(sec.name))))
-  const shownSections = partSection ? [partSection] : sections
+  const uses = usedBy(step)
+  const usedRaw = new Set(uses.map((u) => u.raw))
+  const currentPart = partIndex(step)
+  // The full list follows the step: its ingredients highlighted and scrolled into view.
+  useEffect(() => {
+    if (!showIngs) return
+    const el = ingsRef.current?.querySelector('.used') || ingsRef.current?.querySelector('.Q-chef-ings-part.current')
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [pos, showIngs])
 
   const progress = steps.length ? Math.min(100, (pos / steps.length) * 100) : 100
   const host = document.querySelector('.Q') || document.body
@@ -139,7 +219,7 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
           {voiceOn ? <Volume2 size={19} /> : <VolumeX size={19} />}
         </button>
         {sections.length > 0 && (
-          <button className={`Q-icon-btn${showIngs ? ' on' : ''}`} onClick={() => setShowIngs(!showIngs)} title="Ingredients" aria-label="Ingredients"><ListChecks size={19} /></button>
+          <button className={`Q-icon-btn${showIngs ? ' on' : ''}`} onClick={toggleIngs} title="All the ingredients" aria-label="All the ingredients" aria-pressed={showIngs}><ListChecks size={19} /></button>
         )}
         <button className="Q-icon-btn" onClick={onClose} aria-label="Close chef mode"><X size={20} /></button>
       </div>
@@ -158,17 +238,8 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
         </div>
       )}
 
-      <div className="Q-chef-body">
-        {showIngs && (
-          <div className="Q-chef-ings">
-            {shownSections.map((sec, si) => (
-              <div key={si}>
-                {sec.name && <div className="Q-chef-part">{sec.name}</div>}
-                <ul>{sec.items.map((line, li) => <li key={li}>{String(line).replace(/^\s*(→|->)\s*/, '↳ ')}</li>)}</ul>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className={`Q-chef-body${showIngs ? ' with-ings' : ''}`}>
+        <div className="Q-chef-main">
         {finished ? (
           <div className="Q-chef-step done">
             <div className="Q-chef-text">All steps done.</div>
@@ -177,6 +248,17 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
           <div className="Q-chef-step">
             {step.part && <div className="Q-chef-part">{step.part}</div>}
             <button type="button" className="Q-chef-text" onClick={() => { if (!swiped.current) sayStep(pos, true) }} title="Read it aloud">{step.text}</button>
+            {uses.length > 0 && (
+              <ul className="Q-chef-uses" aria-label="Ingredients for this step">
+                {uses.map((u) => (
+                  <li key={u.raw} className={ticked.has(u.raw) ? 'ticked' : ''} onClick={() => toggleTick(u.raw)}>
+                    <span className="Q-ing-check" aria-hidden="true" />
+                    {u.d.qty && <b>{u.d.qty}</b>}
+                    <span>{u.d.ref ? '↳ ' : ''}{u.d.name}{u.showPart && u.part && <em> · {u.part}</em>}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="Q-chef-actions">
               {stepTimers.filter((t) => t.state !== 'done').map((t) => (
                 <div key={t.id} className={`Q-chef-clock${t.ringing ? ' ringing' : ''}`}>
@@ -199,6 +281,29 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
               <button className="Q-chef-more" onClick={() => onTimerOptions(step.i)}><TimerIcon size={15} /> {step.info.durs.length ? 'Other timer' : 'Timer'}</button>
             </div>
           </div>
+        )}
+        </div>
+        {showIngs && (
+          <aside className="Q-chef-ings" ref={ingsRef} aria-label="All the ingredients">
+            {sections.map((sec, si) => (
+              <div key={si} className={`Q-chef-ings-part${si === currentPart ? ' current' : ''}`}>
+                {sec.name && <div className="Q-chef-part">{sec.name}</div>}
+                <ul>
+                  {sec.items.map((line, ii) => {
+                    const raw = sec.rawIndices[ii]
+                    const d = splitIngLine(line)
+                    return (
+                      <li key={ii} className={`${usedRaw.has(raw) ? 'used' : ''}${ticked.has(raw) ? ' ticked' : ''}`} onClick={() => toggleTick(raw)}>
+                        <span className="Q-ing-check" aria-hidden="true" />
+                        <b>{d.qty}</b>
+                        <span>{d.ref ? '↳ ' : ''}{d.name}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ))}
+          </aside>
         )}
       </div>
 
