@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase.js'
-import { fmtQty, isRefLine, isSectionHeader, parseIng } from './recipeCalc.js'
+import { fmtQty, isRefLine, isSectionHeader, linkOf, parseIng, stripLinks } from './recipeCalc.js'
+import { linkFactor, resolveLink } from './links.js'
 
 // ── Shopping list aggregation ───────────────────────────────────────────────
 // Metric units collapse to one base unit so "1 kg flour" and "250 g flour" add up;
@@ -33,17 +34,34 @@ export function shortTitle(title) {
 
 export function buildShoppingList(sessionRecipes, recipesById) {
   const map = new Map()
-  for (const { id, factor } of sessionRecipes) {
-    const r = recipesById.get(id)
-    if (!r) continue
-    const f = Number(factor) || 1
+  // A recipe's lines; a linked recipe ("350 g  [[Pâte brisée|id]]") adds its own ingredients,
+  // in the amount used — not a line to buy.
+  const collect = (r, f, seen, add) => {
     // Reference lines ("→ first dough") are made in this recipe, not bought.
     const lines = (r.ingredients || []).filter((line) => String(line).trim() && !isSectionHeader(line) && !isRefLine(line))
-    const stages = stageLabels(lines)
+    for (const line of lines) {
+      const sub = linkOf(line) && resolveLink(linkOf(line), recipesById)
+      if (sub && !seen.has(sub.id) && seen.size < 6) collect(sub, f * linkFactor(line, sub), new Set([...seen, sub.id]), add)
+      else add(r, f, line, lines)
+    }
+  }
+  for (const { id, factor } of sessionRecipes) {
+    const top = recipesById.get(id)
+    if (!top) continue
+    const perRecipe = new Map() // recipe → { f, lines } — stage labels are read per recipe
+    collect(top, Number(factor) || 1, new Set([top.id]), (r, f, line, lines) => {
+      const k = `${r.id}|${f}`
+      if (!perRecipe.has(k)) perRecipe.set(k, { r, f, lines, own: [] })
+      perRecipe.get(k).own.push(line)
+    })
+    for (const { r, f, lines: all, own } of perRecipe.values()) addLines(r, f, all, own)
+  }
+  function addLines(r, f, all, lines) {
+    const stages = stageLabels(all)
     for (const line of lines) {
       const p = parseIng(line)
       const [unit, mult] = TO_BASE[p.unit] || [p.unit, 1]
-      let name = p.qty == null ? String(line).trim() : p.name
+      let name = p.qty == null ? stripLinks(line).trim() : p.name
       const m = name.match(TRAILING)
       if (m && stages.has(m[1].trim().toLowerCase())) name = name.replace(TRAILING, '')
       const key = itemKey(name, p.qty == null ? '' : unit)

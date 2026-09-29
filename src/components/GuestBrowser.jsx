@@ -107,7 +107,7 @@ export default function GuestBrowser({ openId, onSignIn }) {
               <Suspense fallback={<div className="Q-msg">Loading…</div>}>
                 <RecipeView
                   key={sel.id} recipe={sel} guest canEdit={false} ownerName={sel.owner?.display_name}
-                  onEdit={noop} onDelete={noop} onUpdate={noop} allRecipes={[]} onCopy={onSignIn} onSaveVariant={onSignIn}
+                  onEdit={noop} onDelete={noop} onUpdate={noop} allRecipes={list || []} onOpenRecipe={setSelId} onCopy={onSignIn} onSaveVariant={onSignIn}
                 />
               </Suspense>
             )}

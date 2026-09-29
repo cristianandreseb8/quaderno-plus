@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChefHat, ChevronLeft, ChevronRight, Globe, Loader2, Lock, MoreHorizontal, Share, Users } from 'lucide-react'
+import { ArrowUpRight, Check, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Globe, Loader2, Lock, MoreHorizontal, Share, Users } from 'lucide-react'
 import {
   calcPct, findStepsForIng, fmtQty, getTotalGrams, ingGrams, lineGrams, numberSteps, parseIng, parseSections, scaleRecipe, sectionGrams, splitIngLine,
 } from '../lib/recipeCalc.js'
@@ -17,6 +17,7 @@ import NotesPanel from './NotesPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
 import { TimerChip, TimerMenu, TimerPresets } from './Timers.jsx'
 import { findDurations } from '../lib/durations.js'
+import { componentsOf, flattenSteps, linkFactor, resolveLink } from '../lib/links.js'
 import { cleanName, guessLang, stepName } from '../lib/timerNames.js'
 import StepSheet from './StepSheet.jsx'
 import ChefMode from './ChefMode.jsx'
@@ -28,7 +29,7 @@ const TABS = [
 ]
 
 export default function RecipeView({
-  recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant, inSession, onToggleSession,
+  recipe, onEdit, onDelete, onUpdate, allRecipes, onCopy, onSaveVariant, inSession, onToggleSession, onOpenRecipe = null,
   canEdit: canEditProp = true, ownerName = null, onShare = null, guest = false,
   isFavorite = false, onToggleFavorite = null, liked = false, onToggleLike = null, collections = [], onToggleCollection = null,
   // In a cooking session: { factor, progress: { ing, steps }, onFactor, onToggleIng, onToggleStep, onClear, onOpenRecipe, onRemove }.
@@ -61,13 +62,15 @@ export default function RecipeView({
   const [addingVideo, setAddingVideo] = useState(false)
   const [stepSheet, setStepSheet] = useState(null) // { i } — the step or part held down
   const [chef, setChef] = useState(false) // chef mode: guided, one step at a time
+  const [unfolded, setUnfolded] = useState(() => new Set()) // linked recipes shown open: "i:<line>", "m:<recipe id>"
+  const toggleFold = (k) => setUnfolded((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n })
   const press = useRef(null)
   const exportNotes = settings.exportNotes
   const addNoteRef = useRef(null)
 
   useEffect(() => {
     setLocalChecked(new Set()); setLocalScale(null); setTranslated(null)
-    setShowScale(false); setTab('recipe'); setAddingVideo(false); setChef(false)
+    setShowScale(false); setTab('recipe'); setAddingVideo(false); setChef(false); setUnfolded(new Set())
     setCustomBaseGrams('')
   }, [recipe.id])
 
@@ -84,6 +87,7 @@ export default function RecipeView({
     if (cook) cook.onClear('ing'); else setLocalChecked(new Set())
   }
 
+  const library = allRecipes || []
   const displayR = translated || recipe
   const originalThumbnail = recipe.thumbnail
   const viewR = useMemo(() => (appliedScale ? scaleRecipe(displayR, appliedScale.factor) : displayR), [displayR, appliedScale])
@@ -299,14 +303,41 @@ export default function RecipeView({
                 const d = splitIngLine(ing)
                 const est = ingGrams(ing)
                 const pct = pctData ? pctData[ii] : null
-                return (
-                  <li key={ii} className={`Q-ing-row${isCk ? ' checked' : ''}${d.ref ? ' ref' : ''}`} onClick={() => handleIngToggle(rawIdx)} title={d.ref ? 'Made earlier in this recipe' : undefined}>
+                // Another recipe used here: its name opens it, the arrow shows what goes into it.
+                const sub = d.link ? resolveLink(d.link, library) : null
+                const open = sub && unfolded.has(`i:${rawIdx}`)
+                const row = (
+                  <li key={ii} className={`Q-ing-row${isCk ? ' checked' : ''}${d.ref ? ' ref' : ''}${d.link ? ' linked' : ''}`} onClick={() => handleIngToggle(rawIdx)} title={d.ref ? 'Made earlier in this recipe' : undefined}>
                     <span className="Q-ing-check" aria-hidden="true" />
-                    <span className="Q-ing-qty">{d.qty}</span>
-                    <span className="Q-ing-name">{d.name}{est.approx && est.grams > 0 && <span className="Q-ing-approx" title="Typical weight, used in totals and baker's %">≈ {fmtQty(est.grams)} g</span>}</span>
+                    <span className="Q-ing-qty">{d.qty}{d.link && d.qty && !/[a-z]/i.test(d.qty) ? ' ×' : ''}</span>
+                    <span className="Q-ing-name">
+                      {d.link
+                        ? <button type="button" className="Q-ing-link" disabled={!sub || !onOpenRecipe} title={sub ? 'Open this recipe' : 'This recipe is not in your library'} onClick={(e) => { e.stopPropagation(); if (sub) onOpenRecipe?.(sub.id) }}>{d.name}{sub && onOpenRecipe && <ArrowUpRight size={13} />}</button>
+                        : d.name}
+                      {est.approx && est.grams > 0 && <span className="Q-ing-approx" title="Typical weight, used in totals and baker's %">≈ {fmtQty(est.grams)} g</span>}
+                    </span>
                     {pct?.pct != null && <span className={`Q-pct-badge${pct.isBase ? ' base' : ''}`}>{pct.pct.toFixed(1)}%</span>}
+                    {sub && (
+                      <button type="button" className={`Q-ing-fold${open ? ' open' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFold(`i:${rawIdx}`) }} aria-expanded={!!open} aria-label={`What goes into ${sub.title}`} title="What goes into it">
+                        <ChevronDown size={15} />
+                      </button>
+                    )}
                   </li>
                 )
+                if (!open) return row
+                const f = linkFactor(ing, sub)
+                const subLines = (f !== 1 ? scaleRecipe(sub, f) : sub).ingredients || []
+                return [row, (
+                  <li key={`${ii}-sub`} className="Q-ing-subs">
+                    <ul>
+                      {subLines.map((line, k) => {
+                        if (/^##?\s+/.test(line)) return <li key={k} className="Q-ing-subs-h">{line.replace(/^##?\s*/, '')}</li>
+                        const sd = splitIngLine(line)
+                        return <li key={k}><span className="Q-ing-qty">{sd.qty}</span><span className="Q-ing-name">{sd.ref ? '↳ ' : ''}{sd.name}</span></li>
+                      })}
+                    </ul>
+                  </li>
+                )]
               })}
             </ul>
             {sec.name && secG > 0 && <div className="Q-subtotal">{secG.toFixed(0)} g</div>}
@@ -319,11 +350,15 @@ export default function RecipeView({
 
   const stepList = numberSteps(viewR.steps)
   const videos = Array.isArray(recipe.videos) ? recipe.videos : []
+  // Every step to cook, the steps of the recipes used in this one included (a Flan's Pâte
+  // brisée): theirs are keyed "<recipe id>:<index>", this recipe's by their index.
+  const flat = useMemo(() => flattenSteps(viewR, library), [viewR, library])
+  const comps = useMemo(() => componentsOf(viewR, library), [viewR, library])
   // Session progress on the method: finished steps and the next one to do.
   const doneSteps = new Set(cook?.progress?.steps || [])
-  const realSteps = stepList.map((st, i) => ({ ...st, i })).filter((st) => st.text && !st.header)
-  const nextStep = cook ? realSteps.find(({ i }) => !doneSteps.has(i))?.i : null
-  const doneCount = realSteps.filter(({ i }) => doneSteps.has(i)).length
+  const realSteps = flat
+  const nextStep = cook ? flat.find((s) => !doneSteps.has(s.key))?.key : null
+  const doneCount = flat.filter((s) => doneSteps.has(s.key)).length
   const ingCount = sections.reduce((n, sec) => n + sec.items.length, 0)
   // Timers: a written time in a step becomes a chip; other steps and each part get a timer menu.
   const partOf = []
@@ -342,6 +377,68 @@ export default function RecipeView({
       tkey: `${recipe.id}:step:${i}`,
     }
   }
+  // A step of a recipe used in this one: its timer is this recipe's, named after that recipe.
+  const subInfo = (s) => {
+    const short = s.text.length > 42 ? s.text.slice(0, 40).trimEnd() + '…' : s.text
+    const names = (s.src.recipe.ingredients || []).filter((l) => !/^##?\s+/.test(l)).map((l) => splitIngLine(l).name)
+    return {
+      label: [s.src.title, s.part, `Step ${s.n}`].filter(Boolean).join(' · ') + ` — ${short}`,
+      name: stepName(s.text, names, cleanName(s.part) || cleanName(s.src.title) || recipeName),
+      durs: findDurations(s.text).slice(0, 3),
+      tkey: `${recipe.id}:${String(s.key).replace(/:(\d+)$/, ':step:$1')}`,
+    }
+  }
+  // Chef mode walks through all of them; each recipe brings its own ingredient list.
+  const chefSteps = useMemo(() => flat.map((s) => ({
+    i: s.key, n: s.n, text: s.text, part: s.part, src: s.src.id, srcTitle: s.src.title,
+    info: s.src.id === recipe.id ? stepInfo(stepList[s.key], s.key) : subInfo(s),
+  })), [flat])
+  const chefSources = useMemo(() => {
+    const out = { [recipe.id]: { title: '', sections } }
+    flat.forEach((s) => { if (!out[s.src.id]) out[s.src.id] = { title: s.src.title, sections: parseSections(s.src.recipe.ingredients || []) } })
+    return out
+  }, [flat, sections])
+
+  // A recipe used in this one, inside the method: its name (opens it) and, unfolded, its steps —
+  // ticked off like the others in a session.
+  const linkedSteps = (c, key) => {
+    const list = flat.filter((s) => s.root === c.sub.id)
+    const open = unfolded.has(`m:${c.sub.id}`)
+    const done = list.filter((s) => doneSteps.has(s.key)).length
+    let label = null
+    return (
+      <li key={key} className={`Q-step-link${cook && list.length && done === list.length ? ' done' : ''}`}>
+        <div className="Q-step-link-head">
+          <button type="button" className="Q-ing-link" disabled={!onOpenRecipe} onClick={() => onOpenRecipe?.(c.sub.id)} title="Open this recipe">
+            {c.sub.title}{onOpenRecipe && <ArrowUpRight size={13} />}
+          </button>
+          <button type="button" className={`Q-step-link-fold${open ? ' open' : ''}`} onClick={() => toggleFold(`m:${c.sub.id}`)} aria-expanded={open}>
+            {list.length ? (cook ? `${done} of ${list.length} steps` : `${list.length} step${list.length === 1 ? '' : 's'}`) : 'No method'}
+            {list.length > 0 && <ChevronDown size={14} />}
+          </button>
+        </div>
+        {open && list.length > 0 && (
+          <ol className={`Q-steps Q-sub-steps${cook ? ' Q-cook-steps' : ''}`}>
+            {list.flatMap((s) => {
+              const where = [s.src.id !== c.sub.id && s.src.title, s.part].filter(Boolean).join(' · ')
+              const head = where && where !== label ? [<li key={`h-${s.key}`} className="Q-step-h">{where}</li>] : []
+              label = where || label
+              return [...head, (
+                <li
+                  key={s.key} data-n={s.n}
+                  className={`Q-step${cook && doneSteps.has(s.key) ? ' done' : ''}${cook && s.key === nextStep ? ' next' : ''}`}
+                  onClick={cook ? () => cook.onToggleStep(s.key) : undefined}
+                >
+                  <span className="Q-step-text">{s.text}</span>
+                </li>
+              )]
+            })}
+          </ol>
+        )}
+      </li>
+    )
+  }
+
   // A step's written times become chips in its text; a step without one gets a small timer
   // beside it (on a touch screen it opens the step's options, like holding the step down).
   const touch = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
@@ -380,15 +477,20 @@ export default function RecipeView({
       summary: cook ? `${checked.size} of ${ingCount} ready` : totalGrams > 0 ? `${totalGrams.toFixed(0)} g` : '',
       actions: checked.size > 0 && <button className="Q-link" onClick={clearTicked}>Clear {checked.size} ticked</button>,
     },
-    stepList.some((st) => st.n) && {
+    (stepList.some((st) => st.n) || flat.length > 0) && {
       id: 'method', title: 'Method', summary: cook ? `${doneCount} of ${realSteps.length}` : `${realSteps.length} steps`,
       actions: cook
         ? doneCount > 0 && <button className="Q-link" onClick={() => cook.onClear('steps')}>Clear {doneCount} done</button>
         : highlightedSteps.size > 0 && <em className="Q-hl-note">{highlightedSteps.size === 1 ? '1 step uses' : `${highlightedSteps.size} steps use`} the ticked ingredients</em>,
       content: (
         <ol className={`Q-steps${cook ? ' Q-cook-steps' : ''}`}>
+          {comps.filter((c) => c.stepAt == null).map((c) => linkedSteps(c, `first-${c.sub.id}`))}
           {stepList.map((st, i) => {
             if (!st.text) return null
+            if (st.link) {
+              const c = comps.find((x) => x.stepAt === i)
+              return c ? linkedSteps(c, `at-${i}`) : <li key={i} className="Q-step-link missing" title="This recipe is not in your library">{st.text}</li>
+            }
             if (st.header) return <li key={i} className="Q-step-h" {...holdToOpen(i)}>{st.text}<TimerMenu tkey={`${recipe.id}:part:${i}`} label={st.text} name={cleanName(st.text) || st.text} {...timerBase} /></li>
             if (cook) {
               return (
@@ -610,12 +712,26 @@ export default function RecipeView({
       {lightboxSrc && <div className="Q-lightbox" onClick={() => setLightboxSrc(null)}><img src={lightboxSrc} alt="" /></div>}
       {chef && (
         <ChefMode
-          title={viewR.title || 'Recipe'} lang={timerLang} timerBase={timerBase} sections={sections}
-          steps={stepList.map((st, i) => ({ ...st, i })).filter((st) => st.n).map((st) => ({ i: st.i, n: st.n, text: st.text, part: partOf[st.i] || '', info: stepInfo(st, st.i) }))}
-          cook={cook} doneSteps={doneSteps} onTimerOptions={(i) => setStepSheet({ i })} onClose={() => setChef(false)}
+          title={viewR.title || 'Recipe'} lang={timerLang} timerBase={timerBase} sections={sections} sources={chefSources}
+          steps={chefSteps} cook={cook} doneSteps={doneSteps} onClose={() => setChef(false)}
+          onTimerOptions={(st) => setStepSheet(typeof st.i === 'number' ? { i: st.i } : { ext: st })}
         />
       )}
-      {stepSheet && stepList[stepSheet.i] && (() => {
+      {stepSheet?.ext && (() => {
+        const st = stepSheet.ext
+        const actions = []
+        if (cook) actions.push({ label: doneSteps.has(st.i) ? 'Mark as not done' : 'Mark as done', onClick: () => cook.onToggleStep(st.i) })
+        actions.push({ label: 'Copy the text', onClick: () => { navigator.clipboard?.writeText(st.text).then(() => toast('Copied'), () => {}) } })
+        return (
+          <StepSheet
+            title={`${st.srcTitle} · Step ${st.n}`} subtitle={st.text}
+            durations={st.info.durs} tkeyBase={st.info.tkey} actions={actions}
+            timer={{ label: st.info.label, name: st.info.name, ...timerBase }}
+            onClose={() => setStepSheet(null)}
+          />
+        )
+      })()}
+      {stepSheet && !stepSheet.ext && stepList[stepSheet.i] && (() => {
         const st = stepList[stepSheet.i]
         const info = stepInfo(st, stepSheet.i)
         const actions = []

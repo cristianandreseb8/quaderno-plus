@@ -5,6 +5,7 @@ import { extractWithClaude, proofreadTexts, structureText } from '../lib/ai.js'
 import { itemLabel, proofreadItems, wordDiff } from '../lib/proofread.js'
 import { useSettings } from '../lib/settings.js'
 import DraggableIngList from './DraggableIngList.jsx'
+import LinkRecipeModal from './LinkRecipeModal.jsx'
 import Modal from './ui/Modal.jsx'
 import { toast } from './ui/Toaster.jsx'
 import { newVideo } from '../lib/video.js'
@@ -15,7 +16,7 @@ const AUTOFILL = [
   ['pdf', 'PDF or book', FileUp],
 ]
 
-export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'blank', onImportPdf }) {
+export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'blank', onImportPdf, library = [] }) {
   const initIngs = initial?.ingredients || []
   const [r, setR] = useState(() => ({
     title: initial?.title || '', category: initial?.category || '', time: initial?.time || '', servings: initial?.servings || '',
@@ -32,6 +33,7 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
   const [err, setErr] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState(null)
+  const [linkFor, setLinkFor] = useState(null) // 'ing' | 'step': choosing a recipe to use in this one
   const [proof, setProof] = useState(null) // spelling check: { busy } | { fixes: [{ id, from, to, on }] } | { error }
   const { settings } = useSettings()
   const spell = settings.proofread !== false
@@ -115,6 +117,15 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
       videos: videoText.split('\n').map((l) => l.trim()).filter(Boolean).map((url) => (initial?.videos || []).find((v) => v.url === url) || newVideo(url)),
     })
   }
+  // Another recipe used in this one: a line at the end of the list (replacing an empty last line).
+  function addLink(line) {
+    const put = (list) => (list.length && !String(list[list.length - 1]).trim() ? [...list.slice(0, -1), line] : [...list, line])
+    if (linkFor === 'ing') setIngredientLines(put)
+    else setR((p) => ({ ...p, steps: put(p.steps?.length ? p.steps : []) }))
+    setLinkFor(null)
+  }
+  const canLink = library.some((x) => x.id !== initial?.id)
+
   // Spelling and grammar: the AI proposes corrections, the cook sees each one and applies them.
   async function runProofread() {
     const items = proofreadItems({ title: r.title, ingredients: ingredientLines, steps, notes: r.notes })
@@ -248,12 +259,12 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
 
       <div className="Q-field">
         <label>Ingredients</label>
-        <DraggableIngList lines={ingredientLines} onChange={setIngredientLines} spellCheck={spell} />
-        <div className="hint">Quantity, unit, then the name — "500 g bread flour". Start a line with → for something made earlier in the recipe ("→ first dough"): it is shown but not added to totals or shopping.</div>
+        <DraggableIngList lines={ingredientLines} onChange={setIngredientLines} spellCheck={spell} onAddRecipe={canLink ? () => setLinkFor('ing') : null} />
+        <div className="hint">Quantity, unit, then the name — "500 g bread flour". Start a line with → for something made earlier in the recipe ("→ first dough"): it is shown but not added to totals or shopping.{canLink ? ' + Recipe uses another of your recipes in this one — a pâte brisée in a flan.' : ''}</div>
       </div>
       <div className="Q-field">
         <label>Method</label>
-        <DraggableIngList kind="step" lines={steps} onChange={(n) => setR((p) => ({ ...p, steps: n }))} spellCheck={spell} />
+        <DraggableIngList kind="step" lines={steps} onChange={(n) => setR((p) => ({ ...p, steps: n }))} spellCheck={spell} onAddRecipe={canLink ? () => setLinkFor('step') : null} />
         <div className="hint">Enter starts the next step. A section groups the steps of one part of the recipe, e.g. "Shaping". Pasting several lines makes one step per line.</div>
       </div>
       <div className="Q-field"><label>Notes</label><textarea className="Q-textarea" rows={3} value={r.notes} onChange={set('notes')} spellCheck={spell} placeholder="Temperatures, flour specs, adjustments…" /></div>
@@ -267,6 +278,7 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
         <button className="btn ghost" onClick={onCancel}>Cancel</button>
       </div>
       {lightboxSrc && <div className="Q-lightbox" onClick={() => setLightboxSrc(null)}><img src={lightboxSrc} alt="" /></div>}
+      {linkFor && <LinkRecipeModal where={linkFor} library={library} selfId={initial?.id} onPick={addLink} onClose={() => setLinkFor(null)} />}
       {proof && !proof.busy && (
         <ProofreadModal
           proof={proof} labelOf={(id) => itemLabel(id, { ingredients: ingredientLines, steps })}

@@ -272,7 +272,7 @@ Deno.serve(async (req) => {
     let result: unknown
 
     if (body.type === "translate") {
-      result = await claudeJson([{ role: "user", content: `Translate this recipe JSON to ${body.targetLang}. Keep quantities, units, technical baking terms, "## " section headers and "→ " reference markers at the start of lines. Return ONLY valid JSON, same structure:\n\n${JSON.stringify(body.recipe)}` }])
+      result = await claudeJson([{ role: "user", content: `Translate this recipe JSON to ${body.targetLang}. Keep quantities, units, technical baking terms, "## " section headers and "→ " reference markers at the start of lines. Keep links to other recipes, written [[Name|id]], exactly as they are. Return ONLY valid JSON, same structure:\n\n${JSON.stringify(body.recipe)}` }])
     } else if (body.type === "structure") {
       result = await claudeStructured({
         schema: RECIPE_SCHEMA,

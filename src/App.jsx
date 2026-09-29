@@ -16,8 +16,8 @@ import SideRail from './components/ui/SideRail.jsx'
 import { RecipeTimerBadge, TimerDock, TimersButton } from './components/Timers.jsx'
 import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
+import { allStepKeys } from './lib/links.js'
 import { addRecipe, buildShoppingList, clearProgress, removeRecipe, resetTicks, setFactor, toggleProgress, useSession } from './lib/session.js'
-import { numberSteps } from './lib/recipeCalc.js'
 import { INSTALL_HELP, useInstall } from './lib/install.js'
 
 // After a redeploy, chunk filenames change and a client that loaded the old index.html
@@ -540,10 +540,11 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
       ready: items.filter((it) => session.shopping.have[it.key]).length + extra.filter((e) => e.have).length,
     }
   }, [session, sessionEntries, recipesById])
+  // Steps of the recipes used inside a recipe (a Flan's Pâte brisée) count as its own.
   const stepStats = (r) => {
-    const total = numberSteps(r.steps).filter((st) => st.n).length
-    const done = (session?.progress?.[r.id]?.steps || []).length
-    return { done: Math.min(done, total), total }
+    const keys = allStepKeys(r, recipes)
+    const done = new Set(session?.progress?.[r.id]?.steps || [])
+    return { done: keys.filter((k) => done.has(k)).length, total: keys.length }
   }
   function toggleInSession(id, on) {
     changeSession(on ? addRecipe(id) : removeRecipe(id))
@@ -582,7 +583,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
 
   // What the recipe screen needs about a recipe, wherever it is opened (recipes or session).
   const recipeProps = (r) => ({
-    recipe: r, onUpdate: updateRecipe, onDelete: () => deleteRecipe(r.id), allRecipes: recipes,
+    recipe: r, onUpdate: updateRecipe, onDelete: () => deleteRecipe(r.id), allRecipes: recipes, onOpenRecipe: openRecipe,
     canEdit: isMine(r), ownerName: isMine(r) ? null : ownerName(r), onShare: () => setShareFor(r),
     isFavorite: favorites.has(r.id), onToggleFavorite: () => toggleFavorite(r.id),
     liked: collections.some((c) => c.name === LIKED_NAME && c.items.includes(r.id)), onToggleLike: () => toggleLike(r.id),
@@ -806,8 +807,8 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
               <Suspense fallback={<div className="Q-msg">Loading…</div>}>
                 {view === 'recipes' && (
                   <>
-                    {mode === 'new' && <RecipeEditor key={'new-' + editorStart} startWith={editorStart} onImportPdf={() => setImportOpen(true)} onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(isPhone() ? null : recipes[0]?.id || null) }} />}
-                    {mode === 'edit' && sel && !sel._lite && isMine(sel) && <RecipeEditor initial={sel} onSave={saveRecipe} onCancel={() => setMode('view')} />}
+                    {mode === 'new' && <RecipeEditor key={'new-' + editorStart} startWith={editorStart} library={recipes} onImportPdf={() => setImportOpen(true)} onSave={saveRecipe} onCancel={() => { setMode('view'); setSelId(isPhone() ? null : recipes[0]?.id || null) }} />}
+                    {mode === 'edit' && sel && !sel._lite && isMine(sel) && <RecipeEditor initial={sel} library={recipes} onSave={saveRecipe} onCancel={() => setMode('view')} />}
                     {mode === 'view' && sel && sel._lite && <div className="Q-view-loading"><div /><div /><div /></div>}
                     {mode === 'view' && sel && !sel._lite && (
                       <RecipeView

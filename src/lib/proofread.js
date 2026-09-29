@@ -1,4 +1,4 @@
-import { isSectionHeader, numberSteps } from './recipeCalc.js'
+import { isSectionHeader, linkOf, numberSteps } from './recipeCalc.js'
 
 // Spelling and grammar check for the recipe editor: which texts go to the AI, and how each
 // correction is shown (a word-level diff) before the cook accepts it.
@@ -7,8 +7,10 @@ import { isSectionHeader, numberSteps } from './recipeCalc.js'
 export function proofreadItems({ title, ingredients, steps, notes }) {
   const items = []
   if (String(title || '').trim()) items.push({ id: 'title', text: title })
-  ;(ingredients || []).forEach((t, i) => { if (String(t).trim() && String(t).trim() !== '##') items.push({ id: `ing${i}`, text: t }) })
-  ;(steps || []).forEach((t, i) => { if (String(t).trim() && String(t).trim() !== '##') items.push({ id: `step${i}`, text: t }) })
+  // Lines that use another recipe ("350 g  [[Pâte brisée|id]]") have nothing to correct.
+  const worth = (t) => String(t).trim() && String(t).trim() !== '##' && !linkOf(t)
+  ;(ingredients || []).forEach((t, i) => { if (worth(t)) items.push({ id: `ing${i}`, text: t }) })
+  ;(steps || []).forEach((t, i) => { if (worth(t)) items.push({ id: `step${i}`, text: t }) })
   if (String(notes || '').trim()) items.push({ id: 'notes', text: notes })
   return items
 }

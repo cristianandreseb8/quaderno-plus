@@ -58,6 +58,8 @@ const DESCRIPTOR = new Set([
   'hache', 'hachee', 'frais', 'fraiche', 'blanc', 'grand', 'grande', 'petit', 'petite', 'entier', 'entiere', 'chaud', 'froid', 'fondu',
   'gehackt', 'frisch', 'frische', 'weiss', 'gross', 'klein', 'ganz', 'warm', 'kalt', 'geschmolzen',
 ])
+// A describing word ("melted", "picada"): skipped when looking for what a step says about an ingredient.
+export const isDescriptor = (w) => DESCRIPTOR.has(w)
 const SKIP = (w) => w.length < 3 || STOP.has(w) || WEAK.has(w) || MEASURE.has(w) || DESCRIPTOR.has(w) || /^\d/.test(w)
 // What an ingredient line names, without quantities, notes and leading measures:
 // "opcional 50 ml crema blanca" → "crema blanca", "a 3 dientes de ajos" → "ajos".

@@ -16,26 +16,40 @@ const REF_RX = /^\s*(?:→|->)\s*/
 export const isRefLine = (line) => REF_RX.test(String(line || ''))
 export const stripRef = (line) => String(line || '').replace(REF_RX, '')
 
+// Another recipe used in this one: "350 g  [[Pâte brisée|<id>]]" in the ingredients (how much of
+// it), "[[Pâte brisée|<id>]]" alone in the method (where its steps go). Shown as its title.
+const LINK_RX = /\[\[([^\]|]+)\|([A-Za-z0-9_-]+)\]\]/
+export function linkOf(line) {
+  const m = String(line || '').match(LINK_RX)
+  return m ? { title: m[1].trim(), id: m[2] } : null
+}
+export const stripLinks = (text) => String(text || '').replace(new RegExp(LINK_RX.source, 'g'), '$1')
+export const linkToken = (r) => `[[${String(r.title || 'Recipe').replace(/[[\]|]/g, ' ').replace(/\s+/g, ' ').trim()}|${r.id}]]`
+// A method line that is only a link: the linked recipe's steps go there.
+export const isLinkStep = (line) => !!linkOf(line) && stripLinks(line).trim() === linkOf(line).title
+
 // Split an ingredient line for display: quantity column, name, and whether it is a reference.
 // Only a real unit goes in the quantity column — "2 large eggs" is 2 + "large eggs".
 export function splitIngLine(line) {
   const ref = isRefLine(line)
-  const t = (ref ? stripRef(line) : String(line || '')).trim()
+  const link = linkOf(line)
+  const t = stripLinks(ref ? stripRef(line) : String(line || '')).trim()
   const m = t.match(ING_RX)
-  if (!m) return { ref, qty: '', name: t }
+  if (!m) return { ref, link, qty: '', name: t }
   const amount = (m[1] ? m[1] + ' ' : '') + m[2]
-  if (m[3] && (isUnitWord(m[3]) || m[3] === '%')) return { ref, qty: `${amount} ${m[3]}`, name: m[4].trim() }
-  return { ref, qty: amount, name: [m[3], m[4].trim()].filter(Boolean).join(' ') }
+  if (m[3] && (isUnitWord(m[3]) || m[3] === '%')) return { ref, link, qty: `${amount} ${m[3]}`, name: m[4].trim() }
+  return { ref, link, qty: amount, name: [m[3], m[4].trim()].filter(Boolean).join(' ') }
 }
 
 // Numbering skips "## Part" header lines inside the method.
 export function numberSteps(steps) {
   let n = 0
   return (steps || []).map((s) => {
-    if (isSectionHeader(s)) return { header: true, text: String(s).replace(/^##?\s*/, ''), n: null }
+    if (isSectionHeader(s)) return { header: true, text: stripLinks(String(s).replace(/^##?\s*/, '')), n: null }
     if (!String(s).trim()) return { header: false, text: '', n: null }
+    if (isLinkStep(s)) return { header: false, link: linkOf(s), text: linkOf(s).title, n: null }
     n += 1
-    return { header: false, text: String(s), n }
+    return { header: false, text: stripLinks(String(s)), n }
   })
 }
 
@@ -46,7 +60,7 @@ const UNICODE_FRACTION_CHARS = Object.keys(UNICODE_FRACTIONS).join('')
 const ING_RX = new RegExp(`^(?:(\\d+)\\s+)?([\\d.,]+(?:/[\\d.,]+)?|[${UNICODE_FRACTION_CHARS}])\\s*([a-zA-Z%]*)\\s{1,}(.+)$`)
 
 export function parseIng(text) {
-  const t = String(text || '').trim()
+  const t = stripLinks(text).trim()
   const m = t.match(ING_RX)
   if (!m) return { qty: null, unit: '', name: t }
   const whole = m[1] ? parseFloat(m[1]) : 0

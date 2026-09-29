@@ -163,6 +163,46 @@
 .Q-drag-num { flex-shrink: 0; min-width: 18px; padding-top: 10px; text-align: right; font: 600 12px var(--mono); color: var(--faint); }
 .Q-field textarea.Q-drag-input, .Q-field textarea.Q-drag-input:focus { height: auto; min-height: 36px; padding: 8px 4px 8px 6px; font: 14px/1.5 var(--sans); resize: none; overflow: hidden; display: block; }
 
+/* Recipes used inside a recipe */
+.Q-link-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font: 600 13px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-link-chip svg { flex-shrink: 0; }
+.Q-field .Q-drag-input.amount, .Q-field .Q-drag-input.amount:focus { flex: 0 0 92px; width: 92px; }
+.Q-drag-item .Q-link-chip { flex: 0 1 auto; margin: 5px 0; }
+.Q-drag-list .Q-drag-item:has(.Q-link-chip) .Q-drag-rm { margin-left: auto; }
+.Q-link-step { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 6px; }
+.Q-link-step small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.Q-drag-list.multiline .Q-drag-item:has(.Q-link-step) { align-items: center; }
+.Q-drag-list.multiline .Q-drag-item:has(.Q-link-step) .Q-drag-handle { padding-top: 4px; }
+.Q-drag-list.multiline .Q-drag-item:has(.Q-link-step) .Q-drag-rm { margin-top: 0; }
+.Q-link-help { margin: 0 0 12px; font-size: 14px; color: var(--ink); line-height: 1.5; }
+.Q-link-help.dim { margin: 14px 0 0; font-size: 12.5px; color: var(--muted); }
+.Q-link-amount { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.Q-link-amount input { width: 120px; height: 38px; padding: 0 12px; border: 1px solid var(--rule-strong); border-radius: 9px; background: var(--surface); color: var(--ink); font: 15px var(--mono); }
+.Q-link-amount input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.Q-ing-link { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: none; background: none; font: inherit; color: var(--accent); cursor: pointer; text-align: left; }
+.Q-ing-link:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+.Q-ing-link:disabled { color: inherit; cursor: inherit; }
+.Q-ing-fold { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 26px; height: 26px; margin: -3px -4px -3px 2px; border: none; border-radius: 7px; background: none; color: var(--muted); cursor: pointer; }
+.Q-ing-fold:hover { background: var(--hover); color: var(--ink); }
+.Q-ing-fold svg { transition: transform .15s; }
+.Q-ing-fold.open svg { transform: rotate(180deg); }
+.Q-ings > li.Q-ing-subs { list-style: none; margin: 0 0 6px 1.9em; padding: 4px 0 4px 12px; border-left: 2px solid var(--accent-soft); }
+.Q-ing-subs ul { list-style: none; margin: 0; padding: 0; }
+.Q-ing-subs li { display: flex; gap: 10px; padding: 3px 0; font-size: .9em; color: var(--muted); }
+.Q-ing-subs li .Q-ing-qty { min-width: 4.2em; }
+.Q-ing-subs li.Q-ing-subs-h { font: 700 .72em var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding-top: 6px; }
+.Q-steps li.Q-step-link { padding: .5em .7em .5em 2.9em; }
+.Q-steps li.Q-step-link::before { content: '↳'; color: var(--accent); }
+.Q-steps li.Q-step-link.missing { color: var(--muted); font-style: italic; }
+.Q-step-link-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 600; }
+.Q-step-link-fold { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 999px; background: none; color: var(--muted); font: 500 12px var(--sans); cursor: pointer; }
+.Q-step-link-fold:hover { color: var(--ink); border-color: var(--rule-strong); }
+.Q-step-link-fold svg { transition: transform .15s; }
+.Q-step-link-fold.open svg { transform: rotate(180deg); }
+.Q-steps li.Q-step-link.done .Q-step-link-fold { color: var(--green); border-color: var(--green-soft); }
+.Q-sub-steps { margin: 6px 0 0 -1.2em; font-weight: 400; }
+.Q-sub-steps li { padding-top: .35em; padding-bottom: .45em; }
+
 /* Spelling & grammar review */
 .Q-proof-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .Q-proof-list li { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; background: var(--surface); transition: opacity .15s; }

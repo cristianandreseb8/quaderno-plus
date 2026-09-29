@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { GripVertical, X } from 'lucide-react'
-import { isSectionHeader } from '../lib/recipeCalc.js'
+import { BookOpen, GripVertical, X } from 'lucide-react'
+import { isLinkStep, isSectionHeader, linkOf } from '../lib/recipeCalc.js'
 
 function findScroller(fromEl) {
   let el = fromEl
@@ -23,7 +23,14 @@ const KINDS = {
 const bare = (line) => (isSectionHeader(line) ? line.replace(/^##?\s*/, '') : line)
 const withPrefix = (line, text) => (isSectionHeader(line) ? '## ' + text : text)
 
-export default function DraggableIngList({ lines, onChange, kind = 'ingredient', spellCheck }) {
+// A line that uses another recipe ("350 g  [[Pâte brisée|id]]") shows the recipe as a chip; in
+// the ingredients only its amount is typed. `onAddRecipe` adds the "+ Recipe" button.
+const linkParts = (line) => {
+  const m = String(line).match(/^(.*?)\s*(\[\[[^\]|]+\|[A-Za-z0-9_-]+\]\])\s*$/)
+  return m ? { amount: m[1].trim(), token: m[2] } : null
+}
+
+export default function DraggableIngList({ lines, onChange, kind = 'ingredient', spellCheck, onAddRecipe }) {
   const K = KINDS[kind] || KINDS.ingredient
   const [dragIdx, setDragIdx] = useState(null)
   const [overIdx, setOverIdx] = useState(null)
@@ -80,7 +87,7 @@ export default function DraggableIngList({ lines, onChange, kind = 'ingredient',
   // Render synchronously so focus moves before the next keystroke arrives.
   function commitAndFocus(n, idx, caret) {
     flushSync(() => onChange(n))
-    const el = listRef.current?.querySelectorAll('.Q-drag-input')[idx]
+    const el = listRef.current?.querySelectorAll('.Q-drag-item')[idx]?.querySelector('.Q-drag-input')
     if (!el) return
     el.focus()
     if (caret != null) el.setSelectionRange(caret, caret)
@@ -138,8 +145,11 @@ export default function DraggableIngList({ lines, onChange, kind = 'ingredient',
     <div className={`Q-drag-list${K.multiline ? ' multiline' : ''}`} ref={listRef}>
       {lines.map((line, idx) => {
         const section = isSectionHeader(line)
-        if (!section && String(line).trim()) stepNo += 1
+        const link = !section && linkOf(line) && linkParts(line)
+        const stepLink = K.multiline && link && isLinkStep(line)
+        if (!section && !stepLink && String(line).trim()) stepNo += 1
         const Field = K.multiline && !section ? 'textarea' : 'input'
+        const chip = link && <span className="Q-link-chip" title="Another recipe used here"><BookOpen size={13} />{linkOf(line).title}</span>
         return (
           <div
             key={idx}
@@ -156,8 +166,29 @@ export default function DraggableIngList({ lines, onChange, kind = 'ingredient',
             >
               <GripVertical size={15} />
             </span>
-            {K.multiline && !section && <span className="Q-drag-num">{String(line).trim() ? stepNo : ''}</span>}
-            <Field
+            {K.multiline && !section && !stepLink && <span className="Q-drag-num">{String(line).trim() ? stepNo : ''}</span>}
+            {stepLink && <span className="Q-link-step">{chip}<small>its steps go here</small></span>}
+            {link && !K.multiline && (
+              <>
+                <input
+                  className="Q-drag-input amount" value={link.amount} placeholder="amount" aria-label="How much of it"
+                  onChange={(e) => {
+                    const n = [...lines]
+                    n[idx] = `${e.target.value.trim() ? e.target.value.replace(/\s+$/, '') + '  ' : ''}${link.token}`
+                    onChange(n)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+                    e.preventDefault()
+                    const n = [...lines]
+                    n.splice(idx + 1, 0, '')
+                    commitAndFocus(n, idx + 1, 0)
+                  }}
+                />
+                {chip}
+              </>
+            )}
+            {!stepLink && !(link && !K.multiline) && <Field
               className={`Q-drag-input${section ? ' section' : ''}`}
               rows={Field === 'textarea' ? 1 : undefined}
               spellCheck={spellCheck}
@@ -170,7 +201,7 @@ export default function DraggableIngList({ lines, onChange, kind = 'ingredient',
               onKeyDown={(e) => onKeyDown(e, idx)}
               onPaste={(e) => onPaste(e, idx)}
               placeholder={section ? K.section : K.placeholder}
-            />
+            />}
             <button type="button" className="Q-drag-rm" onClick={() => onChange(lines.filter((_, i) => i !== idx))} aria-label="Remove line"><X size={14} /></button>
           </div>
         )
@@ -178,6 +209,7 @@ export default function DraggableIngList({ lines, onChange, kind = 'ingredient',
       <div className="Q-drag-footer">
         <button type="button" className="Q-mini-btn" onClick={() => commitAndFocus([...lines, ''], lines.length)}>{K.add}</button>
         <button type="button" className="Q-mini-btn accent" onClick={() => commitAndFocus([...lines, '## '], lines.length)}>+ Section</button>
+        {onAddRecipe && <button type="button" className="Q-mini-btn" onClick={onAddRecipe} title="Use another of your recipes in this one">+ Recipe</button>}
       </div>
     </div>
   )
