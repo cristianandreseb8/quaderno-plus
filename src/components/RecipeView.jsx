@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Globe, Loader2, Lock, MoreHorizontal, Users } from 'lucide-react'
+import { Check, ChefHat, ChevronLeft, ChevronRight, Globe, Loader2, Lock, MoreHorizontal, Share, Users } from 'lucide-react'
 import {
   calcPct, findStepsForIng, fmtQty, getTotalGrams, ingGrams, lineGrams, numberSteps, parseIng, parseSections, scaleRecipe, sectionGrams, splitIngLine,
 } from '../lib/recipeCalc.js'
@@ -496,8 +496,12 @@ export default function RecipeView({
               {inSession ? <><Check size={14} strokeWidth={2.6} /> In session</> : 'Add to session'}
             </button>
           )}
-          {cook && stepList.some((st) => st.n) && <button className="Q-textbtn" onClick={() => setChef(true)}>Chef mode</button>}
-          {canEdit && onShare && <button className="Q-textbtn" onClick={onShare}>Share</button>}
+          {stepList.some((st) => st.n) && (
+            <button className="Q-chef-btn" onClick={() => { setTab('recipe'); setChef(true) }} title="Chef mode: the recipe step by step">
+              <ChefHat size={15} strokeWidth={2.2} /> Chef mode
+            </button>
+          )}
+          {canEdit && onShare && <button className="Q-icon-btn Q-share-btn" onClick={onShare} title="Share" aria-label="Share"><Share size={17} /></button>}
           {canEdit && <button className="Q-textbtn" onClick={onEdit}>Edit</button>}
           {!canEdit && !guest && onToggleLike && <button className={`Q-textbtn${liked ? ' on' : ''}`} onClick={onToggleLike} title={liked ? 'Remove from Recipes I like' : 'Keep it in Recipes I like'}>{liked ? 'Liked' : 'Like'}</button>}
           {guest && <button className="Q-textbtn" onClick={() => onCopy(recipe, null)}>Save a copy</button>}
@@ -517,7 +521,6 @@ export default function RecipeView({
                     <MenuSep />
                   </>
                 )}
-                {stepList.some((st) => st.n) && <MenuItem checked={false} onClick={() => { setTab('recipe'); setChef(true) }}>Chef mode</MenuItem>}
                 <MenuItem checked={!!appliedScale} hint={appliedScale?.label} onClick={() => { setTab('recipe'); setShowScale(true) }}>Scale</MenuItem>
                 <MenuItem checked={showPct} onClick={() => { setTab('recipe'); setShowPct(!showPct) }}>Baker's %</MenuItem>
                 {!guest && <MenuItem checked={!!translated} keepOpen hint={<>{translated ? targetLang : ''}<ChevronRight size={14} /></>} onClick={() => setMenuView('translate')}>Translate</MenuItem>}
