@@ -13,6 +13,11 @@ const LEVELS = [
 async function copy(text, what) {
   try { await navigator.clipboard.writeText(text); toast.success(`${what} copied`) } catch (_) { window.prompt('Copy this link:', text) }
 }
+// The phone's own share sheet (WhatsApp, Messages…). The link shows the recipe's title and photo.
+const canShare = typeof navigator !== 'undefined' && !!navigator.share
+async function shareSheet(title, url) {
+  try { await navigator.share({ title, text: title, url }) } catch (e) { if (e?.name !== 'AbortError') copy(url, 'Link') }
+}
 
 export default function ShareModal({ recipe, fromName, onClose, onVisibility }) {
   const [level, setLevel] = useState(recipe.visibility || 'private')
@@ -60,6 +65,7 @@ export default function ShareModal({ recipe, fromName, onClose, onVisibility }) 
       {level === 'public' && (
         <div className="Q-share-box">
           <code>{recipeLink(recipe.id)}</code>
+          {canShare && <button className="btn ghost sm" onClick={() => shareSheet(recipe.title, recipeLink(recipe.id))}>Share…</button>}
           <button className="btn primary sm" onClick={() => copy(recipeLink(recipe.id), 'Link')}>Copy link</button>
         </div>
       )}
@@ -80,6 +86,7 @@ export default function ShareModal({ recipe, fromName, onClose, onVisibility }) 
                     <b>{s.label || 'Invite'}</b>
                     <span>{s.user_id ? 'Has access' : 'Invite not opened yet'}</span>
                   </div>
+                  {!s.user_id && canShare && <button className="Q-link" onClick={() => shareSheet(recipe.title, inviteLink(s.token))}>Share…</button>}
                   {!s.user_id && <button className="Q-link" onClick={() => copy(inviteLink(s.token), 'Invite link')}>Copy link</button>}
                   {!s.user_id && <button className="Q-link" onClick={() => mailInvite(s.label, recipe.title, inviteLink(s.token), fromName)}>Email</button>}
                   <button className="Q-link danger" onClick={() => revoke(s)}>Remove</button>
@@ -90,6 +97,7 @@ export default function ShareModal({ recipe, fromName, onClose, onVisibility }) 
         </>
       )}
 
+      {level !== 'private' && <p className="Q-share-note">The link shows the recipe's title and photo in WhatsApp, Messages and other apps.</p>}
       <p className="Q-share-note">People you share with can view, scale, use baker's %, translate and export. Only you can change or delete the recipe.</p>
     </Modal>
   )
