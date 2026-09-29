@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import { addExtra, buildShoppingList, formatQty, removeExtra, setQtyOverride, shortTitle, toggleExtra, toggleHave, updateExtra } from '../../lib/session.js'
+import { addExtra, buildShoppingList, formatQty, removeExtra, setQtyOverride, toggleExtra, toggleHave, updateExtra } from '../../lib/session.js'
 import { translateStrings } from '../../lib/ai.js'
 import { guessLang } from '../../lib/timerNames.js'
 import { toast } from '../ui/Toaster.jsx'
@@ -84,16 +84,24 @@ export default function ShoppingList({ session, recipesById, change }) {
     try { await navigator.clipboard.writeText(text); toast.success('Shopping list copied') } catch (_) { toast.error('Could not copy') }
   }
 
+  // Which recipe each item is for — with each one's amount when several share it — as soon as the
+  // list covers more than one recipe (a linked one, like a Flan's pâte brisée, counts as its own).
+  const many = new Set(items.flatMap((it) => it.recipes)).size > 1
+  const forWhat = (r) => {
+    if (!many || r.kind !== 'recipe' || !r.recipes.length) return ''
+    if (r.recipes.length === 1) return r.recipes[0]
+    return r.recipes.map((t) => (r.by?.[t] != null ? `${t} ${formatQty(r.by[t], r.unit)}` : t)).join(' · ')
+  }
   const row = (r) => {
     const computed = r.kind === 'recipe' ? formatQty(r.qty, r.unit) : ''
+    const src = forWhat(r)
     return (
       <li key={r.key} className={`Q-shop-row${r.done ? ' done' : ''}`} onClick={() => toggle(r)}>
         <span className="Q-check" aria-hidden="true" />
         {r.kind === 'recipe'
           ? <QtyField value={overrides[r.key] ?? computed} computed={computed} onCommit={(t) => change(setQtyOverride(r.key, t))} />
           : <span className="Q-shop-qty static" />}
-        <span className="Q-shop-name">{r.name}</span>
-        {r.recipes.length > 1 && <span className="Q-shop-src" title={r.recipes.join(', ')}>{r.recipes.map(shortTitle).join(' + ')}</span>}
+        <span className="Q-shop-name">{r.name}{src && <small className="Q-shop-src">For {src}</small>}</span>
         {r.kind === 'extra' && (
           <button className="Q-shop-rm" onClick={(e) => { e.stopPropagation(); change(removeExtra(r.id)) }} aria-label="Remove item"><X size={14} /></button>
         )}

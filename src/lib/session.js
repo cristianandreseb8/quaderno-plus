@@ -68,9 +68,12 @@ export function buildShoppingList(sessionRecipes, recipesById) {
       const m = name.match(TRAILING)
       if (m && stages.has(m[1].trim().toLowerCase())) name = name.replace(TRAILING, '')
       const key = itemKey(name, p.qty == null ? '' : unit)
-      const cur = map.get(key) || { key, name, unit: p.qty == null ? '' : unit, qty: null, recipes: [] }
+      const cur = map.get(key) || { key, name, unit: p.qty == null ? '' : unit, qty: null, recipes: [], by: {} }
       if (p.qty != null) cur.qty = (cur.qty || 0) + p.qty * mult * f
       if (!cur.recipes.includes(r.title)) cur.recipes.push(r.title)
+      // How much of it each recipe needs (the list shows it beside the item).
+      if (p.qty != null) cur.by[r.title] = (cur.by[r.title] || 0) + p.qty * mult * f
+      else if (!(r.title in cur.by)) cur.by[r.title] = null
       map.set(key, cur)
     }
   }

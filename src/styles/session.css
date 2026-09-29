@@ -21,7 +21,8 @@
 .Q-shop-qty:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px var(--accent-soft); cursor: text; }
 .Q-shop-qty.static { display: inline-block; }
 .Q-shop-name { flex: 1; min-width: 0; }
-.Q-shop-src { flex-shrink: 1; min-width: 0; max-width: 38%; font-size: .78em; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-shop-src { display: block; margin-top: 1px; font-size: .76em; line-height: 1.35; color: var(--muted); }
+.Q-shop-row.done .Q-shop-src { color: var(--faint); }
 .Q-shop-rm { display: flex; padding: 4px; border: none; background: none; color: var(--faint); border-radius: 6px; cursor: pointer; opacity: 0; }
 .Q-shop-row:hover .Q-shop-rm { opacity: 1; }
 @media (hover: none) { .Q-shop-rm { opacity: .7; } }
