@@ -79,6 +79,7 @@ export const DEFAULTS = {
   layout: 'stacked', // 'stacked' | 'split' (ingredients beside the method on wide screens)
   translateLang: 'English',
   exportNotes: false,
+  proofread: true, // spelling underlines and the AI "Check spelling" button in the editor
   sidebar: true,
   sideWidth: null, // px, once the list has been resized by dragging its edge
   blocks: DEFAULT_BLOCKS,

@@ -155,6 +155,29 @@
 .Q-view-loading div:nth-child(3) { height: 220px; }
 .Q-field .Q-drag-input, .Q-field .Q-drag-input:focus { height: 36px; padding: 0 4px; border: none; border-radius: 0; background: transparent; box-shadow: none; font-size: 13.5px; }
 .Q-drag-item:focus-within { background: var(--accent-soft); }
+/* Method rows: text areas that grow with the step, numbered like the recipe page. */
+.Q-drag-list.multiline .Q-drag-item { align-items: flex-start; }
+.Q-drag-list.multiline .Q-drag-item.is-section { align-items: center; }
+.Q-drag-list.multiline .Q-drag-item:not(.is-section) .Q-drag-handle { padding-top: 11px; }
+.Q-drag-list.multiline .Q-drag-item:not(.is-section) .Q-drag-rm { margin-top: 6px; }
+.Q-drag-num { flex-shrink: 0; min-width: 18px; padding-top: 10px; text-align: right; font: 600 12px var(--mono); color: var(--faint); }
+.Q-field textarea.Q-drag-input, .Q-field textarea.Q-drag-input:focus { height: auto; min-height: 36px; padding: 8px 4px 8px 6px; font: 14px/1.5 var(--sans); resize: none; overflow: hidden; display: block; }
+
+/* Spelling & grammar review */
+.Q-proof-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.Q-proof-list li { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; background: var(--surface); transition: opacity .15s; }
+.Q-proof-list li.off { opacity: .5; }
+.Q-proof-list label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.Q-proof-list input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.Q-proof-where { font: 600 11.5px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.Q-proof-diff { margin: 6px 0 0 24px; font-size: 14px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.Q-proof-diff del { color: var(--red); background: var(--red-soft); text-decoration: line-through; border-radius: 3px; }
+.Q-proof-diff ins { color: var(--green); background: var(--green-soft); text-decoration: none; border-radius: 3px; font-weight: 600; }
+.Q-proof-list li.off .Q-proof-diff ins { font-weight: 400; }
+.Q-proof-diff del + ins { margin-left: 3px; }
+.Q-proof-none { margin: 4px 0; color: var(--muted); }
+.Q-proof-btn { display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 560px) { .Q-proof-btn span { display: none; } }
 .Q-steps li.Q-step-h { padding: 1.1em .3em .2em; font: 700 .78em var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); cursor: default; }
 .Q-steps li.Q-step-h:first-child { padding-top: .3em; }
 .Q-steps li.Q-step-h::before { content: none; }

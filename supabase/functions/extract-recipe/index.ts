@@ -151,7 +151,7 @@ OTHER FIELDS
 - notes: short, useful technical notes only — substitutions and alternatives, holding and storage, key formula figures if given (hydration, sugars, fat, inclusions). Leave out nutrition tables, marketing text and anything already said in the method.`
 }
 
-async function claudeStructured(opts: { content: unknown[]; schema: object; effort?: string; maxTokens?: number }) {
+async function claudeStructured(opts: { content: unknown[]; schema: object; effort?: string; maxTokens?: number; system?: string }) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -163,7 +163,7 @@ async function claudeStructured(opts: { content: unknown[]; schema: object; effo
       max_tokens: opts.maxTokens || 16000,
       fallbacks: "default",
       output_config: { effort: opts.effort || "medium", format: { type: "json_schema", schema: opts.schema } },
-      system: RECIPE_SYSTEM,
+      system: opts.system || RECIPE_SYSTEM,
       messages: [{ role: "user", content: opts.content }],
     }),
   })
@@ -175,6 +175,37 @@ async function claudeStructured(opts: { content: unknown[]; schema: object; effo
   const text = (data.content || []).filter((c: { type: string }) => c.type === "text").map((c: { text: string }) => c.text).join("")
   return JSON.parse(text)
 }
+
+// ── Spelling and grammar ─────────────────────────────────────────────────────
+// The editor sends every text of a recipe with an id; the model returns only the ones it
+// corrected, so the client can show each change and apply the ones the cook accepts.
+const PROOFREAD_SCHEMA = {
+  type: "object",
+  properties: {
+    fixes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { id: { type: "string" }, text: { type: "string" } },
+        required: ["id", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["fixes"],
+  additionalProperties: false,
+}
+
+const PROOFREAD_SYSTEM = `You are a careful copy editor for recipes written by cooks and bakers. You fix spelling, missing or wrong accents, grammar (agreement, verb forms, articles) and clearly wrong punctuation or capitalization. Nothing else.
+
+Rules:
+- Keep every text in its own language. Never translate. A recipe may mix languages (Italian terms in a Spanish recipe, English brand names): leave foreign words and phrases as they are unless they are misspelled in their own language.
+- Keep every number, quantity, unit, temperature, time, range, percentage and symbol exactly as written ("500 g", "26-28 °C", "4.5-6 h", "1:1", "80%", "½").
+- Keep a leading "## " or "→ " marker exactly.
+- Keep brand names, product names, proper nouns and technical terms (lievito madre, autolisi, pâte fermentée, Manitoba, Caputo) as written unless clearly misspelled.
+- Do not rephrase, shorten, expand, reorder, or change the style, tone or meaning. Kitchen shorthand and a telegraphic style ("Mix 5 min. Rest.") are fine: leave them.
+- Do not change a line only to add or remove a final period.
+- Return only the items you changed, each with its id and the complete corrected text. If nothing needs fixing, return {"fixes": []}.`
 
 const pdfBlock = (b64: unknown) => ({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } })
 const pageLabel = (a: number, b: number) => (a === b ? `page ${a}` : `pages ${a}–${b}`)
@@ -262,6 +293,20 @@ Deno.serve(async (req) => {
     } else if (body.type === "format_note") {
       const text = await claudeText([{ role: "user", content: `Clean up this voice transcription into readable text. Fix punctuation and capitalization only. Do NOT rephrase, interpret, add information, or change the meaning. Keep it exactly what was said:\n\n"${body.transcript}"` }], undefined, 300)
       result = { text }
+    } else if (body.type === "proofread") {
+      const items = ((body.items || []) as { id: string; text: string }[])
+        .filter((it) => it && typeof it.id === "string" && typeof it.text === "string" && it.text.trim())
+        .slice(0, 400)
+      if (!items.length) {
+        result = { fixes: [] }
+      } else {
+        const out = await claudeStructured({
+          system: PROOFREAD_SYSTEM, schema: PROOFREAD_SCHEMA, effort: "low", maxTokens: 12000,
+          content: [{ type: "text", text: `Check these texts from one recipe:\n\n${JSON.stringify(items)}` }],
+        })
+        const byId = new Map(items.map((it) => [it.id, it.text]))
+        result = { fixes: (out.fixes || []).filter((f: { id: string; text: string }) => byId.has(f.id) && f.text && f.text !== byId.get(f.id)) }
+      }
     } else if (body.type === "ai_suggest_notes") {
       const text = await claudeText([{ role: "user", content: `Give 3 short, practical baking notes for this recipe. Be technical and specific. Recipe: ${JSON.stringify(body.recipe)}. Existing notes: "${body.currentNotes || ''}"` }], undefined, 500)
       result = { text }

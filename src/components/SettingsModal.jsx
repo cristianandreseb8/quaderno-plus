@@ -165,6 +165,13 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
           </div>
           <input type="checkbox" className="Q-switch" checked={settings.exportNotes} onChange={(e) => update({ exportNotes: e.target.checked })} />
         </label>
+        <label className="Q-set-row Q-set-check">
+          <div>
+            <div className="Q-set-label">Spelling & grammar check</div>
+            <div className="Q-set-help">Underlines mistakes while you write a recipe, and adds “Check spelling” to the editor: AI proposes corrections in the recipe’s own language and you choose which to apply.</div>
+          </div>
+          <input type="checkbox" className="Q-switch" checked={settings.proofread !== false} onChange={(e) => update({ proofread: e.target.checked })} />
+        </label>
       </section>
 
       <section className="Q-set-sec">

@@ -17,6 +17,28 @@ const PHRASES = {
   de: { step: 'Schritt', next: 'Nächster Schritt', done: 'Rezept fertig', need: 'Du brauchst' },
 }
 const VOICE_KEY = 'qdplus_chef_voice'
+// The step each recipe was left on, so chef mode reopens there: { [recipeId]: { i, t, at } }
+// (i = the step's line, t = the start of its text, to find it again after an edit).
+const POS_KEY = 'qdplus_chef_pos'
+const readAllPos = () => { try { return JSON.parse(localStorage.getItem(POS_KEY) || '{}') || {} } catch (_) { return {} } }
+function savedStep(recipeId, steps) {
+  const p = readAllPos()[recipeId]
+  if (!p) return -1
+  const same = steps.findIndex((s) => s.i === p.i && s.text.slice(0, 40) === p.t)
+  if (same >= 0) return same
+  const byText = p.t ? steps.findIndex((s) => s.text.slice(0, 40) === p.t) : -1
+  return byText >= 0 ? byText : steps.findIndex((s) => s.i === p.i)
+}
+function saveStep(recipeId, step) {
+  try {
+    const all = readAllPos()
+    if (step) all[recipeId] = { i: step.i, t: step.text.slice(0, 40), at: Date.now() }
+    else delete all[recipeId]
+    // The 40 most recent recipes are plenty.
+    const keep = Object.entries(all).sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).slice(0, 40)
+    localStorage.setItem(POS_KEY, JSON.stringify(Object.fromEntries(keep)))
+  } catch (_) { /* storage unavailable */ }
+}
 // The whole ingredient list: beside the step on wide screens (open unless closed), below it on
 // phones (closed unless opened) — each remembered separately.
 const INGS_KEY = () => (wide() ? 'qdplus_chef_ings' : 'qdplus_chef_ings_phone')
@@ -34,8 +56,15 @@ const FLOUR_WORD = /\b(flours?|farina|farine|harinas?|mehl|semola|semolina)\b/
 // step's timer at hand, and — if wanted — the step read aloud. In a session, Next also ticks the
 // step as done. Steps: [{ i, n, text, part, info: { label, name, durs, tkey } }].
 export default function ChefMode({ title, steps, sections, lang, timerBase, cook, doneSteps, onTimerOptions, onClose }) {
-  const first = cook ? steps.findIndex((s) => !doneSteps.has(s.i)) : 0
-  const [pos, setPos] = useState(first < 0 ? steps.length : first) // steps.length = finished
+  // Back where the recipe was left; otherwise the first step (in a session, the first not done).
+  const [start] = useState(() => {
+    const saved = savedStep(timerBase.recipeId, steps)
+    if (saved >= 0) return { pos: saved, resumed: saved > 0 }
+    const first = cook ? steps.findIndex((s) => !doneSteps.has(s.i)) : 0
+    return { pos: first < 0 ? steps.length : first, resumed: false }
+  })
+  const [pos, setPos] = useState(start.pos) // steps.length = finished
+  const [resumed, setResumed] = useState(start.resumed)
   const [voiceOn, setVoiceOn] = useState(() => { try { return localStorage.getItem(VOICE_KEY) === 'on' } catch (_) { return false } })
   const [showIngs, setShowIngs] = useState(() => {
     try { const v = localStorage.getItem(INGS_KEY()); return v ? v === 'on' : wide() } catch (_) { return wide() }
@@ -136,6 +165,11 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
     }
   }, [ringingKeys])
   useEffect(() => { setNudge(false) }, [pos])
+  // Remember the step; a finished recipe starts from the top next time.
+  useEffect(() => {
+    saveStep(recipeId, pos >= steps.length ? null : steps[pos])
+    if (pos !== start.pos) setResumed(false)
+  }, [pos])
 
   function next() {
     if (finished) { onClose(); return }
@@ -233,6 +267,12 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
         <button className="Q-icon-btn" onClick={onClose} aria-label="Close chef mode"><X size={20} /></button>
       </div>
       <div className="Q-chef-bar"><i style={{ width: `${progress}%` }} /></div>
+      {resumed && !finished && (
+        <div className="Q-chef-resume">
+          <span>Back where you left off</span>
+          <button type="button" onClick={() => setPos(0)}>Start over</button>
+        </div>
+      )}
 
       {running.length > 0 && (
         <div className="Q-chef-timers">
