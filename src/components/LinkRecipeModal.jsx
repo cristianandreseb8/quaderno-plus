@@ -49,13 +49,13 @@ export default function LinkRecipeModal({ where, library, selfId, onPick, onClos
             <button type="button" className={unit === 'batch' ? 'on' : ''} onClick={() => { setUnit('batch'); setAmount('1') }}>× the recipe</button>
           </div>
         </div>
-        <p className="Q-link-help dim">Its ingredients go into the shopping list in that amount, and in chef mode its steps come first — or where you place them with “+ Recipe” in the method.</p>
+        <p className="Q-link-help dim">It goes first, in a section of its own. Its ingredients go into the shopping list in that amount, and in chef mode its steps come first — or where you place them with “+ Recipe” in the method.</p>
       </Modal>
     )
   }
   return (
     <Modal title={title} icon={BookOpen} onClose={onClose} width={520} className="Q-picker">
-      {where === 'step' && <p className="Q-link-help">Its steps are cooked at this point of the method, in chef mode and in sessions.</p>}
+      {where === 'step' && <p className="Q-link-help">Its steps go at the top of the method — drag it to where they are cooked.</p>}
       <div className="Q-search" style={{ marginBottom: 10 }}>
         <Search size={15} className="Q-search-ico" />
         <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your recipes" aria-label="Search your recipes" />

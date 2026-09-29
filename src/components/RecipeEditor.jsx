@@ -6,6 +6,8 @@ import { itemLabel, proofreadItems, wordDiff } from '../lib/proofread.js'
 import { useSettings } from '../lib/settings.js'
 import DraggableIngList from './DraggableIngList.jsx'
 import LinkRecipeModal from './LinkRecipeModal.jsx'
+import { placeLinked } from '../lib/links.js'
+import { linkOf } from '../lib/recipeCalc.js'
 import Modal from './ui/Modal.jsx'
 import { toast } from './ui/Toaster.jsx'
 import { newVideo } from '../lib/video.js'
@@ -117,11 +119,12 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
       videos: videoText.split('\n').map((l) => l.trim()).filter(Boolean).map((url) => (initial?.videos || []).find((v) => v.url === url) || newVideo(url)),
     })
   }
-  // Another recipe used in this one: a line at the end of the list (replacing an empty last line).
+  // Another recipe used in this one: at the top, in a section of its own, with this recipe's own
+  // lines in a section named after it — ordered without arranging anything by hand.
   function addLink(line) {
-    const put = (list) => (list.length && !String(list[list.length - 1]).trim() ? [...list.slice(0, -1), line] : [...list, line])
-    if (linkFor === 'ing') setIngredientLines(put)
-    else setR((p) => ({ ...p, steps: put(p.steps?.length ? p.steps : []) }))
+    const own = r.title.trim() || 'Main'
+    if (linkFor === 'ing') setIngredientLines((list) => placeLinked(list, [`## ${linkOf(line)?.title || 'Recipe'}`, line], own))
+    else setR((p) => ({ ...p, steps: placeLinked(p.steps || [], [line], own) }))
     setLinkFor(null)
   }
   const canLink = library.some((x) => x.id !== initial?.id)

@@ -77,3 +77,25 @@ export function flattenSteps(recipe, library, depth = 0, seen = new Set([recipe.
 
 // Keys of every step, linked recipes included (for "3 of 12 steps" in a session).
 export const allStepKeys = (recipe, library) => flattenSteps(recipe, library).map((s) => s.key)
+
+// Where a newly linked recipe goes in the editor, so the list reads in order without arranging
+// it by hand: linked recipes first, each in its own section named after it ("## Pâte brisée"),
+// then this recipe's own lines under a section with its title ("## Flan batter"). Empty rows and
+// sections left empty are dropped; with nothing of its own yet, an empty row waits under its title.
+export function placeLinked(list, block, ownTitle) {
+  const lines = (list || []).filter((l) => String(l).trim() && String(l).trim() !== '##')
+  // The linked recipes already at the top (sections holding only links, or bare links).
+  let k = 0
+  while (k < lines.length) {
+    let j = isSectionHeader(lines[k]) ? k + 1 : k
+    const start = j
+    while (j < lines.length && !isSectionHeader(lines[j]) && linkOf(lines[j])) j++
+    if (j === start || (j < lines.length && !isSectionHeader(lines[j]))) break
+    k = j
+  }
+  const head = lines.slice(0, k)
+  const rest = lines.slice(k)
+  const own = !rest.some((l) => !isSectionHeader(l)) ? [`## ${ownTitle}`, ''] : isSectionHeader(rest[0]) ? rest : [`## ${ownTitle}`, ...rest]
+  const out = [...head, ...block, ...own]
+  return out.filter((l, i) => !isSectionHeader(l) || (i + 1 < out.length && !isSectionHeader(out[i + 1])))
+}

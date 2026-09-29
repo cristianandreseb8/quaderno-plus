@@ -341,7 +341,7 @@ export default function RecipeView({
                 )]
               })}
             </ul>
-            {sec.name && secG > 0 && <div className="Q-subtotal">{secG.toFixed(0)} g</div>}
+            {sec.name && secG > 0 && sec.items.length > 1 && <div className="Q-subtotal">{secG.toFixed(0)} g</div>}
           </div>
         )
       })}
