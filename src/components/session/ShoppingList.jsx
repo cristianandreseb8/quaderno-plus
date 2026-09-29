@@ -88,9 +88,9 @@ export default function ShoppingList({ session, recipesById, change }) {
   // list covers more than one recipe (a linked one, like a Flan's pâte brisée, counts as its own).
   const many = new Set(items.flatMap((it) => it.recipes)).size > 1
   const forWhat = (r) => {
-    if (!many || r.kind !== 'recipe' || !r.recipes.length) return ''
-    if (r.recipes.length === 1) return r.recipes[0]
-    return r.recipes.map((t) => (r.by?.[t] != null ? `${t} ${formatQty(r.by[t], r.unit)}` : t)).join(' · ')
+    if (!many || r.kind !== 'recipe' || !r.recipes.length) return []
+    if (r.recipes.length === 1) return [r.recipes[0]]
+    return r.recipes.map((t) => (r.by?.[t] != null ? `${t} ${formatQty(r.by[t], r.unit)}` : t))
   }
   const row = (r) => {
     const computed = r.kind === 'recipe' ? formatQty(r.qty, r.unit) : ''
@@ -101,7 +101,8 @@ export default function ShoppingList({ session, recipesById, change }) {
         {r.kind === 'recipe'
           ? <QtyField value={overrides[r.key] ?? computed} computed={computed} onCommit={(t) => change(setQtyOverride(r.key, t))} />
           : <span className="Q-shop-qty static" />}
-        <span className="Q-shop-name">{r.name}{src && <small className="Q-shop-src">For {src}</small>}</span>
+        <span className="Q-shop-name">{r.name}</span>
+        {src.length > 0 && <span className="Q-shop-src" title={`For ${src.join(', ')}`}>{src.map((t) => <span key={t}>{t}</span>)}</span>}
         {r.kind === 'extra' && (
           <button className="Q-shop-rm" onClick={(e) => { e.stopPropagation(); change(removeExtra(r.id)) }} aria-label="Remove item"><X size={14} /></button>
         )}
