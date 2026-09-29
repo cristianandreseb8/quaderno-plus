@@ -10,7 +10,7 @@ import { placeLinked } from '../lib/links.js'
 import { linkOf } from '../lib/recipeCalc.js'
 import Modal from './ui/Modal.jsx'
 import { toast } from './ui/Toaster.jsx'
-import { newVideo } from '../lib/video.js'
+import { linesToVideos, videosToLines } from '../lib/video.js'
 
 const AUTOFILL = [
   ['text', 'Paste text', ClipboardPaste],
@@ -26,7 +26,7 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
     source_photos: initial?.source_photos || [], steps: initial?.steps?.length ? initial.steps : [''], id_data: initial?.id_data || '', media_library: initial?.media_library || '',
     fixed_lang: initial?.fixed_lang || null, copied_from: initial?.copied_from || null,
   }))
-  const [videoText, setVideoText] = useState(() => (initial?.videos || []).map((v) => v.url).join('\n'))
+  const [videoLines, setVideoLines] = useState(() => { const l = videosToLines(initial?.videos); return l.length ? l : [''] })
   const [ingredientLines, setIngredientLines] = useState(() => (initIngs.length ? initIngs : ['']))
   const [tab, setTab] = useState(initial ? null : (startWith === 'text' || startWith === 'photo' ? startWith : null))
   const [images, setImages] = useState([])
@@ -116,7 +116,7 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
       notes: r.notes.trim(), source: r.source || 'Manual', notes_pad: r.notes_pad || '', thumbnail: r.thumbnail || '', source_photos: r.source_photos || [],
       ingredients: ingredientLines.map((l) => l.trim()).filter((l) => l && l !== '##'), steps: (r.steps || []).map((l) => String(l).trim()).filter((l) => l && l !== '##'), id_data: r.id_data || '', media_library: r.media_library || '',
       fixed_lang: r.fixed_lang || null, copied_from: r.copied_from || null, createdAt: initial?.createdAt || Date.now(),
-      videos: videoText.split('\n').map((l) => l.trim()).filter(Boolean).map((url) => (initial?.videos || []).find((v) => v.url === url) || newVideo(url)),
+      videos: linesToVideos(videoLines, initial?.videos),
     })
   }
   // Another recipe used in this one: at the top, in a section of its own, with this recipe's own
@@ -273,7 +273,8 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
       <div className="Q-field"><label>Notes</label><textarea className="Q-textarea" rows={3} value={r.notes} onChange={set('notes')} spellCheck={spell} placeholder="Temperatures, flour specs, adjustments…" /></div>
       <div className="Q-field">
         <label>Videos</label>
-        <textarea className="Q-textarea" rows={2} value={videoText} onChange={(e) => setVideoText(e.target.value)} placeholder="One link per line — YouTube, Vimeo, Instagram, TikTok…" />
+        <DraggableIngList kind="video" lines={videoLines} onChange={setVideoLines} />
+        <div className="hint">One link per row — YouTube, Vimeo, Instagram, TikTok… A section puts a title over the videos after it, e.g. "Shaping".</div>
       </div>
       {r.fixed_lang && <div className="Q-dim" style={{ marginBottom: 10 }}>Fixed language version: {r.fixed_lang}</div>}
       <div className="Q-ed-foot">

@@ -53,3 +53,19 @@ export function parseVideo(raw) {
 }
 
 export const newVideo = (url) => ({ id: Math.random().toString(36).slice(2, 10), url: String(url).trim() })
+
+// Videos can be grouped under titles, like the parts of a recipe: a { section } entry heads the
+// videos after it. As editor lines: a link per row, "## Title" for a section.
+export const newVideoSection = (title) => ({ id: Math.random().toString(36).slice(2, 10), section: String(title).trim() })
+export const isVideoSection = (v) => !!v && !v.url && typeof v.section === 'string'
+// A link (with or without https://), not a title someone typed.
+export const looksLikeLink = (text) => /^https?:\/\//i.test(String(text).trim()) || /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(String(text).trim())
+export const videosToLines = (videos) => (videos || []).map((v) => (isVideoSection(v) ? `## ${v.section}` : v.url))
+export function linesToVideos(lines, before = []) {
+  return (lines || []).map((l) => String(l).trim()).filter((l) => l && l !== '##').map((l) => {
+    // A row that is not a link is a title too ("Shaping" as much as "## Shaping").
+    const title = /^##?\s+/.test(l) ? l.replace(/^##?\s*/, '') : looksLikeLink(l) ? null : l
+    if (title != null) return (before || []).find((v) => isVideoSection(v) && v.section === title) || newVideoSection(title)
+    return (before || []).find((v) => v.url === l) || newVideo(l)
+  })
+}

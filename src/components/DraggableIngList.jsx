@@ -18,6 +18,7 @@ function findScroller(fromEl) {
 const KINDS = {
   ingredient: { add: '+ Ingredient', placeholder: '500 g  ingredient name', section: 'Section name', multiline: false },
   step: { add: '+ Step', placeholder: 'Describe the step', section: 'Section name, e.g. Shaping', multiline: true },
+  video: { add: '+ Video', placeholder: 'Paste a YouTube, Vimeo, Instagram or TikTok link', section: 'Section title, e.g. Shaping', multiline: false },
 }
 
 const bare = (line) => (isSectionHeader(line) ? line.replace(/^##?\s*/, '') : line)

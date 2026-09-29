@@ -271,6 +271,12 @@
 .Q-video-rm { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%; border: none; background: rgba(0, 0, 0, .6); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity .12s; }
 .Q-video:hover .Q-video-rm { opacity: 1; }
 @media (hover: none) { .Q-video-rm { opacity: .85; } }
+.Q-video-sec { display: flex; align-items: center; gap: 6px; margin: 10px 0 -4px; }
+.Q-videos > .Q-video-sec:first-child { margin-top: 0; }
+.Q-video-sec-rm { display: flex; padding: 3px; border: none; border-radius: 6px; background: none; color: var(--faint); cursor: pointer; opacity: 0; transition: opacity .12s; }
+.Q-video-sec:hover .Q-video-sec-rm { opacity: 1; }
+.Q-video-sec-rm:hover { color: var(--red); background: var(--red-soft); }
+@media (hover: none) { .Q-video-sec-rm { opacity: .7; } }
 .Q-video-add { display: flex; gap: 8px; }
 .Q-video-add input { flex: 1; min-width: 0; height: 36px; border: 1px solid var(--rule-strong); border-radius: 9px; background: var(--surface); padding: 0 12px; font-size: 13.5px; color: var(--ink); }
 .Q-video-add input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }

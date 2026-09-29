@@ -351,6 +351,7 @@ export default function RecipeView({
 
   const stepList = numberSteps(viewR.steps)
   const videos = Array.isArray(recipe.videos) ? recipe.videos : []
+  const videoCount = videos.filter((v) => v.url).length
   // Every step to cook, the steps of the recipes used in this one included (a Flan's Pâte
   // brisée): theirs are keyed "<recipe id>:<index>", this recipe's by their index.
   const flat = useMemo(() => flattenSteps(viewR, library), [viewR, library])
@@ -513,7 +514,7 @@ export default function RecipeView({
       ),
     },
     (videos.length > 0 || addingVideo) && {
-      id: 'video', title: videos.length > 1 ? `Videos` : 'Video', summary: videos.length > 1 ? `${videos.length}` : '',
+      id: 'video', title: videoCount > 1 ? `Videos` : 'Video', summary: videoCount > 1 ? `${videoCount}` : '',
       actions: canEdit && videos.length > 0 && !addingVideo && <button className="Q-link" onClick={() => setAddingVideo(true)}>Add</button>,
       content: <VideoBlock videos={videos} onChange={canEdit ? (v) => onUpdate({ ...recipe, videos: v }) : null} adding={addingVideo} onAddingDone={() => setAddingVideo(false)} />,
     },
