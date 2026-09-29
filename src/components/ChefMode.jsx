@@ -17,7 +17,9 @@ const PHRASES = {
   de: { step: 'Schritt', next: 'Nächster Schritt', done: 'Rezept fertig', need: 'Du brauchst' },
 }
 const VOICE_KEY = 'qdplus_chef_voice'
-const INGS_KEY = 'qdplus_chef_ings' // the ingredient list beside the step, on wide screens
+// The whole ingredient list: beside the step on wide screens (open unless closed), below it on
+// phones (closed unless opened) — each remembered separately.
+const INGS_KEY = () => (wide() ? 'qdplus_chef_ings' : 'qdplus_chef_ings_phone')
 const wide = () => window.matchMedia('(min-width: 900px)').matches
 // A timer belongs to a step if its key is the step's, or the step's plus a duration.
 const ofStep = (key, tkey) => key === tkey || String(key || '').startsWith(`${tkey}:`)
@@ -35,7 +37,9 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
   const first = cook ? steps.findIndex((s) => !doneSteps.has(s.i)) : 0
   const [pos, setPos] = useState(first < 0 ? steps.length : first) // steps.length = finished
   const [voiceOn, setVoiceOn] = useState(() => { try { return localStorage.getItem(VOICE_KEY) === 'on' } catch (_) { return false } })
-  const [showIngs, setShowIngs] = useState(() => { try { return wide() && localStorage.getItem(INGS_KEY) !== 'off' } catch (_) { return wide() } })
+  const [showIngs, setShowIngs] = useState(() => {
+    try { const v = localStorage.getItem(INGS_KEY()); return v ? v === 'on' : wide() } catch (_) { return wide() }
+  })
   const [localTicks, setLocalTicks] = useState(() => new Set()) // mise en place outside a session
   const ingsRef = useRef(null)
   const [nudge, setNudge] = useState(false) // a timer of this step ended: time to move on
@@ -177,7 +181,7 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
   function toggleIngs() {
     const on = !showIngs
     setShowIngs(on)
-    if (wide()) { try { localStorage.setItem(INGS_KEY, on ? 'on' : 'off') } catch (_) { /* ignore */ } }
+    try { localStorage.setItem(INGS_KEY(), on ? 'on' : 'off') } catch (_) { /* ignore */ }
   }
 
   function toggleVoice() {
@@ -199,10 +203,16 @@ export default function ChefMode({ title, steps, sections, lang, timerBase, cook
   const usedRaw = new Set(uses.map((u) => u.raw))
   const currentPart = partIndex(step)
   // The full list follows the step: its ingredients highlighted and scrolled into view.
+  // (The part's title goes to the top of the list, so all of the step's ingredients show below it.)
   useEffect(() => {
-    if (!showIngs) return
-    const el = ingsRef.current?.querySelector('.used') || ingsRef.current?.querySelector('.Q-chef-ings-part.current')
-    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    const list = ingsRef.current
+    if (!showIngs || !list) return
+    const first = list.querySelector('li.used')
+    const part = first?.closest('.Q-chef-ings-part') || list.querySelector('.Q-chef-ings-part.current')
+    const target = part || first
+    if (!target) return
+    const top = target.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop - 6
+    list.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
   }, [pos, showIngs])
 
   const progress = steps.length ? Math.min(100, (pos / steps.length) * 100) : 100
