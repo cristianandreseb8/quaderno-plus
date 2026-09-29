@@ -18,6 +18,7 @@ import AIAssistant from './AIAssistant.jsx'
 import { TimerChip, TimerMenu, TimerPresets } from './Timers.jsx'
 import { findDurations } from '../lib/durations.js'
 import { componentsOf, flattenSteps, linkFactor, resolveLink } from '../lib/links.js'
+import { useCookPlans } from '../lib/cookPlan.js'
 import { cleanName, guessLang, stepName } from '../lib/timerNames.js'
 import StepSheet from './StepSheet.jsx'
 import ChefMode from './ChefMode.jsx'
@@ -393,6 +394,13 @@ export default function RecipeView({
     i: s.key, n: s.n, text: s.text, part: s.part, src: s.src.id, srcTitle: s.src.title,
     info: s.src.id === recipe.id ? stepInfo(stepList[s.key], s.key) : subInfo(s),
   })), [flat])
+  // The AI's reading of each method (what every step really takes), fetched when cooking — in chef
+  // mode or a session — and kept on the device. Guests use the reading from the words alone.
+  const planRecipes = useMemo(() => [
+    recipe,
+    ...[...new Set(flat.map((s) => s.src.id))].filter((id) => id !== recipe.id).map((id) => library.find((r) => r.id === id)).filter(Boolean),
+  ], [recipe, flat, library])
+  const cookPlans = useCookPlans(planRecipes, (chef || !!cook) && !guest)
   const chefSources = useMemo(() => {
     const out = { [recipe.id]: { title: '', sections } }
     flat.forEach((s) => { if (!out[s.src.id]) out[s.src.id] = { title: s.src.title, sections: parseSections(s.src.recipe.ingredients || []) } })
@@ -714,6 +722,7 @@ export default function RecipeView({
         <ChefMode
           title={viewR.title || 'Recipe'} lang={timerLang} timerBase={timerBase} sections={sections} sources={chefSources}
           steps={chefSteps} cook={cook} doneSteps={doneSteps} onClose={() => setChef(false)}
+          plans={cookPlans.plans} planPending={cookPlans.pending}
           onTimerOptions={(st) => setStepSheet(typeof st.i === 'number' ? { i: st.i } : { ext: st })}
         />
       )}

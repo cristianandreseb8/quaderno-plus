@@ -55,3 +55,6 @@ export const pdfRecipe = (params) => invoke({ type: 'pdf_recipe', ...params })
 export const translateStrings = (items, targetLang) => invoke({ type: 'translate_strings', items, target_lang: targetLang })
 // Spelling and grammar: items [{ id, text }] in, only the corrected ones [{ id, text }] back.
 export const proofreadTexts = (items) => invoke({ type: 'proofread', items })
+// Chef mode's reading of a method: per step, which ingredient lines go in and how much, and which
+// earlier preparations it uses (see lib/cookPlan.js).
+export const cookPlan = (payload) => invoke({ type: 'cook_plan', ...payload })

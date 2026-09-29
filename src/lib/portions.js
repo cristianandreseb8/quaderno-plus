@@ -31,6 +31,29 @@ const NUM = {
 }
 // "in 3 additions", "en tres veces", "in due volte", "en 3 fois", "in 3 Portionen"
 const PARTS = new Set(['additions', 'addition', 'parts', 'batches', 'times', 'stages', 'goes', 'lots', 'veces', 'partes', 'tandas', 'volte', 'riprese', 'parti', 'fois', 'portionen', 'teilen', 'mal', 'etappen'])
+// Nouns for something already made: "the cornstarch and cream MIX", "la MEZCLA de maicena y crema".
+const PREP = new Set([
+  'mix', 'mixture', 'infusion', 'batter', 'dough', 'paste', 'blend', 'syrup', 'custard', 'emulsion', 'slurry', 'ganache', 'roux',
+  'mezcla', 'masa', 'infusion', 'preparacion', 'almibar', 'jarabe', 'emulsion', 'impasto', 'composto', 'miscela', 'infuso', 'sciroppo',
+  'appareil', 'melange', 'sirop', 'mischung', 'teig', 'masse', 'sirup', 'aufguss',
+])
+const AND = new Set(['and', 'y', 'e', 'et', 'und', '&'])
+const OF = new Set(['of', 'de', 'del', 'di', 'della', 'dello', 'du', 'des', 'd', 'von', 'vom', 'aus'])
+// The ingredient is named as part of a preparation, not added: "the milk infusion", "the
+// cornstarch and cream mix", "la mezcla de maicena y crema", "l'infusion de lait".
+function inPreparation(tokens, i, len) {
+  const after = tokens.slice(i + len, i + len + 3)
+  if (PREP.has(after[0])) return true
+  if (AND.has(after[0]) && after[1] && !PREP.has(after[1]) && PREP.has(after[2])) return true
+  // Before it: a preparation noun, then "of/de", then at most an article, a word and "and/y".
+  for (let j = i - 1, n = 0; j >= 0 && n < 5; j--, n++) {
+    const t = tokens[j]
+    if (/^[.,;:!?()]$/.test(t)) return false
+    if (PREP.has(t)) return OF.has(tokens[j + 1])
+  }
+  return false
+}
+
 const num = (t) => (/^\d+(?:[.,]\d+)?$/.test(t) ? parseFloat(t.replace(',', '.')) : NUM[t])
 
 // Where the ingredient's words (`hit`, as the step matcher found them) sit in the step.
@@ -46,6 +69,7 @@ function findAll(tokens, hit) {
 
 // What the words right before (and after) one mention say about the amount.
 function portionAt(tokens, i, len) {
+  if (inPreparation(tokens, i, len)) return { kind: 'ref' }
   let j = i - 1
   let skipped = 0
   while (j >= 0 && (FILL.has(tokens[j]) || isDescriptor(tokens[j])) && skipped < 4) { j--; skipped++ }
@@ -78,11 +102,13 @@ function portionAt(tokens, i, len) {
 export function portionIn(stepText, hit) {
   const tokens = tokenize(stepText)
   const { at, len } = findAll(tokens, hit)
+  let ref = null
   for (const i of at) {
     const p = portionAt(tokens, i, len)
+    if (p?.kind === 'ref') { ref = p; continue }
     if (p) return p
   }
-  return null
+  return ref
 }
 
 const FRAC_LABEL = [[1 / 2, '½'], [1 / 4, '¼'], [3 / 4, '¾'], [1 / 3, '⅓'], [2 / 3, '⅔'], [1 / 8, '⅛']]
@@ -101,6 +127,8 @@ export function shares(usesPerStep) {
     for (const u of uses) {
       const before = used.has(u.key) ? used.get(u.key) : 0
       const p = u.portion
+      // Named inside a preparation made earlier, or again once all of it went in: nothing to add.
+      if (p?.kind === 'ref' || (!p && before >= 0.999)) continue
       let f, kind
       if (p?.kind === 'frac') { f = p.f; kind = 'frac' }
       else if (p?.kind === 'some') { f = null; kind = 'some' }
@@ -110,9 +138,7 @@ export function shares(usesPerStep) {
         f = Number.isNaN(before) ? null : Math.max(0, 1 - before)
       } else { f = 1; kind = 'all' }
       out.set(u.key, { f, kind, parts: p?.parts || null })
-      if (!(before >= 0.999 && kind === 'all')) {
-        used.set(u.key, f == null ? NaN : (Number.isNaN(before) ? NaN : before + f))
-      }
+      used.set(u.key, f == null ? NaN : (Number.isNaN(before) ? NaN : before + f))
     }
     return out
   })

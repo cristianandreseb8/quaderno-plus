@@ -207,6 +207,61 @@ Rules:
 - Do not change a line only to add or remove a final period.
 - Return only the items you changed, each with its id and the complete corrected text. If nothing needs fixing, return {"fixes": []}.`
 
+// ── Cook plan (chef mode) ────────────────────────────────────────────────────
+// What each step of a method really asks the cook to take — which ingredient lines go in and how
+// much of each, and which preparations made in earlier steps it uses — so the guide can say
+// "about 170 g of the milk infusion" instead of repeating every word that names an ingredient.
+// Shares are fractions of a line (or of a preparation), so the app applies them at any scale.
+const COOK_PLAN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["steps"],
+  properties: {
+    steps: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "items"],
+        properties: {
+          id: { type: "string" },
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["kind", "lines", "share", "approx", "name", "from"],
+              properties: {
+                kind: { type: "string", enum: ["ingredient", "preparation"] },
+                lines: { type: "array", items: { type: "string" } },
+                share: { type: "number" },
+                approx: { type: "boolean" },
+                name: { type: "string" },
+                from: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+}
+
+const COOK_PLAN_SYSTEM = `You are an experienced chef preparing a recipe so that a cook — or a kitchen robot — can follow it step by step without guessing. For every step of the method you state exactly what the cook takes in that step and how much of it, following the recipe the way a chef reads it: you know which things were already combined in earlier steps, which amounts are split across steps, and what vague words like "a part of", "a little", "some", "the rest" mean in context.
+
+You get the ingredient lines (id, part of the recipe, text) and the steps (id, part, text), in order.
+
+For each step, list its items:
+- kind "ingredient": an ingredient line that goes in, or is taken, in this step for the first time or again from the stock (not from a preparation). lines = [that line's id]. share = the fraction of that line used in this step (1 = all of it, 0.5 = half, "the rest" = whatever earlier steps left). name = "", from = "".
+- kind "preparation": something made in an earlier step (an infusion, a mix, a dough, a syrup, a cream, a starter) that this step uses. lines = the ids of the ingredient lines it contains. share = the fraction of that preparation used here. name = what the method calls it, short, in the recipe's language ("milk infusion", "the cornstarch and cream mix", "la masa madre"). from = the id of the step where it was made or last changed.
+- When an amount is vague ("a part of the milk", "a little of the infusion", "some of the cream"), estimate a sensible share for what the step is trying to do, and set approx = true. Otherwise approx = false.
+- Across the whole method, the shares of one ingredient line (directly or inside preparations taken from the stock) add up to at most 1, and usually to exactly 1.
+- Do not list an ingredient again when it is already inside a preparation the step uses. Do not list things that are only mentioned and not added or taken ("until the cream thickens", "cook the custard"), tools, or the dish itself being worked on (the dough being kneaded, the pan on the heat).
+- A step that adds nothing (rest, bake, chill, fold, check) has no items.
+- Lines that start with "→ " are preparations made earlier in the same recipe; when a step adds one, list it as kind "ingredient" with that line.
+
+Return one entry for every step id, in order.`
+
 const pdfBlock = (b64: unknown) => ({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } })
 const pageLabel = (a: number, b: number) => (a === b ? `page ${a}` : `pages ${a}–${b}`)
 
@@ -306,6 +361,22 @@ Deno.serve(async (req) => {
         })
         const byId = new Map(items.map((it) => [it.id, it.text]))
         result = { fixes: (out.fixes || []).filter((f: { id: string; text: string }) => byId.has(f.id) && f.text && f.text !== byId.get(f.id)) }
+      }
+    } else if (body.type === "cook_plan") {
+      const ings = ((body.ingredients || []) as { id: string; part?: string; text: string }[]).slice(0, 200)
+      const steps = ((body.steps || []) as { id: string; part?: string; text: string }[]).slice(0, 150)
+      if (!steps.length) {
+        result = { steps: [] }
+      } else {
+        const text = `Recipe: ${String(body.title || "").slice(0, 200)}
+
+Ingredient lines:
+${ings.map((l) => `${l.id}${l.part ? ` [${l.part}]` : ""}: ${l.text}`).join("\n")}
+
+Steps:
+${steps.map((st) => `${st.id}${st.part ? ` [${st.part}]` : ""}: ${st.text}`).join("\n")}`
+        const out = await claudeStructured({ system: COOK_PLAN_SYSTEM, schema: COOK_PLAN_SCHEMA, effort: "medium", maxTokens: 16000, content: [{ type: "text", text }] })
+        result = { steps: out.steps || [] }
       }
     } else if (body.type === "ai_suggest_notes") {
       const text = await claudeText([{ role: "user", content: `Give 3 short, practical baking notes for this recipe. Be technical and specific. Recipe: ${JSON.stringify(body.recipe)}. Existing notes: "${body.currentNotes || ''}"` }], undefined, 500)
