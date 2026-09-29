@@ -59,7 +59,9 @@ function useVideoTitles(videos, onChange) {
 export default function VideoBlock({ videos, onChange, adding, onAddingDone }) {
   const list = videos || []
   const [url, setUrl] = useState('')
+  const [name, setName] = useState('') // what to call the video being added (optional)
   const [open, setOpen] = useState(null) // id of the video playing
+  const [renaming, setRenaming] = useState(null) // the open video's name while it is edited
   const [more, setMore] = useState(false) // the row goes on past the right edge
   const inputRef = useRef(null)
   const rowRef = useRef(null)
@@ -95,15 +97,20 @@ export default function VideoBlock({ videos, onChange, adding, onAddingDone }) {
       onChange([...list, newVideoSection(text)])
     } else {
       if (!parseVideo(text)) { toast.error('That does not look like a link.'); return }
-      onChange([...list, newVideo(text)])
+      onChange([...list, { ...newVideo(text), ...(name.trim() ? { title: name.trim() } : {}) }])
     }
-    setUrl(''); onAddingDone?.()
+    setUrl(''); setName(''); onAddingDone?.()
   }
-  function rename(v) {
-    const t = window.prompt('Video title', labels[v.id])
-    if (t == null) return
-    onChange(list.map((x) => (x.id === v.id ? { ...x, title: t.trim() || undefined } : x)))
+  // Enter or leaving the field saves the name; Escape keeps the old one.
+  const naming = useRef(false)
+  function saveName(v, value) {
+    if (!naming.current) return
+    naming.current = false
+    setRenaming(null)
+    const t = String(value || '').trim()
+    if (t && t !== labels[v.id]) onChange(list.map((x) => (x.id === v.id ? { ...x, title: t } : x)))
   }
+  const startNaming = (v) => { naming.current = true; setRenaming(labels[v.id]) }
   function remove(v) {
     if (!window.confirm(`Remove “${labels[v.id]}” from the recipe?`)) return
     setOpen(null)
@@ -122,7 +129,7 @@ export default function VideoBlock({ videos, onChange, adding, onAddingDone }) {
           ) : (
             <button
               key={v.id} type="button" className={`Q-vchip${open === v.id ? ' on' : ''}`}
-              onClick={() => setOpen(open === v.id ? null : v.id)} aria-expanded={open === v.id} title={labels[v.id]}
+              onClick={() => { naming.current = false; setRenaming(null); setOpen(open === v.id ? null : v.id) }} aria-expanded={open === v.id} title={labels[v.id]}
             >
               <Play size={12} /><span>{labels[v.id]}</span>
             </button>
@@ -133,9 +140,20 @@ export default function VideoBlock({ videos, onChange, adding, onAddingDone }) {
         <div className="Q-vopen">
           <Player key={playing.id} video={playing} />
           <div className="Q-vopen-bar">
-            <span className="t">{labels[playing.id]}</span>
+            {renaming != null ? (
+              <input
+                className="Q-vname" value={renaming} autoFocus aria-label="Video name" placeholder="Name this video"
+                onChange={(e) => setRenaming(e.target.value)} onBlur={(e) => saveName(playing, e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveName(playing, e.currentTarget.value)
+                  if (e.key === 'Escape') { naming.current = false; setRenaming(null) }
+                }}
+              />
+            ) : (
+              <span className={`t${onChange ? ' editable' : ''}`} onClick={() => onChange && startNaming(playing)} title={onChange ? 'Rename' : undefined}>{labels[playing.id]}</span>
+            )}
             <a className="Q-link" href={playing.url} target="_blank" rel="noopener noreferrer">Open <ExternalLink size={12} /></a>
-            {onChange && <button className="Q-link" onClick={() => rename(playing)}>Rename</button>}
+            {onChange && renaming == null && <button className="Q-link" onClick={() => startNaming(playing)}>Rename</button>}
             {onChange && <button className="Q-link danger" onClick={() => remove(playing)}>Remove</button>}
             <button className="Q-icon-btn" onClick={() => setOpen(null)} aria-label="Close the video"><X size={15} /></button>
           </div>
@@ -145,8 +163,14 @@ export default function VideoBlock({ videos, onChange, adding, onAddingDone }) {
         <div className="Q-video-add">
           <input
             ref={inputRef} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste a video link — or type a title to group the next ones"
-            onKeyDown={(e) => { if (e.key === 'Enter') add(); if (e.key === 'Escape') { setUrl(''); onAddingDone?.() } }}
+            onKeyDown={(e) => { if (e.key === 'Enter') add(); if (e.key === 'Escape') { setUrl(''); setName(''); onAddingDone?.() } }}
           />
+          {url.trim() && !isTitle && (
+            <input
+              className="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" aria-label="Video name"
+              onKeyDown={(e) => { if (e.key === 'Enter') add(); if (e.key === 'Escape') { setUrl(''); setName(''); onAddingDone?.() } }}
+            />
+          )}
           <button className="btn primary sm" onClick={add} disabled={!url.trim()}>{isTitle ? 'Add title' : 'Add'}</button>
         </div>
       )}

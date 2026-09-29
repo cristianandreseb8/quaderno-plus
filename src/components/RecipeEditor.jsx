@@ -274,7 +274,7 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
       <div className="Q-field">
         <label>Videos</label>
         <DraggableIngList kind="video" lines={videoLines} onChange={setVideoLines} />
-        <div className="hint">One link per row — YouTube, Vimeo, Instagram, TikTok… A section puts a title over the videos after it, e.g. "Shaping".</div>
+        <div className="hint">One video per row: its link (YouTube, Vimeo, Instagram, TikTok…) and, if you like, a name — otherwise it shows the video's own title. A section puts a title over the videos after it, e.g. "Shaping".</div>
       </div>
       {r.fixed_lang && <div className="Q-dim" style={{ marginBottom: 10 }}>Fixed language version: {r.fixed_lang}</div>}
       <div className="Q-ed-foot">

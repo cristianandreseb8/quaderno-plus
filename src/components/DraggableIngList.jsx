@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { BookOpen, GripVertical, X } from 'lucide-react'
 import { isLinkStep, isSectionHeader, linkOf } from '../lib/recipeCalc.js'
+import { splitVideoLine, videoLine } from '../lib/video.js'
 
 function findScroller(fromEl) {
   let el = fromEl
@@ -88,7 +89,8 @@ export default function DraggableIngList({ lines, onChange, kind = 'ingredient',
   // Render synchronously so focus moves before the next keystroke arrives.
   function commitAndFocus(n, idx, caret) {
     flushSync(() => onChange(n))
-    const el = listRef.current?.querySelectorAll('.Q-drag-item')[idx]?.querySelector('.Q-drag-input')
+    const row = listRef.current?.querySelectorAll('.Q-drag-item')[idx]
+    const el = row?.querySelector('.Q-drag-input[data-first]') || row?.querySelector('.Q-drag-input')
     if (!el) return
     el.focus()
     if (caret != null) el.setSelectionRange(caret, caret)
@@ -189,7 +191,40 @@ export default function DraggableIngList({ lines, onChange, kind = 'ingredient',
                 {chip}
               </>
             )}
-            {!stepLink && !(link && !K.multiline) && <Field
+            {kind === 'video' && !section && (() => {
+              // A video: its link, and a name to show instead of its own title (optional).
+              const { url: vurl, name } = splitVideoLine(line)
+              const put = (u, nm) => { const n = [...lines]; n[idx] = videoLine(u, nm); onChange(n) }
+              const nextRow = (e) => {
+                if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+                e.preventDefault()
+                const n = [...lines]
+                n.splice(idx + 1, 0, '')
+                commitAndFocus(n, idx + 1, 0)
+              }
+              return (
+                <div className="Q-vrow">
+                  <input
+                    className="Q-drag-input vlink" data-first value={vurl} placeholder={K.placeholder} aria-label="Video link"
+                    onChange={(e) => put(e.target.value.replace(/\s+/g, ''), name)} onKeyDown={nextRow}
+                    onPaste={(e) => {
+                      // Several links at once: one row each.
+                      const parts = (e.clipboardData?.getData('text/plain') || '').split(/\s+/).filter(Boolean)
+                      if (parts.length < 2) return
+                      e.preventDefault()
+                      const n = [...lines]
+                      n.splice(idx, 1, videoLine(parts[0], name), ...parts.slice(1))
+                      commitAndFocus(n, idx + parts.length - 1)
+                    }}
+                  />
+                  <input
+                    className="Q-drag-input vname" value={name} placeholder="Name (optional)" aria-label="Video name"
+                    onChange={(e) => put(vurl, e.target.value.replace(/\t/g, ' '))} onKeyDown={nextRow}
+                  />
+                </div>
+              )
+            })()}
+            {!stepLink && !(link && !K.multiline) && !(kind === 'video' && !section) && <Field
               className={`Q-drag-input${section ? ' section' : ''}`}
               rows={Field === 'textarea' ? 1 : undefined}
               spellCheck={spellCheck}
