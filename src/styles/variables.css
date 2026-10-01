@@ -75,11 +75,25 @@
 }
 
 :root[data-theme="jan"] {
-  --sans: Manrope, ui-sans-serif, system-ui, sans-serif;
-  --heading: var(--sans); --heading-weight: 700;
-  --bg: #F7F6F2; --side: #F1EFEA; --surface: #FCFBF8; --surface-2: #EDEBE5; --hover: #E8E5DE;
-  --ink: #262624; --muted: #6E6B64; --faint: #A6A29A; --rule: #E4E1DA; --rule-strong: #D2CEC5;
-  --accent: #4E6A5E; --accent-soft: #E3EAE5; --navy: #262624;
+  /* Jan is made from a few choices (Settings → Template → Make Jan yours sets them on the page);
+     every other shade is mixed from them. */
+  --jan-bg: #F7F6F2; --jan-ink: #262624; --jan-accent: #4E6A5E;
+  /* Unless chosen too, these follow the background and the text (a dark background gets dark lines). */
+  --jan-surface: color-mix(in srgb, var(--jan-bg) 55%, #FFFFFF 45%);
+  --jan-muted: color-mix(in srgb, var(--jan-ink) 64%, var(--jan-bg));
+  --jan-line: color-mix(in srgb, var(--jan-bg) 87%, var(--jan-ink));
+  --jan-bar: var(--jan-accent);
+  --jan-heading-font: Manrope, ui-sans-serif, system-ui, sans-serif;
+  --jan-body-font: Manrope, ui-sans-serif, system-ui, sans-serif;
+  --jan-mono-font: ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: var(--jan-body-font); --heading: var(--jan-heading-font); --mono: var(--jan-mono-font); --heading-weight: 700;
+  --bg: var(--jan-bg); --surface: var(--jan-surface);
+  --side: color-mix(in srgb, var(--jan-bg) 96%, var(--jan-ink));
+  --surface-2: color-mix(in srgb, var(--jan-bg) 93%, var(--jan-ink));
+  --hover: color-mix(in srgb, var(--jan-bg) 90%, var(--jan-ink));
+  --ink: var(--jan-ink); --muted: var(--jan-muted); --faint: color-mix(in srgb, var(--jan-muted) 62%, var(--jan-bg));
+  --rule: var(--jan-line); --rule-strong: color-mix(in srgb, var(--jan-line) 82%, var(--jan-ink));
+  --accent: var(--jan-accent); --accent-soft: color-mix(in srgb, var(--jan-accent) 14%, var(--jan-bg)); --navy: var(--jan-ink);
   --radius: 8px;
 }
 

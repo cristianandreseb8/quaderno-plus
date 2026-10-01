@@ -58,3 +58,10 @@ export const proofreadTexts = (items) => invoke({ type: 'proofread', items })
 // Chef mode's reading of a method: per step, which ingredient lines go in and how much, and which
 // earlier preparations it uses (see lib/cookPlan.js).
 export const cookPlan = (payload) => invoke({ type: 'cook_plan', ...payload })
+// When a recipe's fresh ingredients are in season in a region ("Jan" template): per ingredient
+// { name, fresh, months[1–12] } and a note.
+export const seasonality = (ingredients, region) => invoke({ type: 'seasonality', ingredients, region })
+// A short spoken answer for "Hey chef" (with the recipe on screen, if any).
+export const voiceAnswer = (question, recipe, language) => invoke({ type: 'voice_answer', question, recipe: stripForApi(recipe), language })
+// A new recipe from a request ("a baguette"), in the shape of an imported one.
+export const createRecipeAI = (request, language) => invoke({ type: 'create_recipe', request, language })

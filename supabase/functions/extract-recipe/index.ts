@@ -262,6 +262,33 @@ For each step, list its items:
 
 Return one entry for every step id, in order.`
 
+// ── Seasons, voice answers, new recipes ──────────────────────────────────────
+// When the fresh ingredients of a recipe are in season where the cook lives ("Jan" template).
+const SEASON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["items", "note"],
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "fresh", "months"],
+        properties: { name: { type: "string" }, fresh: { type: "boolean" }, months: { type: "array", items: { type: "integer" } } },
+      },
+    },
+    note: { type: "string" },
+  },
+}
+const SEASON_SYSTEM = `You know when produce is in season. For each ingredient of a recipe say whether it is fresh seasonal produce (fresh = true): vegetables, fruit, fresh herbs, mushrooms, and the few animal products with a real season (game, some fish and shellfish). Everything else is fresh = false: flour, sugar, salt, spices, oils, butter, milk, cream, cheese, eggs, chocolate, dried, frozen, canned or preserved food, and produce sold the same all year.
+For fresh ingredients, months = the months (1–12) when they are in season, grown locally, in the cook's region. For the others, months = [].
+note = one short sentence, in the language of the ingredient names, on when this recipe is best made — or that it can be made all year.`
+
+const VOICE_SYSTEM = (language: string, recipe: unknown) => `You are "Chef", the voice assistant of a recipe app used in professional and home kitchens. Your answer is read aloud: at most three short sentences (about 60 words), plain text, no markdown, no lists, numbers as digits with their units. Answer in ${language || "the language of the question"}. Be precise and practical, like an experienced chef.${recipe ? `
+
+The recipe on screen: ${JSON.stringify(recipe)}` : ""}`
+
 const pdfBlock = (b64: unknown) => ({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } })
 const pageLabel = (a: number, b: number) => (a === b ? `page ${a}` : `pages ${a}–${b}`)
 
@@ -378,6 +405,25 @@ ${steps.map((st) => `${st.id}${st.part ? ` [${st.part}]` : ""}: ${st.text}`).joi
         const out = await claudeStructured({ system: COOK_PLAN_SYSTEM, schema: COOK_PLAN_SCHEMA, effort: "medium", maxTokens: 16000, content: [{ type: "text", text }] })
         result = { steps: out.steps || [] }
       }
+    } else if (body.type === "seasonality") {
+      const names = ((body.ingredients || []) as string[]).map((x) => String(x).slice(0, 120)).filter(Boolean).slice(0, 80)
+      if (!names.length) {
+        result = { items: [], note: "" }
+      } else {
+        result = await claudeStructured({
+          system: SEASON_SYSTEM, schema: SEASON_SCHEMA, effort: "low", maxTokens: 6000,
+          content: [{ type: "text", text: `The cook's region: ${String(body.region || "Central Europe").slice(0, 120)}.\n\nIngredients:\n${names.map((n) => `- ${n}`).join("\n")}` }],
+        })
+      }
+    } else if (body.type === "voice_answer") {
+      const text = await claudeText([{ role: "user", content: String(body.question || "").slice(0, 1000) }], VOICE_SYSTEM(String(body.language || ""), body.recipe || null), 400)
+      result = { text: text.trim() }
+    } else if (body.type === "create_recipe") {
+      const request = String(body.request || "").slice(0, 500)
+      result = { recipe: await claudeStructured({
+        schema: RECIPE_SCHEMA,
+        content: [{ type: "text", text: `Create a complete, professional recipe for: ${request}.\nWrite it in ${body.language || "the language of the request"}, with exact weights in grams where it makes sense, the parts of the recipe as sections, and the full method.\n\n${recipeRules("book")}` }],
+      }) }
     } else if (body.type === "ai_suggest_notes") {
       const text = await claudeText([{ role: "user", content: `Give 3 short, practical baking notes for this recipe. Be technical and specific. Recipe: ${JSON.stringify(body.recipe)}. Existing notes: "${body.currentNotes || ''}"` }], undefined, 500)
       result = { text }

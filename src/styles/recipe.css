@@ -307,3 +307,41 @@
 .Q-vname { flex: 1; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface); color: var(--ink); font: 500 13.5px var(--sans); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 .Q-video-add input.name { flex: 0.8; }
 @media (max-width: 560px) { .Q-video-add { flex-wrap: wrap; } .Q-video-add input { flex-basis: 100%; } }
+
+/* "Jan": the season of the recipe */
+.Q-season { margin: 10px 0 2px; }
+.Q-season-bar { display: inline-flex; align-items: center; gap: 12px; padding: 0; border: none; background: none; color: var(--muted); font: 600 12px var(--sans); cursor: pointer; }
+.Q-season-bar .lbl { letter-spacing: .04em; }
+.Q-season-bar .months { display: inline-flex; gap: 2px; }
+.Q-season-bar .months i { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 4px; font: 600 9.5px var(--mono); font-style: normal; color: var(--faint); background: var(--surface-2); }
+.Q-season-bar .months i.on { background: var(--accent); color: var(--accent-ink); }
+.Q-season-bar .months i.now { box-shadow: 0 0 0 1.5px var(--ink); }
+.Q-season-more { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; color: var(--ink); max-width: 560px; }
+.Q-season-more p { margin: 0 0 6px; }
+.Q-season-more ul { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 3px; }
+.Q-season-more li b { font-weight: 600; margin-right: 6px; }
+.Q-season-more small { color: var(--faint); }
+
+/* "Jan": ingredients beside the step that uses them */
+.Q-aligned { margin-top: 4px; }
+.Q-al-part { margin: 18px 0 2px; padding: 0 .25em; font: 700 .78em var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.Q-al-row { display: grid; grid-template-columns: minmax(150px, 34%) minmax(0, 1fr); gap: 4px 28px; padding: 12px .25em; border-top: 1px solid var(--rule); border-radius: 6px; transition: background .12s; }
+.Q-al-row.loose { border-top: none; }
+.Q-al-row.next { background: var(--accent-soft); }
+.Q-al-row.done .Q-al-step, .Q-al-row.done .Q-al-ings { opacity: .45; }
+.Q-al-ings { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; align-content: start; font-size: .92em; }
+.Q-al-ings li { display: grid; grid-template-columns: 4.8em minmax(0, 1fr); gap: 8px; align-items: baseline; cursor: default; }
+.Q-al-ings li[class=""], .Q-al-ings li:not(.made) { cursor: pointer; }
+.Q-al-ings li b { font: 600 .92em var(--mono); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.Q-al-ings li small { display: block; font-size: .78em; color: var(--faint); }
+.Q-al-ings li.made { color: var(--muted); }
+.Q-al-ings li.checked { color: var(--faint); text-decoration: line-through; }
+.Q-al-step { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; align-items: start; line-height: 1.6; padding-left: 1.9em; }
+.Q-al-step::before { content: attr(data-n); position: absolute; left: 0; top: .15em; width: 1.4em; text-align: right; font: 600 .8em var(--mono); color: var(--faint); }
+.Q-al-row.loose .Q-al-step { padding-left: 0; }
+.Q-al-row.loose .Q-al-step::before { content: none; }
+@media (max-width: 640px) {
+  .Q-al-row { grid-template-columns: 1fr; gap: 8px; }
+  .Q-al-ings { padding-left: 1.9em; }
+  .Q-al-row .Q-al-ings { order: 2; }
+}

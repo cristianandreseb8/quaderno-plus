@@ -210,3 +210,14 @@
 .Q-set-form { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .Q-set-form input { height: 34px; padding: 0 10px; border: 1px solid var(--rule-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 13.5px; min-width: 200px; }
 .Q-set-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Settings → Make Jan yours */
+.Q-jan { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); }
+.Q-jan-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.Q-jan-head b { font-size: 14px; }
+.Q-jan-colors { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 14px; margin-bottom: 14px; }
+.Q-jan-color { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
+.Q-jan-color input { width: 34px; height: 28px; padding: 0; border: 1px solid var(--rule-strong); border-radius: 7px; background: none; cursor: pointer; }
+.Q-jan-fonts { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.Q-jan-font { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.Q-jan-font .Q-select { min-width: 170px; font-size: 14px; }

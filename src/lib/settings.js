@@ -82,6 +82,7 @@ export const DEFAULTS = {
   exportNotes: false,
   proofread: true, // spelling underlines and the AI "Check spelling" button in the editor
   chefMode: 'pro', // 'pro' (steps overview, next step, step clock, voice commands…) or 'simple'
+  jan: {}, // "Jan" made yours: { colors: { bg, surface, ink, muted, line, accent, bar }, fonts: { heading, body, numbers }, aligned, season, peek, region }
   sidebar: true,
   sideWidth: null, // px, once the list has been resized by dragging its edge
   blocks: DEFAULT_BLOCKS,
@@ -108,9 +109,53 @@ export function saveSettings(s) {
   try { localStorage.setItem(KEY, JSON.stringify(s)) } catch (_) { /* storage unavailable */ }
 }
 
+// Fonts Jan can be set in (Google Fonts families).
+export const JAN_FONTS = [
+  ['Manrope', 'sans'], ['Inter', 'sans'], ['DM Sans', 'sans'], ['Work Sans', 'sans'], ['Karla', 'sans'], ['Nunito', 'sans'], ['Rubik', 'sans'],
+  ['Space Grotesk', 'sans'], ['Josefin Sans', 'sans'], ['Quicksand', 'sans'], ['IBM Plex Sans', 'sans'],
+  ['Lora', 'serif'], ['Fraunces', 'serif'], ['Playfair Display', 'serif'], ['Cormorant Garamond', 'serif'], ['EB Garamond', 'serif'],
+  ['Libre Baskerville', 'serif'], ['Source Serif 4', 'serif'], ['Newsreader', 'serif'],
+  ['IBM Plex Mono', 'mono'], ['JetBrains Mono', 'mono'], ['DM Mono', 'mono'], ['Space Mono', 'mono'],
+]
+// Background, text and accent lead; cards, soft text, lines and bars follow them unless chosen too.
+export const JAN_COLORS = [
+  ['bg', 'Background', '#F7F6F2'], ['ink', 'Text', '#262624'], ['accent', 'Accent (buttons, links)', '#4E6A5E'],
+  ['surface', 'Cards and fields', '#FCFBF8'], ['muted', 'Soft text', '#6E6B64'], ['line', 'Lines', '#E4E1DA'], ['bar', 'Timer bars', '#4E6A5E'],
+]
+export const JAN_DEFAULTS = { aligned: true, season: true, peek: true }
+export const janOption = (s, key) => (s?.jan?.[key] ?? JAN_DEFAULTS[key])
+const FALLBACK = { sans: 'ui-sans-serif, system-ui, sans-serif', serif: 'Georgia, serif', mono: 'ui-monospace, Menlo, monospace' }
+const fontStack = (name) => { const f = JAN_FONTS.find(([n]) => n === name); return f ? `"${f[0]}", ${FALLBACK[f[1]]}` : null }
+// Light text on a dark accent, dark text on a light one.
+function inkOn(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '')
+  if (!m) return null
+  const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? '#1A1A1A' : '#FFFFFF'
+}
+function applyJan(s) {
+  const root = document.documentElement
+  const vars = ['--jan-bg', '--jan-surface', '--jan-ink', '--jan-muted', '--jan-line', '--jan-accent', '--jan-bar', '--jan-heading-font', '--jan-body-font', '--jan-mono-font', '--accent-ink']
+  vars.forEach((v) => root.style.removeProperty(v))
+  if (s.theme !== 'jan') return
+  const c = s.jan?.colors || {}
+  Object.entries(c).forEach(([k, v]) => { if (v) root.style.setProperty(`--jan-${k}`, v) })
+  if (c.accent && inkOn(c.accent)) root.style.setProperty('--accent-ink', inkOn(c.accent))
+  const f = s.jan?.fonts || {}
+  const families = []
+  ;[['heading', '--jan-heading-font'], ['body', '--jan-body-font'], ['numbers', '--jan-mono-font']].forEach(([k, v]) => {
+    const stack = fontStack(f[k])
+    if (stack) { root.style.setProperty(v, stack); families.push(f[k]) }
+  })
+  if (families.length) {
+    loadThemeFonts({ id: `jan-${families.join('-').replace(/\s+/g, '')}`, fonts: [...new Set(families)].map((n) => `family=${n.replace(/ /g, '+')}:wght@400;500;600;700`).join('&') })
+  }
+}
+
 export function applySettings(s) {
   const root = document.documentElement
   root.dataset.theme = s.theme
+  applyJan(s)
   root.dataset.textsize = s.textSize
   const theme = THEMES.find((t) => t.id === s.theme) || THEMES[0]
   loadThemeFonts(theme)

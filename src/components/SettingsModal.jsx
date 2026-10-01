@@ -1,5 +1,5 @@
 import Modal from './ui/Modal.jsx'
-import { THEMES, TEXT_SIZES, loadThemeFonts, useSettings } from '../lib/settings.js'
+import { JAN_COLORS, JAN_DEFAULTS, JAN_FONTS, THEMES, TEXT_SIZES, janOption, loadThemeFonts, useSettings } from '../lib/settings.js'
 import { setVoiceCfg, speak, useTimers, voiceLang } from '../lib/timers.js'
 import { LANGS } from '../lib/constants.js'
 import { INSTALL_HELP, useInstall } from '../lib/install.js'
@@ -119,6 +119,7 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
             </div>
           </div>
         ))}
+        {settings.theme === 'jan' && <JanSettings />}
       </section>
 
       <section className="Q-set-sec">
@@ -279,5 +280,59 @@ function AccountSecurity({ email }) {
       {row('password', 'Password', 'Choose a new password for this account.')}
       {row('email', 'Email', `Now ${email}. The change is confirmed from a link sent to the new address.`)}
     </>
+  )
+}
+
+// "Jan" made yours: every colour, the fonts, and how its recipes are laid out.
+function JanSettings() {
+  const { settings, update } = useSettings()
+  const jan = settings.jan || {}
+  const set = (patch) => update({ jan: { ...jan, ...patch } })
+  const color = (k) => jan.colors?.[k] || JAN_COLORS.find(([x]) => x === k)[2]
+  const font = (k, d) => jan.fonts?.[k] || d
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch (_) { return '' } })()
+  const fontSelect = (k, label, d, kinds) => (
+    <label className="Q-jan-font">
+      <span>{label}</span>
+      <select className="Q-select" value={font(k, d)} onChange={(e) => set({ fonts: { ...(jan.fonts || {}), [k]: e.target.value } })} style={{ fontFamily: `"${font(k, d)}"` }}>
+        {JAN_FONTS.filter(([, kind]) => kinds.includes(kind)).map(([n]) => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </label>
+  )
+  const toggle = (key, label, help) => (
+    <label className="Q-set-row Q-set-check">
+      <div><div className="Q-set-label">{label}</div><div className="Q-set-help">{help}</div></div>
+      <input type="checkbox" className="Q-switch" checked={janOption(settings, key)} onChange={(e) => set({ [key]: e.target.checked })} />
+    </label>
+  )
+  return (
+    <div className="Q-jan">
+      <div className="Q-jan-head">
+        <b>Make Jan yours</b>
+        <button className="Q-link" onClick={() => update({ jan: {} })}>Back to Jan's defaults</button>
+      </div>
+      <div className="Q-jan-colors">
+        {JAN_COLORS.map(([k, label]) => (
+          <label key={k} className="Q-jan-color">
+            <input type="color" value={color(k)} onChange={(e) => set({ colors: { ...(jan.colors || {}), [k]: e.target.value } })} aria-label={label} />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+      <div className="Q-jan-fonts">
+        {fontSelect('heading', 'Titles', 'Manrope', ['sans', 'serif'])}
+        {fontSelect('body', 'Text', 'Manrope', ['sans', 'serif'])}
+        {fontSelect('numbers', 'Numbers', 'IBM Plex Mono', ['mono', 'sans'])}
+      </div>
+      {toggle('aligned', 'Ingredients beside their steps', 'Each step shows, next to it, the ingredients it uses and how much — the recipe reads as one table.')}
+      {toggle('season', 'Season of the recipe', 'A year strip under the title: the months its fresh ingredients are in season where you live.')}
+      {toggle('peek', 'Coming steps in chef mode', 'The next steps show faintly under the current one, to plan ahead.')}
+      {janOption(settings, 'season') && (
+        <div className="Q-set-row">
+          <div><div className="Q-set-label">Your region, for the seasons</div><div className="Q-set-help">Empty: guessed from this device ({tz || 'unknown'}).</div></div>
+          <input className="Q-inline-input" style={{ maxWidth: 220 }} value={jan.region || ''} placeholder={tz} onChange={(e) => set({ region: e.target.value })} />
+        </div>
+      )}
+    </div>
   )
 }

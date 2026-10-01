@@ -8,7 +8,9 @@ import { parseMediaLibrary } from '../lib/media.js'
 import { translateRecipe } from '../lib/ai.js'
 import { VISIBILITY } from '../lib/sharing.js'
 import { LANGS } from '../lib/constants.js'
-import { THEMES, normalizeBlocks, useSettings } from '../lib/settings.js'
+import { THEMES, janOption, normalizeBlocks, useSettings } from '../lib/settings.js'
+import { computeStepUses } from '../lib/stepIngredients.js'
+import Season from './Season.jsx'
 import Menu, { MenuItem, MenuSep, MenuToggle } from './ui/Menu.jsx'
 import { toast } from './ui/Toaster.jsx'
 import Blocks from './ui/Blocks.jsx'
@@ -490,6 +492,7 @@ export default function RecipeView({
   // Templates with step bars ("Jan"): no clocks in the text — a grey bar under the step fills while
   // its timer runs (tap it to start the written time, or for the step's timer options).
   const stepBars = THEMES.find((t) => t.id === settings.theme)?.stepBars
+  const jan = settings.theme === 'jan'
   // w: { wkey, typical } — the step's stopwatch (when it is being timed) and its usual time.
   const timedText = (text, { label, name, durs, tkey }, sheet, w = null) => {
     const extra = w && (
@@ -547,7 +550,63 @@ export default function RecipeView({
     // The release after a hold is not a tap: it must not tick the step.
     onClickCapture: (e) => { if (press.current?.fired) { e.stopPropagation(); e.preventDefault(); press.current = null } },
   })
-  const blocks = [
+  // "Jan": the recipe as one table — every step with the ingredients it uses beside it, in the
+  // amount it needs (the same reading of the method as chef mode: lib/stepIngredients.js).
+  const aligned = jan && janOption(settings, 'aligned') && flat.length > 0
+  const alignedUses = useMemo(
+    () => (aligned ? computeStepUses({ steps: chefSteps, sources: chefSources, recipeId: recipe.id, plans: cookPlans.plans }) : []),
+    [aligned, chefSteps, chefSources, cookPlans.plans],
+  )
+  const alignedContent = aligned && (() => {
+    const used = new Set(alignedUses.flat().filter((u) => typeof u.raw === 'number').map((u) => u.raw))
+    const loose = sections.flatMap((sec) => sec.items.map((line, ii) => ({ line, raw: sec.rawIndices[ii] }))).filter((x) => !used.has(x.raw))
+    let label = null
+    const ing = (u, k) => (
+      <li key={k} className={`${u.made ? 'made' : ''}${typeof u.raw === 'number' && checked.has(u.raw) ? ' checked' : ''}`} onClick={typeof u.raw === 'number' ? () => handleIngToggle(u.raw) : undefined}>
+        <b>{u.qty || ''}</b><span>{u.made ? '↳ ' : ''}{u.d.name}{u.note && <small>{u.note}</small>}</span>
+      </li>
+    )
+    return (
+      <div className="Q-aligned">
+        {loose.length > 0 && (
+          <div className="Q-al-row loose">
+            <ul className="Q-al-ings">{loose.map((x) => { const d = splitIngLine(x.line); return ing({ raw: x.raw, qty: d.qty, d }, x.raw) })}</ul>
+            <div className="Q-al-step"><span className="Q-dim">Not named in a step — have them ready.</span></div>
+          </div>
+        )}
+        {chefSteps.map((cs, k) => {
+          const s = flat[k]
+          const where = [cs.srcTitle, cs.part].filter(Boolean).join(' · ')
+          const head = where && where !== label ? <div className="Q-al-part" key={`h${k}`}>{where}</div> : null
+          label = where || label
+          const own = typeof cs.i === 'number'
+          const done = cook && doneSteps.has(cs.i)
+          const idx = String(cs.i).split(':').pop()
+          return [head, (
+            <div
+              key={cs.i} className={`Q-al-row${done ? ' done' : ''}${cook && cs.i === nextStep ? ' next' : ''}`}
+              onClick={cook ? () => cook.onToggleStep(cs.i) : undefined}
+              {...(own ? holdToOpen(cs.i) : holdToOpen(null, cs))}
+            >
+              <ul className="Q-al-ings">{(alignedUses[k] || []).map(ing)}</ul>
+              <div className="Q-al-step" data-n={k + 1}>
+                {own ? stepBody(stepList[cs.i], cs.i) : timedText(cs.text, cs.info, { ext: cs }, { wkey: `w:${s.src.id}:${idx}`, typical: typicalMs(stepStats, s.src.id, idx, cs.text) })}
+              </div>
+            </div>
+          )]
+        })}
+        {totalGrams > 0 && <div className="Q-grand-total"><span>Total</span>{totalGrams.toFixed(0)} g</div>}
+      </div>
+    )
+  })()
+  const blocks = aligned ? [
+    {
+      id: 'method', title: 'Recipe', content: alignedContent,
+      summary: cook ? `${doneCount} of ${realSteps.length}` : `${realSteps.length} steps${totalGrams > 0 ? ` · ${totalGrams.toFixed(0)} g` : ''}`,
+      actions: cook && doneCount > 0 && <button className="Q-link" onClick={() => cook.onClear('steps')}>Clear {doneCount} done</button>,
+    },
+  ] : []
+  const usualBlocks = [
     {
       id: 'ingredients', title: cook ? 'Mise en place' : 'Ingredients', content: ingredientsContent,
       summary: cook ? `${checked.size} of ${ingCount} ready` : totalGrams > 0 ? `${totalGrams.toFixed(0)} g` : '',
@@ -591,6 +650,9 @@ export default function RecipeView({
       content: <div className="Q-src-photos">{recipe.source_photos.map((src, i) => <img key={i} src={src} onClick={() => setLightboxSrc(src)} alt="" />)}</div>,
     },
   ].filter(Boolean)
+  // In the aligned layout the recipe table takes the place of the ingredients and method blocks.
+  if (aligned) blocks.push(...usualBlocks.filter((b) => b.id !== 'ingredients' && b.id !== 'method'))
+  else blocks.push(...usualBlocks)
 
   const recipeContent = (
     <div>
@@ -633,6 +695,7 @@ export default function RecipeView({
             )}
           </div>
           {origin && <div className="Q-origin">{origin.charAt(0).toUpperCase() + origin.slice(1)}</div>}
+          {jan && janOption(settings, 'season') && <Season recipe={recipe} regionSetting={settings.jan?.region} enabled={!guest} />}
         </div>
         {recipe.thumbnail && <img src={recipe.thumbnail} className="Q-recipe-thumb" onClick={() => setLightboxSrc(recipe.thumbnail)} alt={recipe.title} />}
       </div>
@@ -793,6 +856,7 @@ export default function RecipeView({
           steps={chefSteps} cook={cook} doneSteps={doneSteps} onClose={() => setChef(false)}
           plans={cookPlans.plans} planPending={cookPlans.pending}
           pro={settings.chefMode !== 'simple'} stats={stepStats} factor={appliedScale?.factor || 1} learn={!guest}
+          peek={jan && janOption(settings, 'peek')}
           onTimerOptions={(st) => setStepSheet(typeof st.i === 'number' ? { i: st.i } : { ext: st })}
         />
       )}
