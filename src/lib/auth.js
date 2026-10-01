@@ -37,9 +37,40 @@ export function useAuth() {
 
 const redirect = () => window.location.origin + '/'
 
+// Supabase's messages, in the words of the sign-in screen. `code` lets the screen offer the next
+// step (resend the confirmation, reset the password).
+function friendly(error) {
+  const m = String(error?.message || '')
+  const e = new Error(m)
+  if (/invalid login credentials/i.test(m)) e.message = 'Wrong email or password.'
+  else if (/email not confirmed/i.test(m)) { e.message = 'This email is not confirmed yet. Open the link in the email we sent — or send it again.'; e.code = 'unconfirmed' }
+  else if (/already registered|already been registered|user already exists/i.test(m)) { e.message = 'There is already an account with this email. Sign in, or reset the password.'; e.code = 'exists' }
+  else if (/rate limit|too many|security purposes/i.test(m)) e.message = 'Too many attempts or emails just now. Wait a minute and try again.'
+  else if (/not authorized/i.test(m)) e.message = 'Emails cannot be sent to this address yet. Ask the app owner to set up the mail service.'
+  else if (/password should be|weak password/i.test(m)) e.message = 'Choose a stronger password: at least 8 characters, ideally with numbers or symbols.'
+  else if (/signups? not allowed|signup is disabled/i.test(m)) e.message = 'New accounts are not open right now.'
+  return e
+}
+
 export async function signIn(email, password) {
   const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
-  if (error) throw new Error(error.message === 'Invalid login credentials' ? 'Wrong email or password.' : error.message)
+  if (error) throw friendly(error)
+}
+
+// A one-time sign-in link by email, for an account that already exists.
+export async function sendSignInLink(email) {
+  const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false, emailRedirectTo: redirect() } })
+  if (error) throw friendly(/signups? not allowed|not found/i.test(error.message) ? { message: 'There is no account with this email.' } : error)
+}
+
+export async function resendConfirmation(email) {
+  const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim(), options: { emailRedirectTo: redirect() } })
+  if (error) throw friendly(error)
+}
+
+export async function changeEmail(email) {
+  const { error } = await supabase.auth.updateUser({ email: email.trim() }, { emailRedirectTo: redirect() })
+  if (error) throw friendly(error)
 }
 
 // Returns true when the account is ready to use, false when Supabase still wants the email
@@ -48,7 +79,11 @@ export async function signUp(name, email, password) {
   const { data, error } = await supabase.auth.signUp({
     email: email.trim(), password, options: { data: { name: name.trim() }, emailRedirectTo: redirect() },
   })
-  if (error) throw new Error(error.message)
+  if (error) throw friendly(error)
+  // An email that already has an account comes back without identities (no error, by design).
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    throw friendly({ message: 'User already registered' })
+  }
   return !!data.session
 }
 
@@ -60,12 +95,12 @@ export async function signOut() {
 
 export async function sendPasswordReset(email) {
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: redirect() })
-  if (error) throw new Error(error.message)
+  if (error) throw friendly(error)
 }
 
 export async function setNewPassword(password) {
   const { error } = await supabase.auth.updateUser({ password })
-  if (error) throw new Error(error.message)
+  if (error) throw friendly(error)
 }
 
 export async function saveDisplayName(uid, name) {

@@ -3,7 +3,7 @@ import { THEMES, TEXT_SIZES, loadThemeFonts, useSettings } from '../lib/settings
 import { setVoiceCfg, speak, useTimers, voiceLang } from '../lib/timers.js'
 import { LANGS } from '../lib/constants.js'
 import { INSTALL_HELP, useInstall } from '../lib/install.js'
-import { saveDisplayName, signOut } from '../lib/auth.js'
+import { changeEmail, saveDisplayName, setNewPassword, signOut } from '../lib/auth.js'
 import { toast } from './ui/Toaster.jsx'
 import { useEffect, useState } from 'react'
 
@@ -100,6 +100,7 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
             </div>
             <button className="btn ghost sm" onClick={copyInvite}>Copy link</button>
           </div>
+          <AccountSecurity email={user.email} />
           <div className="Q-set-row">
             <div><div className="Q-set-label">Sign out</div><div className="Q-set-help">Your recipes stay safe in your account.</div></div>
             <button className="btn ghost sm" onClick={() => { onClose(); signOut() }}>Sign out</button>
@@ -210,5 +211,55 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
 
       <div className="Q-set-foot">Quaderno+ · {recipeCount} recipe{recipeCount === 1 ? '' : 's'}</div>
     </Modal>
+  )
+}
+
+// Password and email of the signed-in account.
+function AccountSecurity({ email }) {
+  const [open, setOpen] = useState(null) // 'password' | 'email'
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const close = () => { setOpen(null); setValue('') }
+  async function save(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      if (open === 'password') {
+        if (value.length < 8) throw new Error('Use at least 8 characters.')
+        await setNewPassword(value)
+        toast.success('Password changed')
+      } else {
+        await changeEmail(value)
+        toast.success('Check both inboxes: confirm the change from the link we sent', { duration: 9000 })
+      }
+      close()
+    } catch (ex) {
+      toast.error(ex.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const row = (kind, label, help) => (
+    <div className="Q-set-row">
+      <div><div className="Q-set-label">{label}</div><div className="Q-set-help">{help}</div></div>
+      {open === kind ? (
+        <form className="Q-set-form" onSubmit={save}>
+          <input
+            type={kind === 'password' ? 'password' : 'email'} autoFocus required value={value} onChange={(e) => setValue(e.target.value)}
+            autoComplete={kind === 'password' ? 'new-password' : 'email'} placeholder={kind === 'password' ? 'New password (8+ characters)' : 'New email'}
+          />
+          <button className="btn primary sm" disabled={busy}>Save</button>
+          <button type="button" className="btn ghost sm" onClick={close}>Cancel</button>
+        </form>
+      ) : (
+        <button className="btn ghost sm" onClick={() => { setOpen(kind); setValue('') }}>Change</button>
+      )}
+    </div>
+  )
+  return (
+    <>
+      {row('password', 'Password', 'Choose a new password for this account.')}
+      {row('email', 'Email', `Now ${email}. The change is confirmed from a link sent to the new address.`)}
+    </>
   )
 }
