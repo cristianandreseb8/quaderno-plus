@@ -146,6 +146,24 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
         </div>
       </section>
 
+      <section className="Q-set-sec">
+        <h3>Chef mode</h3>
+        <div className="Q-set-row">
+          <div>
+            <div className="Q-set-label">{settings.chefMode === 'simple' ? 'Simple' : 'Pro'}</div>
+            <div className="Q-set-help">
+              {settings.chefMode === 'simple'
+                ? 'Just the step, its ingredients and its timers — nothing else on screen.'
+                : 'Adds every step at a glance, the next step, a clock for each step against your usual time, long waits coming up, the key numbers highlighted, and hands-free voice commands (“next”, “back”, “repeat”, “timer”, “stop”).'}
+            </div>
+          </div>
+          <div className="Q-seg">
+            <button type="button" className={settings.chefMode === 'simple' ? 'on' : ''} onClick={() => update({ chefMode: 'simple' })}>Simple</button>
+            <button type="button" className={settings.chefMode !== 'simple' ? 'on' : ''} onClick={() => update({ chefMode: 'pro' })}>Pro</button>
+          </div>
+        </div>
+      </section>
+
       <VoiceSettings />
 
       <section className="Q-set-sec">

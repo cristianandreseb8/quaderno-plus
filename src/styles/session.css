@@ -57,3 +57,56 @@
 .Q-pick-txt { min-width: 0; }
 .Q-pick-txt b { display: block; font-weight: 600; font-size: 14px; }
 .Q-pick-txt span { font-size: 12px; color: var(--muted); }
+
+/* Plan: the session clock, what to start when, and a timeline of every recipe. */
+.Q-plan-clock { display: flex; align-items: center; gap: 10px; margin: 6px 0 18px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); }
+.Q-plan-clock b { font: 600 22px var(--mono); font-variant-numeric: tabular-nums; }
+.Q-plan-clock > span { color: var(--muted); font-size: 13px; }
+.Q-plan-clock .sp { flex: 1; }
+.Q-plan-clock .btn { display: inline-flex; align-items: center; gap: 5px; }
+.Q-plan-tips { list-style: none; margin: 0 0 20px; padding: 0; display: grid; gap: 6px; }
+.Q-plan-tips li { display: flex; gap: 12px; padding: 9px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--ink); font-size: 13.5px; line-height: 1.45; }
+.Q-plan-tips li span { flex-shrink: 0; min-width: 4.5em; font: 600 12px var(--mono); color: var(--accent); padding-top: 1px; }
+.Q-plan-gantt { position: relative; margin-bottom: 22px; padding-top: 22px; }
+.Q-plan-axis { position: absolute; top: 0; left: 132px; right: 0; height: 18px; }
+.Q-plan-axis span { position: absolute; transform: translateX(-50%); font: 500 10.5px var(--mono); color: var(--faint); }
+.Q-plan-row { display: flex; align-items: center; gap: 12px; height: 30px; }
+.Q-plan-name { flex: 0 0 120px; font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-plan-lane { position: relative; flex: 1; height: 16px; border-radius: 4px; background: var(--surface-2); }
+.Q-plan-step { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: repeating-linear-gradient(135deg, var(--accent-soft) 0 4px, transparent 4px 8px); box-shadow: inset 0 0 0 1px var(--accent-soft); overflow: hidden; }
+.Q-plan-step i.work, .Q-plan-legend i.work { display: block; height: 100%; background: var(--accent); }
+.Q-plan-legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 0 132px; font-size: 11.5px; color: var(--muted); }
+.Q-plan-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.Q-plan-legend i { display: inline-block; width: 18px; height: 8px; border-radius: 2px; }
+.Q-plan-legend i.wait { background: repeating-linear-gradient(135deg, var(--accent-soft) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 1px var(--accent-soft); }
+.Q-plan-list { list-style: none; margin: 0; padding: 0; }
+.Q-plan-list li { display: flex; gap: 12px; align-items: baseline; padding: 8px 2px; border-bottom: 1px solid var(--rule); font-size: 13.5px; line-height: 1.45; }
+.Q-plan-list .at { flex: 0 0 4.5em; font: 600 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.Q-plan-list .what { flex: 1; min-width: 0; }
+.Q-plan-list .dur { flex-shrink: 0; font: 500 12px var(--mono); color: var(--faint); }
+@media (max-width: 640px) {
+  .Q-plan-axis, .Q-plan-legend { left: 0; margin-left: 0; }
+  .Q-plan-row { flex-direction: column; align-items: stretch; height: auto; gap: 4px; margin-bottom: 8px; }
+  .Q-plan-name { flex: none; }
+}
+
+/* Time report */
+.Q-report-empty { color: var(--muted); line-height: 1.55; }
+.Q-report-sec { margin-bottom: 22px; }
+.Q-report-sec h3 { margin: 0 0 8px; font: 700 11.5px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.Q-report-list, .Q-report-recipes { list-style: none; margin: 0; padding: 0; }
+.Q-report-list li { display: flex; gap: 12px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: 13.5px; }
+.Q-report-list .when { flex: 0 0 7.5em; color: var(--muted); font-size: 12.5px; }
+.Q-report-list .what, .Q-report-recipes .what { flex: 1; min-width: 0; }
+.Q-report-list b, .Q-report-recipes b { font: 600 13px var(--mono); }
+.Q-report-recipes li { border-bottom: 1px solid var(--rule); }
+.Q-report-recipes button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 0; border: none; background: none; color: var(--ink); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.Q-report-recipes .n { color: var(--faint); font-size: 12px; }
+.Q-report-recipes li.open svg { transform: rotate(180deg); }
+.Q-report-steps { width: 100%; margin: 0 0 12px; border-collapse: collapse; font-size: 12.5px; }
+.Q-report-steps th { text-align: left; font-weight: 600; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--rule); }
+.Q-report-steps td { padding: 6px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.Q-report-steps td:not(:first-child), .Q-report-steps th:not(:first-child) { white-space: nowrap; text-align: right; font-family: var(--mono); }
+.Q-report-steps small { color: var(--faint); }
+.Q-plan-listhead { display: flex; justify-content: space-between; padding: 0 2px 4px; font: 600 10.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--rule); }
+.Q-plan-list .dur em { font-style: normal; color: var(--accent); }

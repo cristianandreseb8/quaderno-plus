@@ -15,7 +15,8 @@ import Blocks from './ui/Blocks.jsx'
 import VideoBlock from './VideoBlock.jsx'
 import NotesPanel from './NotesPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
-import { StepBar, TimerChip, TimerMenu, TimerPresets } from './Timers.jsx'
+import { StepBar, TimerChip, TimerMenu, TimerPresets, WatchChip } from './Timers.jsx'
+import { fmtSpan, fmtWatch, startWatch, stopWatch, typicalMs, useStepStats, watchElapsed, watchFor } from '../lib/timing.js'
 import { findDurations } from '../lib/durations.js'
 import { componentsOf, flattenSteps, linkFactor, resolveLink } from '../lib/links.js'
 import { useCookPlans } from '../lib/cookPlan.js'
@@ -464,6 +465,8 @@ export default function RecipeView({
               label = where || label
               // Timers as on this recipe's own steps (chefSteps holds their names and keys).
               const cs = chefSteps.find((x) => x.i === s.key)
+              const idx = String(s.key).split(':').pop()
+              const sw = { wkey: `w:${s.src.id}:${idx}`, typical: typicalMs(stepStats, s.src.id, idx, s.text) }
               return [...head, (
                 <li
                   key={s.key} data-n={s.n}
@@ -471,7 +474,7 @@ export default function RecipeView({
                   onClick={cook ? () => cook.onToggleStep(s.key) : undefined}
                   {...(cs ? holdToOpen(null, cs) : {})}
                 >
-                  {cs ? timedText(s.text, cs.info, { ext: cs }) : <span className="Q-step-text">{s.text}</span>}
+                  {cs ? timedText(s.text, cs.info, { ext: cs }, sw) : <span className="Q-step-text">{s.text}</span>}
                 </li>
               )]
             })}
@@ -487,24 +490,43 @@ export default function RecipeView({
   // Templates with step bars ("Jan"): no clocks in the text — a grey bar under the step fills while
   // its timer runs (tap it to start the written time, or for the step's timer options).
   const stepBars = THEMES.find((t) => t.id === settings.theme)?.stepBars
-  const timedText = (text, { label, name, durs, tkey }, sheet) => {
+  // w: { wkey, typical } — the step's stopwatch (when it is being timed) and its usual time.
+  const timedText = (text, { label, name, durs, tkey }, sheet, w = null) => {
+    const extra = w && (
+      <>
+        {w.typical != null && <span className="Q-step-usual" title="Your usual time for this step">~{fmtSpan(w.typical)}</span>}
+        <WatchChip wkey={w.wkey} />
+      </>
+    )
     if (stepBars) {
       return (
         <>
-          <span className="Q-step-text">{text}</span>
+          <span className="Q-step-text">{text}{extra}</span>
           <StepBar tkey={tkey} durs={durs} label={label} name={name} onSheet={() => setStepSheet(sheet)} {...timerBase} />
         </>
       )
     }
-    if (durs.length) return <span className="Q-step-text">{text}{durs.map((d) => <TimerChip key={d.ms} tkey={`${tkey}:${d.ms}`} label={label} name={name} ms={d.ms} text={d.label} {...timerBase} />)}</span>
+    if (durs.length) return <span className="Q-step-text">{text}{durs.map((d) => <TimerChip key={d.ms} tkey={`${tkey}:${d.ms}`} label={label} name={name} ms={d.ms} text={d.label} {...timerBase} />)}{extra}</span>
     return (
       <>
-        <span className="Q-step-text">{text}</span>
+        <span className="Q-step-text">{text}{extra}</span>
         <TimerMenu className="side" tkey={tkey} label={label} name={name} onSheet={touch ? () => setStepSheet(sheet) : null} {...timerBase} />
       </>
     )
   }
-  const stepBody = (st, i) => timedText(st.text, stepInfo(st, i), { i })
+  // How long each step usually takes you (lib/timing.js), and timing a step by hand.
+  const stepStats = useStepStats([recipe.id, ...comps.map((c) => c.sub.id)], !guest)
+  const watchInfo = (recipeId, key, text) => ({
+    key: `w:${recipeId}:${key}`, recipeId, stepKey: String(key), stepText: text, sessionId: cook?.sessionId || null, factor: appliedScale?.factor || 1,
+  })
+  const ownWatch = (i) => ({ wkey: `w:${recipe.id}:${i}`, typical: typicalMs(stepStats, recipe.id, String(i), String((recipe.steps || [])[i] ?? '')) })
+  const stepBody = (st, i) => timedText(st.text, stepInfo(st, i), { i }, ownWatch(i))
+  const timingAction = (info) => {
+    const w = watchFor(info.key)
+    return w
+      ? { label: `Stop timing (${fmtWatch(watchElapsed(w))})`, onClick: () => { const ms = stopWatch(info.key); toast(`Timed: ${fmtSpan(ms)}`) } }
+      : { label: 'Time this step', onClick: () => startWatch(info) }
+  }
   // Hold a step (or part) down on a phone — or right-click it — for its options, a timer first.
   // A step of a linked recipe passes itself as `ext` (see chefSteps).
   const holdToOpen = (i, ext = null) => ({
@@ -770,6 +792,7 @@ export default function RecipeView({
           title={viewR.title || 'Recipe'} lang={timerLang} timerBase={timerBase} sections={sections} sources={chefSources}
           steps={chefSteps} cook={cook} doneSteps={doneSteps} onClose={() => setChef(false)}
           plans={cookPlans.plans} planPending={cookPlans.pending}
+          pro={settings.chefMode !== 'simple'} stats={stepStats} factor={appliedScale?.factor || 1} learn={!guest}
           onTimerOptions={(st) => setStepSheet(typeof st.i === 'number' ? { i: st.i } : { ext: st })}
         />
       )}
@@ -777,6 +800,7 @@ export default function RecipeView({
         const st = stepSheet.ext
         const actions = []
         if (cook) actions.push({ label: doneSteps.has(st.i) ? 'Mark as not done' : 'Mark as done', onClick: () => cook.onToggleStep(st.i) })
+        if (!guest) actions.push(timingAction(watchInfo(st.src, String(st.i).split(':').pop(), st.text)))
         actions.push({ label: 'Copy the text', onClick: () => { navigator.clipboard?.writeText(st.text).then(() => toast('Copied'), () => {}) } })
         return (
           <StepSheet
@@ -792,6 +816,7 @@ export default function RecipeView({
         const info = stepInfo(st, stepSheet.i)
         const actions = []
         if (cook && !st.header) actions.push({ label: doneSteps.has(stepSheet.i) ? 'Mark as not done' : 'Mark as done', onClick: () => cook.onToggleStep(stepSheet.i) })
+        if (!guest && !st.header) actions.push(timingAction(watchInfo(recipe.id, stepSheet.i, String((recipe.steps || [])[stepSheet.i] ?? st.text))))
         actions.push({ label: 'Copy the text', onClick: () => { navigator.clipboard?.writeText(st.text).then(() => toast('Copied'), () => {}) } })
         // Edit the step as written (not as scaled or translated on screen).
         const raw = String((recipe.steps || [])[stepSheet.i] ?? '')

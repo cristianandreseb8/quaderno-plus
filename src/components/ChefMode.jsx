@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, ListChecks, Pause, Play, Timer as TimerIcon, Volume2, VolumeX, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ListChecks, ListOrdered, Mic, MicOff, Pause, Play, Timer as TimerIcon, Volume2, VolumeX, X } from 'lucide-react'
 import {
   addTime, fmtClock, pauseTimer, remaining, resumeTimer, speak, startTimer, stopRinging, stopSpeaking, useTimers, voiceLang,
 } from '../lib/timers.js'
 import { cleanName, ingredientKey, mentionedIngredients } from '../lib/timerNames.js'
 import { fmtQty, lineGrams, parseIng, splitIngLine, stripRef } from '../lib/recipeCalc.js'
 import { fracLabel, portionIn, shares } from '../lib/portions.js'
+import { recordStepTime, typicalMs } from '../lib/timing.js'
+import { NextUp, StepClock, StepsRail, highlight, useVoiceCommands, voiceCommandsSupported } from './ChefPro.jsx'
+import { toast } from './ui/Toaster.jsx'
 import { hasFlourWord } from '../lib/constants.js'
 
 // Words the guide says, in the recipe's language (the step text is read in it too).
@@ -87,7 +90,12 @@ function planAmount(l, it) {
 // id) and `srcTitle`; `sources` holds each recipe's ingredient parts: { [id]: { sections } }.
 // `plans` holds the AI's reading of each recipe's method (lib/cookPlan.js) by recipe id; a recipe
 // without one yet is read from the words of its steps.
-export default function ChefMode({ title, steps, sections, sources: sourcesProp, plans = {}, planPending = false, lang, timerBase, cook, doneSteps, onTimerOptions, onClose }) {
+// `pro` adds the extras of ChefPro.jsx; `stats` are the learned step times (lib/timing.js) — each
+// step's time in chef mode is recorded when it is done (Next), to learn from.
+export default function ChefMode({
+  title, steps, sections, sources: sourcesProp, plans = {}, planPending = false, lang, timerBase, cook, doneSteps, onTimerOptions, onClose,
+  pro = false, stats = null, factor = 1, learn = true,
+}) {
   // Back where the recipe was left; otherwise the first step (in a session, the first not done).
   const [start] = useState(() => {
     const saved = savedStep(timerBase.recipeId, steps)
@@ -268,6 +276,13 @@ export default function ChefMode({ title, steps, sections, sources: sourcesProp,
     }
   }, [ringingKeys])
   useEffect(() => { setNudge(false) }, [pos])
+  // When each step was reached, to time it; and when chef mode opened.
+  const arrived = useRef({ pos, at: Date.now() })
+  const opened = useRef(Date.now())
+  useEffect(() => { arrived.current = { pos, at: Date.now() } }, [pos])
+  const typicalOf = (s) => (stats ? typicalMs(stats, srcId(s), String(stepIndex(s)), s.text) : null)
+  const [rail, setRail] = useState(false)
+  const [listen, setListen] = useState(false)
   // Remember the step; a finished recipe starts from the top next time.
   useEffect(() => {
     saveStep(recipeId, pos >= steps.length ? null : steps[pos])
@@ -276,6 +291,9 @@ export default function ChefMode({ title, steps, sections, sources: sourcesProp,
 
   function next() {
     if (finished) { onClose(); return }
+    if (learn && arrived.current.pos === pos) {
+      recordStepTime({ recipeId: srcId(step), stepKey: stepIndex(step), stepText: step.text, sessionId: cook?.sessionId || null, factor, source: 'chef', startedAt: arrived.current.at, endedAt: Date.now() })
+    }
     if (cook && !doneSteps.has(step.i)) cook.onToggleStep(step.i)
     timers.filter((t) => t.ringing && ofStep(t.key, step.info.tkey)).forEach((t) => stopRinging(t.id))
     setPos((p) => Math.min(p + 1, steps.length))
@@ -288,9 +306,24 @@ export default function ChefMode({ title, steps, sections, sources: sourcesProp,
       if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next() }
       if (e.key === 'ArrowLeft') { e.preventDefault(); back() }
       if (e.key === 'Escape') onClose()
+      if (pro && (e.key === 'r' || e.key === 'R')) sayStep(pos, true)
+      if (pro && (e.key === 's' || e.key === 'S')) setRail((v) => !v)
+      if (pro && (e.key === 't' || e.key === 'T')) startStepTimer()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
+  })
+
+  // The step's written time, started from a key or a voice command.
+  function startStepTimer() {
+    const d = step?.info.durs?.[0]
+    if (!d) { onTimerOptions(step); return }
+    startTimer({ key: `${step.info.tkey}:${d.ms}`, label: step.info.label, name: step.info.name, duration: d.ms, ...timerBase })
+  }
+  const voice = useVoiceCommands(pro && listen, lang, {
+    next, back, repeat: () => sayStep(pos, true), timer: startStepTimer,
+    stop: () => { stopSpeaking(); timers.filter((t) => t.ringing).forEach((t) => stopRinging(t.id)) },
+    denied: () => { setListen(false); toast.error('The microphone is not allowed for this site.') },
   })
 
   // Swipe left for the next step, right for the previous one.
@@ -361,6 +394,18 @@ export default function ChefMode({ title, steps, sections, sources: sourcesProp,
           <b>{title}</b>
           <span>{finished ? 'All steps done' : `Step ${pos + 1} of ${steps.length}`}</span>
         </div>
+        {pro && (
+          <button className={`Q-icon-btn${rail ? ' on' : ''}`} onClick={() => setRail((v) => !v)} title="All the steps (S)" aria-label="All the steps" aria-pressed={rail}><ListOrdered size={19} /></button>
+        )}
+        {pro && voiceCommandsSupported() && (
+          <button
+            className={`Q-icon-btn${listen ? ' on' : ''}${voice.heard ? ' heard' : ''}`} onClick={() => setListen((v) => !v)}
+            title={listen ? 'Listening: say “next”, “back”, “repeat”, “timer” or “stop”' : 'Hands-free: control it with your voice'} aria-pressed={listen}
+            aria-label={listen ? 'Stop listening' : 'Control with your voice'}
+          >
+            {listen ? <Mic size={19} /> : <MicOff size={19} />}
+          </button>
+        )}
         <button className={`Q-icon-btn${voiceOn ? ' on' : ''}`} onClick={toggleVoice} title={voiceOn ? 'Voice on: steps are read aloud' : 'Voice off'} aria-label={voiceOn ? 'Turn the voice off' : 'Read the steps aloud'}>
           {voiceOn ? <Volume2 size={19} /> : <VolumeX size={19} />}
         </button>
@@ -390,7 +435,10 @@ export default function ChefMode({ title, steps, sections, sources: sourcesProp,
         </div>
       )}
 
-      <div className={`Q-chef-body${showIngs ? ' with-ings' : ''}`}>
+      <div className={`Q-chef-body${showIngs ? ' with-ings' : ''}${pro && rail ? ' with-rail' : ''}`}>
+        {pro && rail && (
+          <StepsRail steps={steps} pos={pos} done={cook ? doneSteps : new Set()} typicalOf={typicalOf} onClose={() => setRail(false)} onJump={(k) => { setPos(k); if (!wide()) setRail(false) }} />
+        )}
         <div className="Q-chef-main">
         {finished ? (
           <div className="Q-chef-step done">
@@ -399,7 +447,8 @@ export default function ChefMode({ title, steps, sections, sources: sourcesProp,
         ) : (
           <div className="Q-chef-step">
             {(step.srcTitle || step.part) && <div className="Q-chef-part">{step.srcTitle && <span className="Q-chef-src">{step.srcTitle}</span>}{step.srcTitle && step.part ? ' · ' : ''}{step.part}</div>}
-            <button type="button" className="Q-chef-text" onClick={() => { if (!swiped.current) sayStep(pos, true) }} title="Read it aloud">{step.text}</button>
+            <button type="button" className="Q-chef-text" onClick={() => { if (!swiped.current) sayStep(pos, true) }} title="Read it aloud">{pro ? highlight(step.text) : step.text}</button>
+            {pro && <StepClock since={arrived.current.pos === pos ? arrived.current.at : Date.now()} typical={typicalOf(step)} total={opened.current} />}
             {[['fresh', uses.filter((u) => !u.made)], ['made', uses.filter((u) => u.made)]].map(([kind, list]) => list.length > 0 && (
               <ul key={kind} className={`Q-chef-uses ${kind}`} aria-label={kind === 'made' ? 'Made in earlier steps' : 'Ingredients for this step'}>
                 {kind === 'made' && <li className="Q-chef-uses-label" aria-hidden="true">Made earlier</li>}
@@ -465,6 +514,7 @@ export default function ChefMode({ title, steps, sections, sources: sourcesProp,
         )}
       </div>
 
+      {pro && !finished && <NextUp steps={steps} pos={pos} typicalOf={typicalOf} />}
       <div className="Q-chef-nav">
         <button className="back" onClick={back} disabled={pos === 0}><ChevronLeft size={22} /> Back</button>
         <button className={`next${nudge ? ' nudge' : ''}`} onClick={next}>

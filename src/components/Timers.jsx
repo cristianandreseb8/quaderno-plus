@@ -6,6 +6,9 @@ import {
   sayName, setBig, setDockOpen, setVoiceCfg, setVoiceOn, startTimer, stopRinging, testVoice, useTimers, voiceLang, voicesFor,
 } from '../lib/timers.js'
 import { fmtDuration, parseDurationInput } from '../lib/durations.js'
+import { fmtSpan, fmtWatch, stopWatch, useWatches, watchElapsed, watchFor } from '../lib/timing.js'
+import { Timer } from 'lucide-react'
+import { toast } from './ui/Toaster.jsx'
 
 export const presetLabel = (min) => (min < 60 ? `${min} min` : `${+(min / 60).toFixed(1)} h`)
 
@@ -267,6 +270,22 @@ export function StepBar({ tkey, durs = [], label, name, lang, recipeId, recipeTi
     <button type="button" className={`Q-stepbar${t ? ` ${t.state}` : ''}${t?.ringing ? ' ringing' : ''}`} onClick={tap} title={title} aria-label={`${title}${name ? ` — ${name}` : ''}`}>
       <span className="track"><i style={{ width: `${pct}%` }} /></span>
       {text && <span className="t">{text}</span>}
+    </button>
+  )
+}
+
+// ── A step being timed by hand (lib/timing.js): its stopwatch, tap to stop and keep the time ──
+export function WatchChip({ wkey }) {
+  const { now } = useWatches()
+  const w = watchFor(wkey)
+  if (!w) return null
+  return (
+    <button
+      type="button" className={`Q-watch${w.pausedAt ? ' paused' : ''}`}
+      onClick={(e) => { e.stopPropagation(); const ms = stopWatch(wkey); toast(`Timed: ${fmtSpan(ms)} — it goes into this step's usual time`) }}
+      title="Stop timing and keep the time"
+    >
+      <Timer size={12} />{fmtWatch(watchElapsed(w, now))}
     </button>
   )
 }

@@ -48,6 +48,8 @@ const SettingsModal = lazyRetry(() => import('./components/SettingsModal.jsx'))
 const PdfImport = lazyRetry(() => import('./components/PdfImport.jsx'))
 const ShoppingList = lazyRetry(() => import('./components/session/ShoppingList.jsx'))
 const RecipePicker = lazyRetry(() => import('./components/session/RecipePicker.jsx'))
+const PlanView = lazyRetry(() => import('./components/session/PlanView.jsx'))
+const TimesReport = lazyRetry(() => import('./components/TimesReport.jsx'))
 const ShareModal = lazyRetry(() => import('./components/ShareModal.jsx'))
 const isPhone = () => window.matchMedia('(max-width: 760px)').matches
 
@@ -117,6 +119,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   // session reopens on the recipe being cooked — also after leaving it or closing the app.
   const [sessSel, setSessSel] = useState(() => lastSessSel() || (isPhone() ? null : 'shopping'))
   const [showPicker, setShowPicker] = useState(false)
+  const [showReport, setShowReport] = useState(false)
   const searchRef = useRef(null)
   const toggleSidebarRef = useRef(() => {})
   const { session, loaded: sessionLoaded, change: changeSession, finish: finishSession } = useSession(toast.error)
@@ -126,7 +129,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   }, [sessSel])
   // A recipe no longer in the session: back to the shopping list (the list of the session on a phone).
   useEffect(() => {
-    if (!sessionLoaded || !sessSel || sessSel === 'shopping') return
+    if (!sessionLoaded || !sessSel || sessSel === 'shopping' || sessSel === 'plan') return
     if ((session?.recipes || []).some((e) => e.id === sessSel)) return
     try { localStorage.removeItem(SESS_SEL_KEY) } catch (_) { /* ignore */ }
     setSessSel(isPhone() ? null : 'shopping')
@@ -203,7 +206,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   // stays on it. (Waits for the first load, which reads and clears the link it was opened with.)
   useEffect(() => {
     if (loading) return
-    const id = view === 'recipes' ? (mode === 'view' ? selId : null) : sessSel !== 'shopping' ? sessSel : null
+    const id = view === 'recipes' ? (mode === 'view' ? selId : null) : !['shopping', 'plan'].includes(sessSel) ? sessSel : null
     const want = recipePath(id)
     if (window.location.pathname + window.location.search !== want) window.history.replaceState(null, '', want)
     const title = id && recipesRef.current.find((r) => r.id === id)?.title
@@ -641,6 +644,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
       {phone && <MenuItem onClick={() => setShowAppAI(true)}>Assistant</MenuItem>}
       <MenuItem onClick={() => setShowLibrary(true)}>Ingredients</MenuItem>
       <MenuItem onClick={() => setShowCompare(true)}>Compare recipes</MenuItem>
+      <MenuItem onClick={() => setShowReport(true)}>Time report</MenuItem>
       <MenuSep />
       {!install.installed && <MenuItem onClick={installApp}>Install app</MenuItem>}
       <MenuItem onClick={() => setShowSettings(true)}>Settings</MenuItem>
@@ -803,6 +807,15 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                     <span>{shopStats.total ? `${shopStats.ready} of ${shopStats.total} ready` : 'Empty'}</span>
                   </div>
                 </div>
+                <div
+                  className="Q-list-item Q-sess-shop" role="button" tabIndex={0} aria-selected={sessSel === 'plan'}
+                  onClick={() => setSessSel('plan')} onKeyDown={(e) => { if (e.key === 'Enter') setSessSel('plan') }}
+                >
+                  <div className="Q-list-txt">
+                    <h4>Plan</h4>
+                    <span>{sessionEntries.length > 1 ? 'Cook them in parallel' : 'Timeline and session clock'}</span>
+                  </div>
+                </div>
                 <div className="Q-side-label">Cooking</div>
                 {sessionEntries.map((e) => {
                   const r = recipesById.get(e.id)
@@ -861,6 +874,9 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                       </div>
                     )
                 )}
+                {view === 'session' && sessSel === 'plan' && (
+                  <PlanView session={session} recipesById={recipesById} library={recipes} change={changeSession} onOpenReport={() => setShowReport(true)} />
+                )}
                 {view === 'session' && cookRecipe && cookRecipe._lite && <div className="Q-view-loading"><div /><div /><div /></div>}
                 {view === 'session' && cookRecipe && !cookRecipe._lite && (
                   <RecipeView
@@ -877,6 +893,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                       onClear: (kind) => changeSession(clearProgress(cookRecipe.id, kind)),
                       onOpenRecipe: () => openRecipe(cookRecipe.id),
                       onRemove: () => toggleInSession(cookRecipe.id, false),
+                      sessionId: session?.id || null,
                     }}
                   />
                 )}
@@ -944,6 +961,11 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
         {showPicker && (
           <Suspense fallback={null}>
             <RecipePicker recipes={recipes} selectedIds={sessionIds} onToggle={toggleInSession} onClose={() => setShowPicker(false)} />
+          </Suspense>
+        )}
+        {showReport && (
+          <Suspense fallback={null}>
+            <TimesReport recipesById={recipesById} onClose={() => setShowReport(false)} />
           </Suspense>
         )}
         {importMounted && (

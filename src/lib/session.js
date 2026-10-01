@@ -86,7 +86,7 @@ export function formatQty(qty, unit) {
 }
 
 // ── Persistence ─────────────────────────────────────────────────────────────
-const EMPTY = { recipes: [], shopping: { have: {}, qty: {}, extra: [] }, progress: {} }
+const EMPTY = { recipes: [], shopping: { have: {}, qty: {}, extra: [] }, progress: {}, clock: {} }
 
 function normalize(row) {
   return {
@@ -94,6 +94,7 @@ function normalize(row) {
     recipes: Array.isArray(row?.recipes) ? row.recipes : [],
     shopping: { have: {}, qty: {}, extra: [], ...(row?.shopping || {}) },
     progress: row?.progress || {},
+    clock: row?.clock || {},
   }
 }
 
@@ -121,7 +122,7 @@ export function useSession(onError) {
     if (!s?.id) return
     pending.current = null
     saving.current = supabase.from('cook_sessions')
-      .update({ recipes: s.recipes, shopping: s.shopping, progress: s.progress, name: s.name || '', updated_at: new Date().toISOString() })
+      .update({ recipes: s.recipes, shopping: s.shopping, progress: s.progress, clock: s.clock || {}, name: s.name || '', updated_at: new Date().toISOString() })
       .eq('id', s.id)
       .then(({ error }) => { if (error) errRef.current?.('Could not save the session: ' + error.message) })
     await saving.current
@@ -181,7 +182,10 @@ export function useSession(onError) {
   const finish = useCallback(async () => {
     if (!session?.id) return
     await flush()
-    const { error } = await supabase.from('cook_sessions').update({ status: 'done', updated_at: new Date().toISOString() }).eq('id', session.id)
+    // The session's clock stops with it.
+    const c = session.clock || {}
+    const clock = c.start && !c.end ? { ...c, end: c.paused_at || new Date().toISOString(), paused_at: null } : c
+    const { error } = await supabase.from('cook_sessions').update({ status: 'done', clock, updated_at: new Date().toISOString() }).eq('id', session.id)
     if (error) { errRef.current?.('Could not finish the session: ' + error.message); return }
     setSession(null)
   }, [session, flush])
@@ -222,3 +226,14 @@ export const clearProgress = (recipeId, kind) => (s) => ({
   ...s, progress: { ...s.progress, [recipeId]: { ...(s.progress[recipeId] || { ing: [], steps: [] }), [kind]: [] } },
 })
 export const resetTicks = () => (s) => ({ ...s, shopping: { ...s.shopping, have: {}, extra: s.shopping.extra.map((e) => ({ ...e, have: false })) }, progress: {} })
+
+// The session's clock (see lib/timing.js): start, pause, resume.
+const nowIso = () => new Date().toISOString()
+export const clockStart = () => (s) => ({ ...s, clock: { start: nowIso(), end: null, paused_ms: 0, paused_at: null } })
+export const clockPause = () => (s) => (s.clock?.start && !s.clock.paused_at && !s.clock.end ? { ...s, clock: { ...s.clock, paused_at: nowIso() } } : s)
+export const clockResume = () => (s) => {
+  const c = s.clock || {}
+  if (!c.paused_at) return s
+  return { ...s, clock: { ...c, paused_ms: (c.paused_ms || 0) + (Date.now() - Date.parse(c.paused_at)), paused_at: null } }
+}
+export const clockReset = () => (s) => ({ ...s, clock: {} })

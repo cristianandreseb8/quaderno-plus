@@ -81,6 +81,7 @@ export const DEFAULTS = {
   translateLang: 'English',
   exportNotes: false,
   proofread: true, // spelling underlines and the AI "Check spelling" button in the editor
+  chefMode: 'pro', // 'pro' (steps overview, next step, step clock, voice commands…) or 'simple'
   sidebar: true,
   sideWidth: null, // px, once the list has been resized by dragging its edge
   blocks: DEFAULT_BLOCKS,

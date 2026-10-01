@@ -256,3 +256,44 @@
 .Q-stepbar.done .track i { background: var(--rule-strong); }
 .Q-stepbar.ringing .track i { background: var(--accent); animation: qring 1s steps(1) infinite; }
 .Q-stepbar.ringing .t { color: var(--accent); font-weight: 700; }
+
+/* A step's usual time (learned) and its stopwatch while timed by hand */
+.Q-step-usual { margin-left: 8px; font: 500 .74em var(--mono); color: var(--faint); white-space: nowrap; }
+.Q-watch { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 1px 8px; height: 22px; vertical-align: middle; border: 1px solid var(--accent); border-radius: 999px; background: var(--accent-soft); color: var(--accent); font: 600 11.5px var(--mono); font-variant-numeric: tabular-nums; cursor: pointer; }
+.Q-watch.paused { opacity: .6; }
+
+/* ── Chef mode Pro ── */
+.Q-hl { background: none; color: inherit; font-weight: 700; border-bottom: 2px solid var(--accent-soft); }
+.Q-hl.temp { color: var(--red); border-bottom-color: var(--red-soft); }
+.Q-hl.time { color: var(--accent); }
+.Q-chef-clockline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; margin-top: 16px; font-size: 13px; color: var(--muted); }
+.Q-chef-clockline b { font: 600 13px var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.Q-chef-clockline .over b { color: var(--red); }
+.Q-chef-clockline .sp { flex: 1; }
+.Q-chef-next { padding: 0 clamp(20px, 5vw, 72px) 10px; display: grid; gap: 6px; }
+.Q-chef-ahead { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--ink); font-size: 13px; }
+.Q-chef-ahead svg { color: var(--accent); flex-shrink: 0; }
+.Q-chef-nextline { display: flex; align-items: baseline; gap: 10px; min-width: 0; padding: 8px 12px; border: 1px dashed var(--rule-strong); border-radius: 10px; font-size: 13.5px; color: var(--muted); }
+.Q-chef-nextline .lbl { flex-shrink: 0; font: 700 10.5px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.Q-chef-nextline .txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-chef-nextline .t { flex-shrink: 0; font: 500 12px var(--mono); color: var(--faint); }
+.Q-chef-rail { flex: 0 0 300px; min-height: 0; overflow: auto; border-right: 1px solid var(--rule); padding-right: 12px; }
+.Q-chef-rail-head { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; padding: 2px 0 8px; background: var(--bg); }
+.Q-chef-rail-head b { font: 700 11px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.Q-chef-rail ol { list-style: none; margin: 0; padding: 0; }
+.Q-chef-rail li.part { padding: 12px 6px 4px; font: 700 10.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.Q-chef-rail li button { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 7px 6px; border: none; border-radius: 8px; background: none; color: var(--ink); font: 13px/1.4 var(--sans); text-align: left; cursor: pointer; }
+.Q-chef-rail li button:hover { background: var(--hover); }
+.Q-chef-rail li.cur button { background: var(--accent-soft); }
+.Q-chef-rail li.done button { color: var(--faint); }
+.Q-chef-rail .n { flex: 0 0 1.6em; text-align: right; font: 600 11.5px var(--mono); color: var(--faint); }
+.Q-chef-rail li.done .n { color: var(--green); }
+.Q-chef-rail .txt { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.Q-chef-rail .t { flex-shrink: 0; font: 500 11px var(--mono); color: var(--faint); }
+.Q-chef-rail li button svg { align-self: center; color: var(--accent); flex-shrink: 0; }
+.Q-chef-top .Q-icon-btn.heard { background: var(--accent); color: var(--accent-ink); }
+@media (max-width: 899px) {
+  .Q-chef-body.with-rail { position: relative; }
+  .Q-chef-rail { position: absolute; inset: 0; z-index: 2; flex: none; padding: 14px 18px; border-right: none; background: var(--bg); }
+  .Q-chef-next { padding: 0 18px 8px; }
+}
