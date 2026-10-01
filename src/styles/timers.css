@@ -105,9 +105,9 @@
 
 /* No idle clocks in the method: a timer shows while it runs; right-click a step (or hold it, on a
    phone) for timers and to edit it. Phones also hide the times written in steps until started. */
-.Q-steps .Q-step-tbtn { display: none; }
+:is(.Q-steps, .Q-aligned) .Q-step-tbtn { display: none; }
 @media (hover: none) {
-  .Q-steps .Q-tchip:not(.running):not(.paused):not(.ringing) { display: none; }
+  :is(.Q-steps, .Q-aligned) .Q-tchip:not(.running):not(.paused):not(.ringing) { display: none; }
 }
 
 /* ── Chef mode: one step at a time, full screen ── */

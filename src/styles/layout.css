@@ -167,3 +167,43 @@ body.Q-resizing, body.Q-resizing * { cursor: col-resize !important; user-select:
 .Q-lightbox { position: fixed; inset: 0; background: rgba(0, 0, 0, .9); z-index: 800; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
 .Q-lightbox img { max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: 10px; }
 .Q-err { color: var(--red); font-size: 12.5px; margin: 8px 12px 10px; line-height: 1.5; }
+
+/* ── Your own templates: their options (data-* on <html>, set by lib/settings.js) ─────────── */
+/* Corners */
+:root[data-corners="square"] { --radius: 2px; --radius-sm: 2px; }
+:root[data-corners="square"] :is(.btn, .Q-block, .Q-steps li, .Q-ing-row, .Q-al-row, .Q-cc-lane, .Q-cc-nowcard, .Q-cc-tips li, .Q-cc-hours, .Q-tl, .Q-float.open, .Q-float-pill, .Q-list-item, .Q-chef-uses li, .Q-chef-nav button, .Q-inline-input, .Q-select, .Q-plan-clock, .Q-theme-card, .Q-tl-step) { border-radius: 2px; }
+:root[data-corners="round"] { --radius: 16px; --radius-sm: 12px; }
+:root[data-corners="round"] :is(.btn, .Q-chef-nav button) { border-radius: 999px; }
+:root[data-corners="round"] :is(.Q-cc-lane, .Q-cc-nowcard, .Q-tl, .Q-float.open, .Q-block, .Q-plan-clock) { border-radius: 22px; }
+:root[data-corners="round"] :is(.Q-steps li, .Q-ing-row, .Q-al-row, .Q-list-item, .Q-chef-uses li, .Q-cc-tips li) { border-radius: 14px; }
+/* Spacing */
+:root[data-spacing="compact"] .Q-ing-row { padding-top: .28em; padding-bottom: .28em; }
+:root[data-spacing="compact"] .Q-steps li { padding-top: .35em; padding-bottom: .45em; line-height: 1.5; }
+:root[data-spacing="compact"] .Q-al-row { padding-top: 7px; padding-bottom: 7px; }
+:root[data-spacing="compact"] .Q-block { margin-bottom: 16px; }
+:root[data-spacing="compact"] .Q-cc-task-head { padding-top: 6px; padding-bottom: 6px; }
+:root[data-spacing="airy"] .Q-ing-row { padding-top: .8em; padding-bottom: .8em; }
+:root[data-spacing="airy"] .Q-steps li { padding-top: .85em; padding-bottom: 1.05em; line-height: 1.85; }
+:root[data-spacing="airy"] .Q-al-row { padding-top: 20px; padding-bottom: 20px; }
+:root[data-spacing="airy"] .Q-block { margin-bottom: 38px; }
+:root[data-spacing="airy"] .Q-cc-task-head { padding-top: 14px; padding-bottom: 14px; }
+/* Section titles */
+:root[data-heads="normal"] :is(.Q-sec-h, .Q-al-part, .Q-steps li.Q-step-h, .Q-chef-part, .Q-block-title) { text-transform: none; letter-spacing: .01em; font-size: .92em; }
+:root[data-heads="upper"] :is(.Q-sec-h, .Q-al-part, .Q-steps li.Q-step-h, .Q-chef-part) { text-transform: uppercase; letter-spacing: .1em; font-size: .78em; }
+:root[data-heads="smallcaps"] :is(.Q-sec-h, .Q-al-part, .Q-steps li.Q-step-h, .Q-chef-part, .Q-block-title) { text-transform: none; font-variant: small-caps; letter-spacing: .05em; font-size: 1em; }
+/* Step numbers */
+:root[data-stepnums="circles"] :is(.Q-steps li:not(.Q-step-link):not(.Q-step-h), .Q-al-step)::before {
+  width: 1.75em; height: 1.75em; line-height: 1.75em; text-align: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700;
+}
+:root[data-stepnums="circles"] .Q-steps li:not(.Q-step-link):not(.Q-step-h)::before { left: .45em; top: .62em; font-size: .78em; }
+:root[data-stepnums="circles"] .Q-al-step::before { top: .2em; font-size: .72em; }
+:root[data-stepnums="none"] :is(.Q-steps li:not(.Q-step-link):not(.Q-step-h), .Q-al-step)::before { content: none; }
+:root[data-stepnums="none"] .Q-steps li:not(.Q-step-link):not(.Q-step-h) { padding-left: .7em; }
+:root[data-stepnums="none"] .Q-al-step { padding-left: 0; }
+/* Lines between rows */
+:root[data-lines="0"] .Q-ing-row { border-bottom-color: transparent; }
+:root[data-lines="0"] .Q-al-row { border-top-color: transparent; }
+:root[data-lines="0"] :is(.Q-cc-task + .Q-cc-task, .Q-chef-ings li) { border-top-color: transparent; border-bottom-color: transparent; }
+/* Amounts */
+:root[data-amounts="accent"] :is(.Q-ing-qty, .Q-al-ings li b, .Q-chef-uses b, .Q-chef-ings b, .Q-cc-ings b) { color: var(--accent); }
+:root[data-amounts="plain"] :is(.Q-ing-qty, .Q-al-ings li b, .Q-chef-uses b, .Q-chef-ings b, .Q-cc-ings b) { font-weight: 400; }

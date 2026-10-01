@@ -1,5 +1,5 @@
 import Modal from './ui/Modal.jsx'
-import { JAN_COLORS, JAN_DEFAULTS, JAN_FONTS, THEMES, TEXT_SIZES, janOption, loadThemeFonts, useSettings } from '../lib/settings.js'
+import { JAN_COLORS, JAN_DEFAULTS, JAN_FONTS, THEMES, TEXT_SIZES, customOf, fontStack, janOption, loadThemeFonts, templateFrom, useSettings } from '../lib/settings.js'
 import { setVoiceCfg, speak, useTimers, voiceLang } from '../lib/timers.js'
 import { LANGS } from '../lib/constants.js'
 import { INSTALL_HELP, useInstall } from '../lib/install.js'
@@ -113,6 +113,24 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
       <section className="Q-set-sec">
         <h3>Template</h3>
         <p className="Q-set-help">Changes colours and typography across the whole app. Saved on this device.</p>
+        <div className="Q-theme-group">Yours</div>
+        <div className="Q-theme-grid">
+          {(settings.custom || []).map((c) => (
+            <ThemeCard
+              key={c.id} active={settings.theme === `custom:${c.id}`} onPick={() => update({ theme: `custom:${c.id}` })}
+              theme={{ name: c.name, desc: 'Your template', colors: [c.colors.bg, c.colors.surface, c.colors.accent, c.colors.ink], heading: fontStack(c.fonts?.heading), headingWeight: c.weight }}
+            />
+          ))}
+          <button type="button" className="Q-theme-card Q-theme-new" onClick={() => {
+            const t = { ...templateFrom(settings), id: Math.random().toString(36).slice(2, 9) }
+            update({ custom: [...(settings.custom || []), t], theme: `custom:${t.id}` })
+          }}>
+            <span className="plus" aria-hidden="true">+</span>
+            <div className="Q-theme-name">Create template</div>
+            <div className="Q-theme-desc">Starts from the one in use; make every part yours</div>
+          </button>
+        </div>
+        {customOf(settings) && <TemplateEditor />}
         {[['Light', THEMES.filter((t) => !t.dark)], ['Dark', THEMES.filter((t) => t.dark)]].map(([label, list]) => (
           <div key={label}>
             <div className="Q-theme-group">{label}</div>
@@ -316,6 +334,104 @@ function AccountSecurity({ email }) {
       {row('password', 'Password', 'Choose a new password for this account.')}
       {row('email', 'Email', `Now ${email}. The change is confirmed from a link sent to the new address.`)}
     </>
+  )
+}
+
+// One of your own templates: its name, colours, fonts, shapes and layout — every change shows at
+// once across the app, and is kept on this device.
+const SEG = (value, options, onChange, label) => (
+  <div className="Q-seg" role="group" aria-label={label}>
+    {options.map(([v, l]) => <button key={v} type="button" className={value === v ? 'on' : ''} aria-pressed={value === v} onClick={() => onChange(v)}>{l}</button>)}
+  </div>
+)
+function TemplateEditor() {
+  const { settings, update } = useSettings()
+  const t = customOf(settings)
+  const [base, setBase] = useState('')
+  if (!t) return null
+  const set = (patch) => update({ custom: settings.custom.map((c) => (c.id === t.id ? { ...c, ...patch } : c)) })
+  const font = (k) => t.fonts?.[k] || 'System sans'
+  const fontSelect = (k, label, kinds) => (
+    <label className="Q-jan-font">
+      <span>{label}</span>
+      <select className="Q-select" value={font(k)} onChange={(e) => set({ fonts: { ...(t.fonts || {}), [k]: e.target.value } })} style={{ fontFamily: fontStack(font(k)) || undefined }}>
+        {JAN_FONTS.filter(([, kind]) => kinds.includes(kind)).map(([n]) => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </label>
+  )
+  const row = (label, help, control) => (
+    <div className="Q-set-row">
+      <div><div className="Q-set-label">{label}</div>{help && <div className="Q-set-help">{help}</div>}</div>
+      {control}
+    </div>
+  )
+  const toggle = (key, label, help) => (
+    <label className="Q-set-row Q-set-check">
+      <div><div className="Q-set-label">{label}</div><div className="Q-set-help">{help}</div></div>
+      <input type="checkbox" className="Q-switch" checked={key === 'lines' || key === 'peek' ? t[key] !== false : !!t[key]} onChange={(e) => set({ [key]: e.target.checked })} />
+    </label>
+  )
+  const startFrom = (id) => {
+    if (!id) return
+    const from = templateFrom(settings, id)
+    set({ colors: from.colors, fonts: from.fonts, weight: from.weight, stepBars: from.stepBars })
+    setBase('')
+  }
+  const remove = () => {
+    if (!window.confirm(`Delete the template “${t.name}”?`)) return
+    update({ custom: settings.custom.filter((c) => c.id !== t.id), theme: 'slate' })
+  }
+  const duplicate = () => {
+    const copy = { ...JSON.parse(JSON.stringify(t)), id: Math.random().toString(36).slice(2, 9), name: `${t.name} copy` }
+    update({ custom: [...settings.custom, copy], theme: `custom:${copy.id}` })
+  }
+  return (
+    <div className="Q-jan Q-tpl">
+      <div className="Q-jan-head">
+        <input className="Q-tpl-name" value={t.name} onChange={(e) => set({ name: e.target.value })} aria-label="Template name" placeholder="Template name" />
+        <span className="Q-tpl-acts">
+          <select className="Q-select" value={base} onChange={(e) => { setBase(e.target.value); startFrom(e.target.value) }} aria-label="Take colours and fonts from">
+            <option value="">Take colours from…</option>
+            {THEMES.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+          <button type="button" className="Q-link" onClick={duplicate}>Duplicate</button>
+          <button type="button" className="Q-link danger" onClick={remove}>Delete</button>
+        </span>
+      </div>
+
+      <div className="Q-tpl-sec">Colours</div>
+      <div className="Q-jan-colors">
+        {JAN_COLORS.map(([k, label, d]) => (
+          <label key={k} className="Q-jan-color">
+            <input type="color" value={t.colors?.[k] || d} onChange={(e) => set({ colors: { ...(t.colors || {}), [k]: e.target.value } })} aria-label={label} />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+
+      <div className="Q-tpl-sec">Type</div>
+      <div className="Q-jan-fonts">
+        {fontSelect('heading', 'Titles', ['sans', 'serif', 'mono'])}
+        {fontSelect('body', 'Text', ['sans', 'serif'])}
+        {fontSelect('numbers', 'Numbers', ['mono', 'sans'])}
+      </div>
+      {row('Title weight', null, SEG(t.weight || 600, [[500, 'Light'], [600, 'Medium'], [700, 'Bold'], [800, 'Heavy']], (v) => set({ weight: v }), 'Title weight'))}
+      {row('Section titles', 'Pino, Masa, Primo impasto…', SEG(t.heads || 'theme', [['theme', 'Default'], ['normal', 'As written'], ['upper', 'CAPS'], ['smallcaps', 'Small caps']], (v) => set({ heads: v }), 'Section titles'))}
+
+      <div className="Q-tpl-sec">Shape and space</div>
+      {row('Corners', null, SEG(t.corners || 'soft', [['square', 'Square'], ['soft', 'Soft'], ['round', 'Round']], (v) => set({ corners: v }), 'Corners'))}
+      {row('Spacing', 'Room between ingredients, steps and boxes.', SEG(t.spacing || 'comfortable', [['compact', 'Compact'], ['comfortable', 'Normal'], ['airy', 'Airy']], (v) => set({ spacing: v }), 'Spacing'))}
+      {row('Step numbers', null, SEG(t.stepNums || 'numbers', [['numbers', '1 2 3'], ['circles', '① ② ③'], ['none', 'None']], (v) => set({ stepNums: v }), 'Step numbers'))}
+      {row('Amounts', '250 g, 2 cucharaditas…', SEG(t.amounts || 'bold', [['bold', 'Bold'], ['accent', 'Accent colour'], ['plain', 'Plain']], (v) => set({ amounts: v }), 'Amounts'))}
+      {toggle('lines', 'Lines between rows', 'A thin line between ingredients and between steps.')}
+
+      <div className="Q-tpl-sec">Layout</div>
+      {toggle('aligned', 'Ingredients beside their steps', 'Each step shows, next to it, the ingredients it uses and how much — the recipe reads as one table.')}
+      {toggle('stepBars', 'Timers as bars between steps', 'A grey bar under each timed step that fills while its timer runs.')}
+      {toggle('season', 'Season of the recipe', 'A year strip under the title: the months its fresh ingredients are in season where you live.')}
+      {toggle('peek', 'Coming steps in chef mode', 'The next steps show faintly under the current one, to plan ahead.')}
+      {t.season && row('Your region, for the seasons', 'Empty: guessed from this device.', <input className="Q-inline-input" style={{ maxWidth: 220 }} value={t.region || ''} onChange={(e) => set({ region: e.target.value })} />)}
+    </div>
   )
 }
 

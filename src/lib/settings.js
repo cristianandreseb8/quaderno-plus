@@ -83,6 +83,7 @@ export const DEFAULTS = {
   proofread: true, // spelling underlines and the AI "Check spelling" button in the editor
   chefMode: 'pro', // 'pro' (steps overview, next step, step clock, voice commands…) or 'simple'
   heyChef: {}, // { auto: start listening when the app opens, lang: 'auto' | 'en-US' | 'es-ES' …, speak: answer out loud }
+  custom: [], // your own templates (customOf, templateFrom below); in use as theme 'custom:<id>'
   jan: {}, // "Jan" made yours: { colors: { bg, surface, ink, muted, line, accent, bar }, fonts: { heading, body, numbers }, aligned, season, peek, region }
   sidebar: true,
   sideWidth: null, // px, once the list has been resized by dragging its edge
@@ -112,6 +113,7 @@ export function saveSettings(s) {
 
 // Fonts Jan can be set in (Google Fonts families).
 export const JAN_FONTS = [
+  ['System sans', 'sans'], ['System serif', 'serif'], ['System mono', 'mono'],
   ['Manrope', 'sans'], ['Inter', 'sans'], ['DM Sans', 'sans'], ['Work Sans', 'sans'], ['Karla', 'sans'], ['Nunito', 'sans'], ['Rubik', 'sans'],
   ['Space Grotesk', 'sans'], ['Josefin Sans', 'sans'], ['Quicksand', 'sans'], ['IBM Plex Sans', 'sans'],
   ['Lora', 'serif'], ['Fraunces', 'serif'], ['Playfair Display', 'serif'], ['Cormorant Garamond', 'serif'], ['EB Garamond', 'serif'],
@@ -126,7 +128,8 @@ export const JAN_COLORS = [
 export const JAN_DEFAULTS = { aligned: true, season: true, peek: true }
 export const janOption = (s, key) => (s?.jan?.[key] ?? JAN_DEFAULTS[key])
 const FALLBACK = { sans: 'ui-sans-serif, system-ui, sans-serif', serif: 'Georgia, serif', mono: 'ui-monospace, Menlo, monospace' }
-const fontStack = (name) => { const f = JAN_FONTS.find(([n]) => n === name); return f ? `"${f[0]}", ${FALLBACK[f[1]]}` : null }
+const SYSTEM = { 'System sans': SYS_SANS, 'System serif': SYS_SERIF, 'System mono': FALLBACK.mono }
+export const fontStack = (name) => { if (SYSTEM[name]) return SYSTEM[name]; const f = JAN_FONTS.find(([n]) => n === name); return f ? `"${f[0]}", ${FALLBACK[f[1]]}` : null }
 // Light text on a dark accent, dark text on a light one.
 function inkOn(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || '')
@@ -134,35 +137,99 @@ function inkOn(hex) {
   const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? '#1A1A1A' : '#FFFFFF'
 }
+// Jan made yours, and your own templates, are drawn from a few colours and fonts set on the page
+// (variables.css mixes every other shade from them).
+const OPTION_ATTRS = ['corners', 'spacing', 'heads', 'stepnums', 'lines', 'amounts', 'dark']
 function applyJan(s) {
   const root = document.documentElement
-  const vars = ['--jan-bg', '--jan-surface', '--jan-ink', '--jan-muted', '--jan-line', '--jan-accent', '--jan-bar', '--jan-heading-font', '--jan-body-font', '--jan-mono-font', '--accent-ink']
+  const vars = ['--jan-bg', '--jan-surface', '--jan-ink', '--jan-muted', '--jan-line', '--jan-accent', '--jan-bar', '--jan-heading-font', '--jan-body-font', '--jan-mono-font', '--accent-ink', '--heading-weight']
   vars.forEach((v) => root.style.removeProperty(v))
-  if (s.theme !== 'jan') return
-  const c = s.jan?.colors || {}
+  OPTION_ATTRS.forEach((a) => delete root.dataset[a])
+  root.style.removeProperty('color-scheme')
+  const custom = customOf(s)
+  const look = custom || (s.theme === 'jan' ? s.jan || {} : null)
+  if (!look) return
+  const c = look.colors || {}
   Object.entries(c).forEach(([k, v]) => { if (v) root.style.setProperty(`--jan-${k}`, v) })
   if (c.accent && inkOn(c.accent)) root.style.setProperty('--accent-ink', inkOn(c.accent))
-  const f = s.jan?.fonts || {}
+  const f = look.fonts || {}
   const families = []
   ;[['heading', '--jan-heading-font'], ['body', '--jan-body-font'], ['numbers', '--jan-mono-font']].forEach(([k, v]) => {
     const stack = fontStack(f[k])
-    if (stack) { root.style.setProperty(v, stack); families.push(f[k]) }
+    if (stack) { root.style.setProperty(v, stack); if (!SYSTEM[f[k]]) families.push(f[k]) }
   })
   if (families.length) {
-    loadThemeFonts({ id: `jan-${families.join('-').replace(/\s+/g, '')}`, fonts: [...new Set(families)].map((n) => `family=${n.replace(/ /g, '+')}:wght@400;500;600;700`).join('&') })
+    loadThemeFonts({ id: `jan-${families.join('-').replace(/\s+/g, '')}`, fonts: [...new Set(families)].map((n) => `family=${n.replace(/ /g, '+')}:wght@400;500;600;700;800`).join('&') })
   }
+  if (!custom) return
+  if (custom.weight) root.style.setProperty('--heading-weight', String(custom.weight))
+  const set = (a, v, plain) => { if (v != null && v !== plain) root.dataset[a] = String(v) }
+  set('corners', custom.corners, 'soft')
+  set('spacing', custom.spacing, 'comfortable')
+  set('heads', custom.heads, 'theme')
+  set('stepnums', custom.stepNums, 'numbers')
+  if (custom.lines === false) root.dataset.lines = '0'
+  set('amounts', custom.amounts, 'bold')
+  if (isDark(c.bg)) { root.dataset.dark = '1'; root.style.setProperty('color-scheme', 'dark') }
+}
+const isDark = (hex) => { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return false; const n = parseInt(m[1], 16); return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.45 }
+
+// ── Your own templates ───────────────────────────────────────────────────────
+// settings.custom: [{ id, name, colors: { bg, ink, accent, surface, muted, line, bar }, fonts: { heading, body, numbers },
+//   weight, corners: 'square' | 'soft' | 'round', spacing: 'compact' | 'comfortable' | 'airy',
+//   heads: 'theme' | 'normal' | 'upper' | 'smallcaps', stepNums: 'numbers' | 'circles' | 'none',
+//   lines, amounts: 'bold' | 'accent' | 'plain', stepBars, aligned, season, peek, region }].
+// The one in use: settings.theme = 'custom:<id>'.
+export const customOf = (s) => (String(s?.theme || '').startsWith('custom:') ? (s.custom || []).find((t) => `custom:${t.id}` === s.theme) || null : null)
+const firstFamily = (stack) => String(stack || '').split(',')[0].replace(/["']/g, '').trim()
+// A new template, starting from the one in use (or any other).
+export function templateFrom(s, themeId = s.theme) {
+  const own = (s.custom || []).find((t) => `custom:${t.id}` === themeId)
+  if (own) return { ...JSON.parse(JSON.stringify(own)), id: undefined, name: `${own.name} copy` }
+  if (themeId === 'jan') {
+    const color = (k) => s.jan?.colors?.[k] || JAN_COLORS.find(([x]) => x === k)[2]
+    return {
+      name: 'My Jan', colors: Object.fromEntries(JAN_COLORS.map(([k]) => [k, color(k)])),
+      fonts: { heading: s.jan?.fonts?.heading || 'Manrope', body: s.jan?.fonts?.body || 'Manrope', numbers: s.jan?.fonts?.numbers || 'System mono' },
+      weight: 700, corners: 'soft', spacing: 'comfortable', heads: 'theme', stepNums: 'numbers', lines: true, amounts: 'bold',
+      stepBars: true, aligned: janOption(s, 'aligned'), season: janOption(s, 'season'), peek: janOption(s, 'peek'), region: s.jan?.region || '',
+    }
+  }
+  const t = THEMES.find((x) => x.id === themeId) || THEMES[0]
+  const [bg, surface2, accent, ink] = t.colors
+  const head = firstFamily(t.heading)
+  const known = JAN_FONTS.some(([n]) => n === head)
+  const serif = /serif/i.test(t.heading) && !/sans-serif/i.test(t.heading)
+  const heading = known ? head : (serif ? 'System serif' : 'System sans')
+  const body = known && !serif ? head : 'System sans'
+  const mix = (a, b, w) => { const p = (h) => parseInt(h.slice(1), 16); const x = p(a), y = p(b); const ch = (sh) => Math.round(((x >> sh) & 255) * w + ((y >> sh) & 255) * (1 - w)); return `#${[16, 8, 0].map((sh) => ch(sh).toString(16).padStart(2, '0')).join('')}` }
+  return {
+    name: `My ${t.name}`,
+    colors: { bg, ink, accent, surface: t.dark ? surface2 : mix(bg, '#ffffff', 0.5), muted: mix(ink, bg, 0.62), line: mix(bg, ink, 0.86), bar: accent },
+    fonts: { heading, body, numbers: 'System mono' },
+    weight: t.headingWeight || 600, corners: 'soft', spacing: 'comfortable', heads: 'theme', stepNums: 'numbers', lines: true, amounts: 'bold',
+    stepBars: !!t.stepBars, aligned: false, season: false, peek: true, region: '',
+  }
+}
+// What the template in use switches on: Jan's layout ideas, for Jan and for your own templates.
+export function themeFeatures(s) {
+  const c = customOf(s)
+  if (c) return { stepBars: !!c.stepBars, aligned: !!c.aligned, season: !!c.season, peek: c.peek !== false, region: c.region || '' }
+  if (s?.theme === 'jan') return { stepBars: true, aligned: janOption(s, 'aligned'), season: janOption(s, 'season'), peek: janOption(s, 'peek'), region: s.jan?.region || '' }
+  return { stepBars: !!THEMES.find((t) => t.id === s?.theme)?.stepBars, aligned: false, season: false, peek: false, region: '' }
 }
 
 export function applySettings(s) {
   const root = document.documentElement
-  root.dataset.theme = s.theme
+  const custom = customOf(s)
+  root.dataset.theme = custom ? 'custom' : String(s.theme).startsWith('custom:') ? 'slate' : s.theme // a deleted template
   applyJan(s)
   root.dataset.textsize = s.textSize
   const theme = THEMES.find((t) => t.id === s.theme) || THEMES[0]
-  loadThemeFonts(theme)
+  if (!custom) loadThemeFonts(theme)
   let meta = document.querySelector('meta[name="theme-color"]')
   if (!meta) { meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta) }
-  meta.content = theme.colors[0]
+  meta.content = custom?.colors?.bg || theme.colors[0]
 }
 
 export const SettingsContext = createContext({ settings: DEFAULTS, update: () => {} })

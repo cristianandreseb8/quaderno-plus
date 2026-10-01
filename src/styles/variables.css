@@ -74,8 +74,8 @@
   --fs: 16.5px;
 }
 
-:root[data-theme="jan"] {
-  /* Jan is made from a few choices (Settings → Template → Make Jan yours sets them on the page);
+:root[data-theme="jan"], :root[data-theme="custom"] {
+  /* Jan — and every template you create — is made from a few choices (Settings → Template → Make Jan yours sets them on the page);
      every other shade is mixed from them. */
   --jan-bg: #F7F6F2; --jan-ink: #262624; --jan-accent: #4E6A5E;
   /* Unless chosen too, these follow the background and the text (a dark background gets dark lines). */
@@ -211,3 +211,12 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 /* aliases referenced by the R&D panel */
 :root { --border: var(--rule); }
+
+/* ── Your own templates (Settings → Template → Create template; lib/settings.js sets these) ── */
+:root[data-theme="custom"] { --heading-weight: 650; }
+:root[data-theme="custom"][data-dark] {
+  --jan-surface: color-mix(in srgb, var(--jan-bg) 90%, var(--jan-ink));
+  --green-soft: color-mix(in srgb, var(--green) 20%, var(--jan-bg)); --red-soft: color-mix(in srgb, var(--red) 20%, var(--jan-bg));
+  --ai-soft: color-mix(in srgb, var(--ai) 20%, var(--jan-bg)); --id-soft: color-mix(in srgb, var(--id) 18%, var(--jan-bg)); --id-line: color-mix(in srgb, var(--id) 40%, var(--jan-bg));
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .45); --shadow-lg: 0 14px 36px rgba(0, 0, 0, .55); --overlay: rgba(0, 0, 0, .6);
+}
