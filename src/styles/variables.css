@@ -74,6 +74,15 @@
   --fs: 16.5px;
 }
 
+:root[data-theme="jan"] {
+  --sans: Manrope, ui-sans-serif, system-ui, sans-serif;
+  --heading: var(--sans); --heading-weight: 700;
+  --bg: #F7F6F2; --side: #F1EFEA; --surface: #FCFBF8; --surface-2: #EDEBE5; --hover: #E8E5DE;
+  --ink: #262624; --muted: #6E6B64; --faint: #A6A29A; --rule: #E4E1DA; --rule-strong: #D2CEC5;
+  --accent: #4E6A5E; --accent-soft: #E3EAE5; --navy: #262624;
+  --radius: 8px;
+}
+
 :root[data-theme="slate"] {
   color-scheme: dark;
   --bg: #131518; --side: #171A1E; --surface: #1C1F24; --surface-2: #22262C; --hover: #292E35;

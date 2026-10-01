@@ -19,6 +19,7 @@ export const THEMES = [
   { id: 'bakery', name: 'Bakery', desc: 'Friendly rounded type, warm peach', colors: ['#FFF7F0', '#FDEBDD', '#E0763F', '#3A2418'], heading: 'Nunito, system-ui, sans-serif', headingWeight: 800, fonts: 'family=Nunito:wght@400;500;600;700;800' },
   { id: 'lab', name: 'Lab', desc: 'Plex type, like an R&D notebook', colors: ['#F4F5F2', '#FFFFFF', '#0F7B6C', '#1B1F1D'], heading: '"IBM Plex Mono", monospace', headingWeight: 600, fonts: 'family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700' },
   { id: 'kitchen', name: 'Kitchen', desc: 'High contrast, larger text for the line', colors: ['#FFFFFF', '#F2F2F2', '#C2410C', '#000000'], heading: SYS_SANS, headingWeight: 800 },
+  { id: 'jan', name: 'Jan', desc: 'Calm and quiet — timers are grey bars that fill between the steps', colors: ['#F7F6F2', '#EDEBE5', '#4E6A5E', '#262624'], heading: 'Manrope, system-ui, sans-serif', headingWeight: 700, fonts: 'family=Manrope:wght@400;500;600;700;800', stepBars: true },
   // Dark
   { id: 'slate', name: 'Slate', desc: 'Dark, easy on the eyes at night', colors: ['#131518', '#22262C', '#E09A5B', '#E9E6E1'], heading: SYS_SERIF, dark: true },
   { id: 'noir', name: 'Noir', desc: 'Pure black and gold, grand titles', colors: ['#0A0A0A', '#181818', '#D4AF6A', '#F2EFEA'], heading: '"Playfair Display", Georgia, serif', fonts: 'family=Playfair+Display:wght@500;600;700', dark: true },

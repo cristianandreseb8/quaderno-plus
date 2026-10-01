@@ -8,14 +8,14 @@ import { parseMediaLibrary } from '../lib/media.js'
 import { translateRecipe } from '../lib/ai.js'
 import { VISIBILITY } from '../lib/sharing.js'
 import { LANGS } from '../lib/constants.js'
-import { normalizeBlocks, useSettings } from '../lib/settings.js'
+import { THEMES, normalizeBlocks, useSettings } from '../lib/settings.js'
 import Menu, { MenuItem, MenuSep, MenuToggle } from './ui/Menu.jsx'
 import { toast } from './ui/Toaster.jsx'
 import Blocks from './ui/Blocks.jsx'
 import VideoBlock from './VideoBlock.jsx'
 import NotesPanel from './NotesPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
-import { TimerChip, TimerMenu, TimerPresets } from './Timers.jsx'
+import { StepBar, TimerChip, TimerMenu, TimerPresets } from './Timers.jsx'
 import { findDurations } from '../lib/durations.js'
 import { componentsOf, flattenSteps, linkFactor, resolveLink } from '../lib/links.js'
 import { useCookPlans } from '../lib/cookPlan.js'
@@ -484,7 +484,18 @@ export default function RecipeView({
   // A step's written times become chips in its text; a step without one gets a small timer
   // beside it (on a touch screen it opens the step's options, like holding the step down).
   const touch = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
+  // Templates with step bars ("Jan"): no clocks in the text — a grey bar under the step fills while
+  // its timer runs (tap it to start the written time, or for the step's timer options).
+  const stepBars = THEMES.find((t) => t.id === settings.theme)?.stepBars
   const timedText = (text, { label, name, durs, tkey }, sheet) => {
+    if (stepBars) {
+      return (
+        <>
+          <span className="Q-step-text">{text}</span>
+          <StepBar tkey={tkey} durs={durs} label={label} name={name} onSheet={() => setStepSheet(sheet)} {...timerBase} />
+        </>
+      )
+    }
     if (durs.length) return <span className="Q-step-text">{text}{durs.map((d) => <TimerChip key={d.ms} tkey={`${tkey}:${d.ms}`} label={label} name={name} ms={d.ms} text={d.label} {...timerBase} />)}</span>
     return (
       <>

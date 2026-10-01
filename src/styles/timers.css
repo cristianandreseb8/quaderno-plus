@@ -242,3 +242,17 @@
 .Q-sheet-edit { width: 100%; margin: 4px 0 10px; padding: 10px 12px; border: 1px solid var(--rule-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font: 15px/1.5 var(--sans); resize: vertical; }
 .Q-sheet-edit:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .Q-sheet-edit-foot { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Step bars ("Jan" template): a thin grey track under each step that fills while its timer runs. */
+.Q-stepbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; width: 100%; margin: .55em 0 -.2em; padding: 6px 0; border: none; background: none; color: var(--faint); font: 500 11.5px var(--sans); font-variant-numeric: tabular-nums; cursor: pointer; text-align: left; }
+.Q-stepbar .track { flex: 1; height: 4px; border-radius: 999px; background: var(--rule); overflow: hidden; transition: height .15s; }
+.Q-stepbar .track i { display: block; height: 100%; border-radius: inherit; background: var(--muted); transition: width .9s linear; }
+.Q-stepbar .t { flex-shrink: 0; min-width: 3.5em; text-align: right; }
+.Q-stepbar:hover .track { height: 6px; }
+.Q-stepbar:hover { color: var(--ink); }
+.Q-stepbar.running .track i { background: var(--accent); }
+.Q-stepbar.running .t { color: var(--accent); font-weight: 700; }
+.Q-stepbar.paused .track i { background: var(--faint); }
+.Q-stepbar.done .track i { background: var(--rule-strong); }
+.Q-stepbar.ringing .track i { background: var(--accent); animation: qring 1s steps(1) infinite; }
+.Q-stepbar.ringing .t { color: var(--accent); font-weight: 700; }

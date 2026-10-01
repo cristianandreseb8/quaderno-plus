@@ -238,3 +238,35 @@ export function RecipeTimerBadge({ recipeId }) {
   const soonest = mine.reduce((a, t) => (t.endsAt < a.endsAt ? t : a))
   return <span className="Q-list-timer"><TimerIcon size={11} />{fmtClock(remaining(soonest, now))}{mine.length > 1 ? ` +${mine.length - 1}` : ''}</span>
 }
+
+// ── "Jan" template: a step's timer as a thin grey bar under it, filling while it runs ──
+// Tap: start the time written in the step (or, without one, open the step's timer options);
+// while running, tap to pause or resume; when it rings, tap to stop it.
+export function StepBar({ tkey, durs = [], label, name, lang, recipeId, recipeTitle, onSheet }) {
+  const { timers, now } = useTimers()
+  const t = timers.find((x) => (x.key === tkey || String(x.key || '').startsWith(`${tkey}:`)) && x.state !== 'idle')
+  const left = t ? remaining(t, now) : 0
+  const pct = t ? (t.state === 'done' ? 100 : Math.min(100, Math.max(0, ((t.duration - left) / t.duration) * 100))) : 0
+  function tap(e) {
+    e.stopPropagation()
+    if (!t || t.state === 'done') {
+      if (t?.ringing) { stopRinging(t.id); return }
+      if (durs.length) startTimer({ key: `${tkey}:${durs[0].ms}`, label, name, lang, recipeId, recipeTitle, duration: durs[0].ms })
+      else onSheet?.()
+      return
+    }
+    if (t.ringing) stopRinging(t.id)
+    else if (t.state === 'running') pauseTimer(t.id)
+    else if (t.state === 'paused') resumeTimer(t.id)
+  }
+  const text = !t
+    ? (durs.length ? durs[0].label : '')
+    : t.ringing ? 'Time’s up' : t.state === 'done' ? 'Done' : t.state === 'paused' ? `${fmtClock(left)} · paused` : fmtClock(left)
+  const title = !t ? (durs.length ? `Start ${durs[0].label}` : 'Timer') : t.ringing ? 'Stop' : t.state === 'running' ? 'Pause' : t.state === 'paused' ? 'Resume' : 'Start again'
+  return (
+    <button type="button" className={`Q-stepbar${t ? ` ${t.state}` : ''}${t?.ringing ? ' ringing' : ''}`} onClick={tap} title={title} aria-label={`${title}${name ? ` — ${name}` : ''}`}>
+      <span className="track"><i style={{ width: `${pct}%` }} /></span>
+      {text && <span className="t">{text}</span>}
+    </button>
+  )
+}
