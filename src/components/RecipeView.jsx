@@ -41,6 +41,7 @@ export default function RecipeView({
   // In a cooking session: { factor, progress: { ing, steps }, onFactor, onToggleIng, onToggleStep, onClear, onOpenRecipe, onRemove }.
   // Ticks and the batch size are then the session's — saved, and shared with its shopping list.
   cook = null,
+  onBackToPlan = null, // in a session: chef mode opened from the plan gets an arrow back to it
 }) {
   const canEdit = canEditProp && !guest
   const { settings, update: updateSettings } = useSettings()
@@ -68,6 +69,7 @@ export default function RecipeView({
   const [addingVideo, setAddingVideo] = useState(false)
   const [stepSheet, setStepSheet] = useState(null) // { i } — the step or part held down
   const [chef, setChef] = useState(false) // chef mode: guided, one step at a time
+  const [chefFromPlan, setChefFromPlan] = useState(false)
   const [unfolded, setUnfolded] = useState(() => new Set()) // linked recipes shown open: "i:<line>", "m:<recipe id>"
   const toggleFold = (k) => setUnfolded((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n })
   const press = useRef(null)
@@ -81,6 +83,7 @@ export default function RecipeView({
     let wantChef = false
     try { wantChef = sessionStorage.getItem('qdplus_open_chef') === recipe.id; if (wantChef) sessionStorage.removeItem('qdplus_open_chef') } catch (_) { /* ignore */ }
     setChef(wantChef)
+    setChefFromPlan(wantChef)
     setCustomBaseGrams('')
   }, [recipe.id])
 
@@ -115,6 +118,12 @@ export default function RecipeView({
   // "Hey chef" (components/HeyChef.jsx): open chef mode, scale, read the ingredients.
   const voiceRef = useRef(null)
   voiceRef.current = (d) => {
+    // The plan's "Chef mode" on a step of this recipe (ChefMode goes to the step when it is open).
+    if (d.intent === 'chef-at') {
+      setChefFromPlan(true)
+      if (!chef) { setTab('recipe'); setChef(true); d.handled = true }
+      return
+    }
     if (d.intent === 'chef-open' || ((d.intent === 'chef-next' || d.intent === 'chef-goto') && !chef)) {
       if (!chef) { setTab('recipe'); setChef(true); d.handled = true }
       return
@@ -883,7 +892,8 @@ export default function RecipeView({
       {chef && (
         <ChefMode
           title={viewR.title || 'Recipe'} lang={timerLang} timerBase={timerBase} sections={sections} sources={chefSources}
-          steps={chefSteps} cook={cook} doneSteps={doneSteps} onClose={() => setChef(false)}
+          steps={chefSteps} cook={cook} doneSteps={doneSteps} onClose={() => { setChef(false); setChefFromPlan(false) }}
+          onBack={chefFromPlan && onBackToPlan ? () => { setChef(false); setChefFromPlan(false); onBackToPlan() } : null}
           plans={cookPlans.plans} planPending={cookPlans.pending}
           pro={settings.chefMode !== 'simple'} stats={stepStats} factor={appliedScale?.factor || 1} learn={!guest}
           peek={jan && janOption(settings, 'peek')}

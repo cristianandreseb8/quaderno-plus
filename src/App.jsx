@@ -4,7 +4,7 @@ import { dbDelete, dbInsert, dbUpdate, dbLoad, dbLoadByIds, dbLoadOne, dbLoadPub
 import { readList, writeList } from './lib/listCache.js'
 import { translateRecipe, autoCategorize } from './lib/ai.js'
 import { SettingsContext, applySettings, loadSettings, saveSettings, useSettings } from './lib/settings.js'
-import { setNewPassword, signOut, useAuth } from './lib/auth.js'
+import { confirmSignOut, continueAsGuest, isGuestUser, setNewPassword, signOut, useAuth } from './lib/auth.js'
 import { VISIBILITY, acceptInvite, linkTarget, recipePath } from './lib/sharing.js'
 import {
   LIKED_NAME, addToCollection, createCollection, deleteCollection, loadCollections, loadFavorites, removeFromCollection, renameCollection, setFavorite,
@@ -14,7 +14,7 @@ import GuestBrowser from './components/GuestBrowser.jsx'
 import Modal from './components/ui/Modal.jsx'
 import SideRail from './components/ui/SideRail.jsx'
 import { RecipeTimerBadge, TimerDock, TimersButton } from './components/Timers.jsx'
-import HeyChef, { HeyChefButton } from './components/HeyChef.jsx'
+import HeyChef, { HeyChefButton, sendVoice } from './components/HeyChef.jsx'
 import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
 import { allStepKeys } from './lib/links.js'
@@ -50,6 +50,7 @@ const PdfImport = lazyRetry(() => import('./components/PdfImport.jsx'))
 const ShoppingList = lazyRetry(() => import('./components/session/ShoppingList.jsx'))
 const RecipePicker = lazyRetry(() => import('./components/session/RecipePicker.jsx'))
 const ControlCenter = lazyRetry(() => import('./components/session/ControlCenter.jsx'))
+const FloatingPlan = lazyRetry(() => import('./components/session/FloatingPlan.jsx'))
 const ShareModal = lazyRetry(() => import('./components/ShareModal.jsx'))
 const isPhone = () => window.matchMedia('(max-width: 760px)').matches
 
@@ -596,6 +597,18 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
     toast('Session finished')
   }
 
+  // Chef mode on one task of the plan (it reopens on the step saved for the recipe); its arrow leads
+  // back to the plan. On the recipe already open, chef mode just goes to that step.
+  const chefAt = (id, key, text) => {
+    try {
+      const all = JSON.parse(localStorage.getItem('qdplus_chef_pos') || '{}')
+      all[id] = { i: key, t: String(text || '').slice(0, 40), at: Date.now() }
+      localStorage.setItem('qdplus_chef_pos', JSON.stringify(all))
+    } catch (_) { /* storage unavailable */ }
+    if (view === 'session' && sessSel === id) { sendVoice({ intent: 'chef-at', key }); return }
+    try { sessionStorage.setItem('qdplus_open_chef', id) } catch (_) { /* ignore */ }
+    setSessSel(id)
+  }
   const isOpen = view === 'session' ? !!sessSel : (mode !== 'view' || !!sel)
   const sidebarOpen = settings.sidebar !== false
   toggleSidebarRef.current = () => updateSettings({ sidebar: !sidebarOpen })
@@ -649,9 +662,9 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
       <MenuSep />
       <div className="Q-menu-account">
         {profile?.display_name && <b>{profile.display_name}</b>}
-        <span>{user.email}</span>
+        <span>{isGuestUser(user) ? 'Guest on this device' : user.email}</span>
       </div>
-      <MenuItem onClick={() => signOut()}>Sign out</MenuItem>
+      <MenuItem onClick={() => { if (confirmSignOut(user)) signOut() }}>Sign out</MenuItem>
     </>
   )
 
@@ -811,8 +824,8 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                   onClick={() => setSessSel('plan')} onKeyDown={(e) => { if (e.key === 'Enter') setSessSel('plan') }}
                 >
                   <div className="Q-list-txt">
-                    <h4>Control center</h4>
-                    <span>{sessionEntries.length > 1 ? 'Every task, in parallel' : 'Tasks, timing and deadlines'}</span>
+                    <h4>Plan</h4>
+                    <span>{sessionEntries.length > 1 ? 'Every recipe at once, in order' : 'Tasks, timing and deadlines'}</span>
                   </div>
                 </div>
                 <div className="Q-side-label">Cooking</div>
@@ -877,22 +890,13 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                   <ControlCenter
                     session={session} recipesById={recipesById} library={recipes} change={changeSession}
                     onOpenRecipe={(id) => setSessSel(id)}
-                    onChefAt={(id, key, text) => {
-                      // Chef mode opens on that task (it reopens on the step saved for the recipe).
-                      try {
-                        const all = JSON.parse(localStorage.getItem('qdplus_chef_pos') || '{}')
-                        all[id] = { i: key, t: String(text || '').slice(0, 40), at: Date.now() }
-                        localStorage.setItem('qdplus_chef_pos', JSON.stringify(all))
-                      } catch (_) { /* storage unavailable */ }
-                      try { sessionStorage.setItem('qdplus_open_chef', id) } catch (_) { /* ignore */ }
-                      setSessSel(id)
-                    }}
+                    onChefAt={chefAt}
                   />
                 )}
                 {view === 'session' && cookRecipe && cookRecipe._lite && <div className="Q-view-loading"><div /><div /><div /></div>}
                 {view === 'session' && cookRecipe && !cookRecipe._lite && (
                   <RecipeView
-                    key={'cook-' + cookRecipe.id} {...recipeProps(cookRecipe)}
+                    key={'cook-' + cookRecipe.id} {...recipeProps(cookRecipe)} onBackToPlan={() => setSessSel('plan')}
                     onEdit={() => { switchView('recipes'); setSelId(cookRecipe.id); setMode('edit') }}
                     onCopy={(r, lang) => { switchView('recipes'); copyRecipe(r, lang) }}
                     onSaveVariant={(r, label) => { switchView('recipes'); saveVariant(r, label) }}
@@ -925,6 +929,11 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
             </div>
           </main>
         </div>
+        {view === 'session' && sessionEntries.length > 0 && sessSel !== 'plan' && (
+          <Suspense fallback={null}>
+            <FloatingPlan session={session} recipesById={recipesById} library={recipes} change={changeSession} onOpenPlan={() => setSessSel('plan')} onChefAt={chefAt} />
+          </Suspense>
+        )}
 
         {showAppAI && (
           <div className="Q-drawer-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowAppAI(false) }}>
@@ -1082,7 +1091,12 @@ export default function App() {
       <AuthScreen
         reason={invite ? 'Someone shared a recipe with you. Sign in, or create a free account, to open it.' : null}
         onCancel={browsing ? () => setWantsAuth(false) : null} cancelLabel="Back to public recipes"
-        onGuest={browsing || invite ? null : () => { setGuest(true); setWantsAuth(false) }}
+        onGuest={browsing || invite ? null : async () => {
+          // A guest account with the whole app; while Supabase has guests switched off, browsing only.
+          try { await continueAsGuest() } catch (e) {
+            if (e.code === 'guest-off') { setGuest(true); setWantsAuth(false) } else toast.error(e.message)
+          }
+        }}
       />
     )
   } else {

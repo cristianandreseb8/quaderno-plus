@@ -223,6 +223,15 @@ export const toggleProgress = (recipeId, kind, idx) => (s) => {
   const nextList = list.includes(idx) ? list.filter((i) => i !== idx) : [...list, idx]
   return { ...s, progress: { ...s.progress, [recipeId]: { ...cur, [kind]: nextList } } }
 }
+// Marks steps done (or not), whatever they were before. setSteps puts back a saved list (undo).
+export const setStepsDone = (recipeId, keys, on = true) => (s) => {
+  const cur = s.progress[recipeId] || { ing: [], steps: [] }
+  const list = (cur.steps || []).filter((k) => !keys.includes(k))
+  return { ...s, progress: { ...s.progress, [recipeId]: { ...cur, steps: on ? [...list, ...keys] : list } } }
+}
+export const setSteps = (recipeId, steps) => (s) => ({
+  ...s, progress: { ...s.progress, [recipeId]: { ...(s.progress[recipeId] || { ing: [], steps: [] }), steps: [...steps] } },
+})
 export const clearProgress = (recipeId, kind) => (s) => ({
   ...s, progress: { ...s.progress, [recipeId]: { ...(s.progress[recipeId] || { ing: [], steps: [] }), [kind]: [] } },
 })

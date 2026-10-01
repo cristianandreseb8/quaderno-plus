@@ -168,6 +168,62 @@
 .Q-cc-done-toggle:hover, .Q-cc-tl-toggle:hover { background: var(--hover); color: var(--ink); }
 .Q-cc-done-toggle[aria-expanded="true"] svg, .Q-cc-tl-toggle.open svg { transform: rotate(180deg); }
 .Q-cc-tl-toggle { margin: 18px 0 8px; }
+.Q-cc-done-row { display: flex; align-items: center; gap: 0; }
+.Q-cc-done-row .Q-cc-done-toggle + .Q-cc-done-toggle { margin-left: auto; }
+.Q-cc-nowcard.later .lbl { color: var(--muted); }
+/* A step under way on a timer: the recipe waits, the plan goes on elsewhere. */
+.Q-cc-task.waiting .n { background: transparent; border: 2px dashed hsl(var(--lane)); color: hsl(var(--lane)); }
+.Q-cc-task.waiting .when b { color: hsl(var(--lane)); }
+
+/* ── Cooking now: floats over the session and chef mode ─────────────────────── */
+.Q-float {
+  position: fixed; z-index: 540; right: 16px; bottom: 16px; width: 330px; max-width: calc(100vw - 32px);
+  font-family: var(--sans); color: var(--ink);
+}
+.Q-float.over-chef { bottom: 104px; }
+.Q-float.open {
+  display: flex; flex-direction: column; max-height: min(60vh, 460px);
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; box-shadow: var(--shadow-lg); animation: qpop .14s ease-out;
+}
+.Q-float-head { display: flex; align-items: center; gap: 2px; padding: 8px 6px 4px 16px; }
+.Q-float-head b { font: 700 11px var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.Q-float-head .sp { flex: 1; }
+.Q-float-list { position: relative; list-style: none; margin: 0; padding: 4px 10px 10px; overflow: auto; }
+.Q-float-row { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 6px 4px; border-radius: 10px; }
+.Q-float-row.now { background: hsl(var(--lane) / .1); }
+/* The line from each number to the next: the order, at a glance. */
+.Q-float-row:not(:last-child)::before { content: ''; position: absolute; left: 15px; top: 31px; bottom: -7px; width: 2px; border-radius: 1px; background: var(--rule-strong); }
+.Q-float-row .dot, .Q-float-pill .dot {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-top: 1px;
+  border-radius: 50%; background: var(--surface); border: 2px solid hsl(var(--lane)); color: hsl(var(--lane)); font: 700 11px var(--mono);
+}
+.Q-float-row.now .dot, .Q-float-pill .dot { background: hsl(var(--lane)); color: #fff; }
+.Q-float-row .body { display: grid; gap: 1px; min-width: 0; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.Q-float-row .body:disabled { cursor: default; }
+.Q-float-row .body:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.Q-float-row .rec { font-size: 11.5px; font-weight: 700; color: hsl(var(--lane)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-float-row .step { font-size: 13.5px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.Q-float-row .body:hover .step { text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; }
+.Q-float-row .then { font-size: 11.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-float-row .wait { display: inline-flex; align-items: center; gap: 4px; justify-self: start; padding: 1px 8px; border-radius: 999px; background: hsl(var(--lane) / .12); color: hsl(var(--lane)); font: 600 11.5px var(--mono); }
+.Q-float-row .wait.ringing { animation: qring 1s steps(1) infinite; }
+.Q-float-row .at { padding-top: 3px; font: 600 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
+.Q-float-row.now .at { color: hsl(var(--lane)); }
+.Q-float-pill {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px 7px 8px; border: 1px solid var(--rule); border-radius: 999px;
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-lg); font: 13px var(--sans); cursor: pointer; text-align: left;
+}
+.Q-float-pill .dot { margin: 0; flex-shrink: 0; }
+.Q-float-pill .txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-float-pill .at { font: 600 12px var(--mono); color: hsl(var(--lane)); white-space: nowrap; }
+.Q-float-pill .more { padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font: 600 11px var(--mono); }
+.Q-float-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 700px) {
+  body:has(.Q-float) .Q-pane { padding-bottom: 76px; } /* the end of the page clears the floating line */
+  .Q-float { left: 12px; right: 12px; width: auto; max-width: none; bottom: 12px; }
+  .Q-float.over-chef { bottom: 100px; }
+}
+@media (prefers-reduced-motion: reduce) { .Q-float.open { animation: none; } }
 .Q-plan-row .Q-plan-step i.work { background: hsl(var(--lane, 24 75% 52%)); }
 @media (prefers-reduced-motion: reduce) { .Q-cc-task-body { animation: none; } .Q-cc-bar i { transition: none; } }
 @media (max-width: 640px) {

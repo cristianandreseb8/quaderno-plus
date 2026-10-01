@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, ListChecks, ListOrdered, Mic, MicOff, Pause, Play, Timer as TimerIcon, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, ListChecks, ListOrdered, Mic, MicOff, Pause, Play, Timer as TimerIcon, Volume2, VolumeX, X } from 'lucide-react'
 import {
   addTime, fmtClock, pauseTimer, remaining, resumeTimer, speak, startTimer, stopRinging, stopSpeaking, useTimers, voiceLang,
 } from '../lib/timers.js'
@@ -59,7 +59,7 @@ const ofStep = (key, tkey) => key === tkey || String(key || '').startsWith(`${tk
 // step's time in chef mode is recorded when it is done (Next), to learn from.
 export default function ChefMode({
   title, steps, sections, sources: sourcesProp, plans = {}, planPending = false, lang, timerBase, cook, doneSteps, onTimerOptions, onClose,
-  pro = false, stats = null, factor = 1, learn = true, peek = false,
+  pro = false, stats = null, factor = 1, learn = true, peek = false, onBack = null,
 }) {
   // Back where the recipe was left; otherwise the first step (in a session, the first not done).
   const [start] = useState(() => {
@@ -198,6 +198,7 @@ export default function ChefMode({
     else if (d.intent === 'chef-back') back()
     else if (d.intent === 'chef-repeat') sayStep(pos, true)
     else if (d.intent === 'read-ingredients') sayStep(pos, true, true)
+    else if (d.intent === 'chef-at') { const k = steps.findIndex((x) => String(x.i) === String(d.key)); if (k < 0) return; setPos(k) }
     else if (d.intent === 'chef-goto') setPos(Math.max(0, Math.min(steps.length - 1, (d.n || 1) - 1)))
     else if (d.intent === 'chef-close') onClose()
     else if (d.intent === 'chef-timer') startStepTimer()
@@ -275,6 +276,7 @@ export default function ChefMode({
   return createPortal(
     <div className="Q-chef" role="dialog" aria-label={`Chef mode: ${title}`} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
       <div className="Q-chef-top">
+        {onBack && <button type="button" className="Q-chef-back" onClick={onBack} aria-label="Back to the plan" title="Back to the plan"><ArrowLeft size={18} /><span>Plan</span></button>}
         <div className="Q-chef-title">
           <b>{title}</b>
           <span>{finished ? 'All steps done' : `Step ${pos + 1} of ${steps.length}`}</span>

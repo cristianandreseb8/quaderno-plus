@@ -3,7 +3,7 @@ import { JAN_COLORS, JAN_DEFAULTS, JAN_FONTS, THEMES, TEXT_SIZES, janOption, loa
 import { setVoiceCfg, speak, useTimers, voiceLang } from '../lib/timers.js'
 import { LANGS } from '../lib/constants.js'
 import { INSTALL_HELP, useInstall } from '../lib/install.js'
-import { changeEmail, saveDisplayName, setNewPassword, signOut } from '../lib/auth.js'
+import { changeEmail, confirmSignOut, isGuestUser, saveDisplayName, setNewPassword, signOut } from '../lib/auth.js'
 import { toast } from './ui/Toaster.jsx'
 import { HEY_LANGS } from './HeyChef.jsx'
 import { heyChefSupported, setHeyChef, useHeyChef } from '../lib/heychef.js'
@@ -91,7 +91,7 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
           <div className="Q-set-row">
             <div style={{ flex: 1 }}>
               <div className="Q-set-label">Your name</div>
-              <div className="Q-set-help">Shown to people you share recipes with. Signed in as {user.email}.</div>
+              <div className="Q-set-help">Shown to people you share recipes with. {isGuestUser(user) ? 'You are a guest on this device.' : `Signed in as ${user.email}.`}</div>
             </div>
             <input className="Q-inline-input" style={{ maxWidth: 220 }} value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} disabled={savingName} />
           </div>
@@ -102,10 +102,10 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
             </div>
             <button className="btn ghost sm" onClick={copyInvite}>Copy link</button>
           </div>
-          <AccountSecurity email={user.email} />
+          {isGuestUser(user) ? <KeepGuestWork pending={user.new_email} /> : <AccountSecurity email={user.email} />}
           <div className="Q-set-row">
-            <div><div className="Q-set-label">Sign out</div><div className="Q-set-help">Your recipes stay safe in your account.</div></div>
-            <button className="btn ghost sm" onClick={() => { onClose(); signOut() }}>Sign out</button>
+            <div><div className="Q-set-label">Sign out</div><div className="Q-set-help">{isGuestUser(user) ? 'As a guest, signing out loses what you made here.' : 'Your recipes stay safe in your account.'}</div></div>
+            <button className="btn ghost sm" onClick={() => { if (!confirmSignOut(user)) return; onClose(); signOut() }}>Sign out</button>
           </div>
         </section>
       )}
@@ -238,6 +238,38 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
 }
 
 // Password and email of the signed-in account.
+// A guest keeps everything by turning the guest account into a real one: an email (confirmed from
+// the link sent to it), then a password here.
+function KeepGuestWork({ pending }) {
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function save(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await changeEmail(value)
+      toast.success('Open the link we sent to confirm it — then set a password here', { duration: 9000 })
+      setValue('')
+    } catch (ex) {
+      toast.error(ex.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="Q-set-row">
+      <div>
+        <div className="Q-set-label">Keep your work</div>
+        <div className="Q-set-help">{pending ? `Waiting for you to confirm ${pending} from the link we sent.` : 'You are using Quaderno+ as a guest. Add your email to turn this into your account — everything you made stays.'}</div>
+      </div>
+      <form className="Q-set-form" onSubmit={save}>
+        <input type="email" required value={value} onChange={(e) => setValue(e.target.value)} autoComplete="email" placeholder="Your email" />
+        <button className="btn primary sm" disabled={busy}>{pending ? 'Send again' : 'Add'}</button>
+      </form>
+    </div>
+  )
+}
+
 function AccountSecurity({ email }) {
   const [open, setOpen] = useState(null) // 'password' | 'email'
   const [value, setValue] = useState('')

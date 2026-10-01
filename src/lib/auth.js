@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { storedSession, supabase } from './supabase.js'
+import { setRememberMe, storedSession, supabase } from './supabase.js'
 
 // Session + profile of the signed-in user. Someone signed in on this device gets the workspace
 // straight away from the saved session (Supabase refreshes the token meanwhile, and signs them
@@ -85,6 +85,23 @@ export async function signUp(name, email, password) {
     throw friendly({ message: 'User already registered' })
   }
   return !!data.session
+}
+
+// "Continue as guest": a guest account with everything an account has, kept on this device. It
+// needs "Allow anonymous sign-ins" on in Supabase (Authentication → Sign In / Providers); while it is
+// off the error has code 'guest-off' and the guest only browses public recipes.
+export async function continueAsGuest() {
+  setRememberMe(true)
+  const { error } = await supabase.auth.signInAnonymously()
+  if (!error) return
+  const e = friendly(error)
+  if (/anonymous/i.test(error.message || '')) e.code = 'guest-off'
+  throw e
+}
+export const isGuestUser = (user) => !!user?.is_anonymous
+// A guest's work lives only in that guest account: signing out loses it, so ask first.
+export function confirmSignOut(user) {
+  return !isGuestUser(user) || window.confirm('You are a guest: signing out loses everything you made here, for good.\n\nTo keep it, add your email in Settings → Account first.\n\nSign out anyway?')
 }
 
 export async function signOut() {

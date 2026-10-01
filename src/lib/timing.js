@@ -69,6 +69,9 @@ export function stopWatch(key) {
 export function cancelWatch(key) { watches = watches.filter((x) => x.key !== key); emit() }
 
 // ── Learning ─────────────────────────────────────────────────────────────────
+// Off for now (2026-10-01): the times you took are still recorded, but nothing shows or plans with
+// them until this is developed further — the plan works from what the steps say.
+const USE_LEARNED = false
 let statsVersion = 0
 const textKey = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]+/g, ' ').trim()
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }
@@ -96,7 +99,7 @@ export function useStepStats(recipeIds, enabled = true) {
   const [v, setV] = useState(statsVersion)
   useEffect(() => { const id = setInterval(() => { if (v !== statsVersion) setV(statsVersion) }, 2000); return () => clearInterval(id) }, [v])
   useEffect(() => {
-    if (!enabled || !sig) return undefined
+    if (!USE_LEARNED || !enabled || !sig) return undefined
     let live = true
     loadStepStats(sig.split(',')).then((s) => { if (live) setStats(s) }).catch(() => { /* works without */ })
     return () => { live = false }

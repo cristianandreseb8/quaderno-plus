@@ -1,51 +1,33 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { AlarmClock, Check, ChefHat, ChevronDown, ExternalLink, Pause, Play, RotateCcw, Timer as TimerIcon, Undo2 } from 'lucide-react'
-import { planSession } from '../../lib/planner.js'
-import { flattenSteps } from '../../lib/links.js'
+import { AlarmClock, Check, ChefHat, ChevronDown, ExternalLink, Pause, Play, RotateCcw, SkipForward, Timer as TimerIcon, Undo2 } from 'lucide-react'
 import { findDurations } from '../../lib/durations.js'
-import { parseSections, scaleRecipe } from '../../lib/recipeCalc.js'
+import { parseSections } from '../../lib/recipeCalc.js'
 import { computeStepUses } from '../../lib/stepIngredients.js'
 import { cachedPlan } from '../../lib/cookPlan.js'
-import { clockElapsed, clockRunning, fmtSpan, fmtWatch, startWatch, stopWatch, useStepStats, useWatches, watchElapsed, watchFor } from '../../lib/timing.js'
-import { clockPause, clockReset, clockResume, clockStart, setReadyBy, toggleProgress } from '../../lib/session.js'
-import { fmtClock, remaining, startTimer, useTimers } from '../../lib/timers.js'
+import { clockElapsed, clockRunning, fmtSpan, fmtWatch, startWatch, stopWatch, useWatches, watchElapsed, watchFor } from '../../lib/timing.js'
+import { clockPause, clockReset, clockResume, clockStart, setReadyBy, setSteps, setStepsDone, toggleProgress } from '../../lib/session.js'
+import { fmtClock, remaining, startTimer } from '../../lib/timers.js'
+import { toast } from '../ui/Toaster.jsx'
+import { LANES, clock, stepKeyOfTimer, useSessionPlan, when } from './useSessionPlan.js'
 
-// A colour per recipe, the same in light and dark templates.
-const LANES = ['24 75% 52%', '212 70% 55%', '158 55% 42%', '276 52% 58%', '332 62% 55%', '43 80% 46%']
-const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString()
-const when = (ms, now) => (sameDay(ms, now) ? clock(ms) : `${new Date(ms).toLocaleDateString([], { weekday: 'short' })} ${clock(ms)}`)
 // <input type="datetime-local"> speaks local time without a zone.
 const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fromLocalInput = (v) => (v ? new Date(v).toISOString() : null)
 
-// The session's control center: every recipe's tasks side by side, planned from now with the times
-// learned from your cooking — what to do now, what comes next, when each recipe will be ready (and
-// whether that meets the time you want it), and each task opening up to its ingredients and timers.
+// The session's plan: every recipe's tasks side by side, planned from now with the times the steps
+// give — what to do now, what comes next, when each recipe will be ready (and whether that meets
+// the time you want it), and each task opening up to its ingredients and timers. A step that
+// leaves you waiting (resting, fermenting, baking) lets the plan go straight on with another recipe.
 export default function ControlCenter({ session, recipesById, library, change, onOpenRecipe, onChefAt }) {
-  const entries = (session?.recipes || []).map((e) => ({ raw: recipesById.get(e.id), factor: Number(e.factor) || 1 })).filter((e) => e.raw)
-  const scaled = useMemo(() => entries.map((e) => ({ recipe: e.factor !== 1 ? scaleRecipe(e.raw, e.factor) : e.raw, factor: e.factor })),
-    [entries.map((e) => `${e.raw.id}:${e.raw.updated_at}:${e.factor}`).join(',')])
-  const doneSig = JSON.stringify(entries.map((e) => session?.progress?.[e.raw.id]?.steps || []))
-  const done = useMemo(() => Object.fromEntries(entries.map((e) => [e.raw.id, new Set(session?.progress?.[e.raw.id]?.steps || [])])), [doneSig])
-  const stats = useStepStats(entries.map((e) => e.raw.id).concat(library.map((r) => r.id)).slice(0, 400))
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(id) }, [])
-  const dueSig = JSON.stringify(session?.plan || {})
-  const due = useMemo(() => Object.fromEntries(entries.map((e) => {
-    const iso = session?.plan?.recipes?.[e.raw.id]?.ready_by || session?.plan?.ready_by
-    return [e.raw.id, iso ? Date.parse(iso) - now : null]
-  })), [dueSig, now, entries.length])
-  const plan = useMemo(() => planSession(scaled, library, stats, { done, due }), [scaled, stats, done, library, due])
+  const { entries, scaled, steps, done, started, plan, now, timers, tnow } = useSessionPlan({ session, recipesById, library, change })
   const [open, setOpen] = useState(null) // `${recipe id}|${step key}` of the task shown open
   const [showTimeline, setShowTimeline] = useState(false)
-  const { timers, now: tnow } = useTimers()
 
   const readyAll = session?.plan?.ready_by || null
   const allDone = now + plan.total
-  const doNow = plan.items.filter((it) => it.start <= 60000)
+  const first = plan.items[0]
   const waitingNow = timers.filter((t) => (t.state === 'running' || t.ringing) && entries.some((e) => t.recipeId === e.raw.id))
-  const totalSteps = entries.reduce((n, e, i) => n + flattenSteps(scaled[i].recipe, library).length, 0)
+  const totalSteps = entries.reduce((n, e) => n + (steps[e.raw.id]?.length || 0), 0)
   const doneSteps = entries.reduce((n, e) => n + (done[e.raw.id]?.size || 0), 0)
 
   // Deadlines: when a recipe will be ready by this plan, against when it should be.
@@ -62,10 +44,10 @@ export default function ControlCenter({ session, recipesById, library, change, o
     entries.forEach((e) => {
       const s = status(e.raw.id)
       if (!s.due || !plan.alone[e.raw.id]) return
-      const started = done[e.raw.id]?.size > 0
-      if (s.startBy < now) out.push({ kind: 'late', text: `${e.raw.title} still needs ${fmtSpan(plan.alone[e.raw.id])} even on its own — it can’t be ready before ${when(now + plan.alone[e.raw.id], now)}. Start it now, or move its time.` })
+      const going = done[e.raw.id]?.size > 0 || !!started[e.raw.id]
+      if (s.startBy < now) out.push({ kind: 'late', text: `${e.raw.title} still needs ${fmtSpan(plan.alone[e.raw.id])} even on its own — it can’t be ready before ${when(now + plan.alone[e.raw.id], now)}. Start it now, start it from a later step, or move its time.` })
       else if (s.late) out.push({ kind: 'late', text: `${e.raw.title} would be ready at ${when(s.end, now)}, ${fmtSpan(-s.slack)} after ${when(s.due, now)}: the other recipes need you at the same time. Move one of the times, or get a hand.` })
-      else if (s.startBy > now + 5 * 60000) out.push({ kind: 'plan', text: `${e.raw.title}: ${started ? 'pick it up again' : 'start'} by ${when(s.startBy, now)} at the latest to have it ready at ${when(s.due, now)}.` })
+      else if (s.startBy > now + 5 * 60000) out.push({ kind: 'plan', text: `${e.raw.title}: ${going ? 'pick it up again' : 'start'} by ${when(s.startBy, now)} at the latest to have it ready at ${when(s.due, now)}.` })
     })
     plan.tips.slice(1).forEach((t) => out.push({ kind: 'tip', text: `${when(now + t.at, now)} — ${t.text}` }))
     return out.slice(0, 5)
@@ -74,7 +56,7 @@ export default function ControlCenter({ session, recipesById, library, change, o
   if (!entries.length) {
     return (
       <div className="Q-cc">
-        <div className="Q-sess-head"><div><h1>Control center</h1><p>Add recipes to the session to see their tasks here, side by side.</p></div></div>
+        <div className="Q-sess-head"><div><h1>Plan</h1><p>Add recipes to the session to see their tasks here, side by side.</p></div></div>
       </div>
     )
   }
@@ -82,10 +64,10 @@ export default function ControlCenter({ session, recipesById, library, change, o
     <div className="Q-cc">
       <div className="Q-cc-head">
         <div>
-          <h1>Control center</h1>
+          <h1>Plan</h1>
           <p>
-            {doneSteps} of {totalSteps} tasks done · {plan.items.length ? <>all done about <b>{when(allDone, now)}</b></> : 'all done'}
-            {readyAll && plan.items.length > 0 && <span className={allDone > Date.parse(readyAll) ? 'late' : 'ok'}> · {allDone > Date.parse(readyAll) ? `${fmtSpan(allDone - Date.parse(readyAll))} late` : 'on time'}</span>}
+            {doneSteps} of {totalSteps} tasks done · {plan.total > 0 ? <>all done about <b>{when(allDone, now)}</b></> : 'all done'}
+            {readyAll && plan.total > 0 && <span className={allDone > Date.parse(readyAll) ? 'late' : 'ok'}> · {allDone > Date.parse(readyAll) ? `${fmtSpan(allDone - Date.parse(readyAll))} late` : 'on time'}</span>}
           </p>
         </div>
         <label className="Q-cc-due">
@@ -96,22 +78,22 @@ export default function ControlCenter({ session, recipesById, library, change, o
 
       <SessionClock session={session} change={change} />
 
-      {(doNow.length > 0 || waitingNow.length > 0) && (
+      {(first || waitingNow.length > 0) && (
         <section className="Q-cc-now" aria-label="Do now">
-          {doNow.slice(0, 1).map((it) => (
-            <div key={`${it.rid}|${it.key}`} className="Q-cc-nowcard" style={{ '--lane': LANES[it.ri % LANES.length] }}>
-              <div className="lbl">Do now</div>
-              <div className="what"><span className="rec">{it.title}{it.sub ? ` · ${it.sub}` : ''}</span><span className="txt">{it.text}</span></div>
-              <div className="meta">{fmtSpan(it.workEnd - it.start)} hands-on{it.wait ? ` · then ${fmtSpan(it.wait)} waiting` : ''}{it.learned ? ' · your time' : ''}</div>
+          {first && (
+            <div key={`${first.rid}|${first.key}`} className={`Q-cc-nowcard${first.start > 60000 ? ' later' : ''}`} style={{ '--lane': LANES[first.ri % LANES.length] }}>
+              <div className="lbl">{first.start <= 60000 ? 'Do now' : `Nothing to do until ${when(now + first.start, now)} — then`}</div>
+              <div className="what"><span className="rec">{first.title}{first.sub ? ` · ${first.sub}` : ''}</span><span className="txt">{first.text}</span></div>
+              <div className="meta">{fmtSpan(first.workEnd - first.start)} hands-on{first.wait ? ` · then ${fmtSpan(first.wait)} waiting — the plan goes on with the other recipes` : ''}</div>
               <div className="acts">
-                {findDurations(it.text).slice(0, 1).map((d) => (
-                  <button key={d.ms} className="btn primary sm" onClick={() => startTimer({ key: `${it.tkey}:${d.ms}`, label: it.text.slice(0, 60), name: it.title, duration: d.ms, recipeId: it.rid, recipeTitle: it.title })}><TimerIcon size={14} /> Start {d.label}</button>
+                {findDurations(first.text).slice(0, 1).map((d) => (
+                  <button key={d.ms} className="btn primary sm" onClick={() => startTimer({ key: `${first.tkey}:${d.ms}`, label: first.text.slice(0, 60), name: first.title, duration: d.ms, recipeId: first.rid, recipeTitle: first.title })}><TimerIcon size={14} /> Start {d.label}</button>
                 ))}
-                <button className="btn ghost sm" onClick={() => change(toggleProgress(it.rid, 'steps', it.key))}><Check size={14} /> Done</button>
-                <button className="btn ghost sm" onClick={() => onChefAt(it.rid, it.key, it.text)}><ChefHat size={14} /> Chef mode</button>
+                <button className="btn ghost sm" onClick={() => change(setStepsDone(first.rid, [first.key]))}><Check size={14} /> Done</button>
+                <button className="btn ghost sm" onClick={() => onChefAt(first.rid, first.key, first.text)}><ChefHat size={14} /> Chef mode</button>
               </div>
             </div>
-          ))}
+          )}
           {waitingNow.length > 0 && (
             <div className="Q-cc-waiting" aria-label="Running">
               {waitingNow.map((t) => <span key={t.id} className={t.ringing ? 'ringing' : ''}><TimerIcon size={12} />{t.name || t.label} · {t.ringing ? 'time’s up' : fmtClock(remaining(t, tnow))}</span>)}
@@ -130,8 +112,8 @@ export default function ControlCenter({ session, recipesById, library, change, o
         {entries.map((e, ri) => (
           <Lane
             key={e.raw.id} ri={ri} raw={e.raw} recipe={scaled[ri].recipe} factor={e.factor} library={library} plan={plan} done={done[e.raw.id]}
-            status={status(e.raw.id)} now={now} open={open} setOpen={setOpen} change={change} timers={timers} tnow={tnow} session={session}
-            onOpenRecipe={onOpenRecipe} onChefAt={onChefAt}
+            steps={steps[e.raw.id] || []} status={status(e.raw.id)} now={now} open={open} setOpen={setOpen} change={change} timers={timers} tnow={tnow}
+            session={session} onOpenRecipe={onOpenRecipe} onChefAt={onChefAt}
           />
         ))}
       </div>
@@ -145,9 +127,8 @@ export default function ControlCenter({ session, recipesById, library, change, o
 }
 
 // One recipe: its deadline, when it will be ready, and its tasks in order.
-function Lane({ ri, raw, recipe, factor, library, plan, done, status, now, open, setOpen, change, timers, tnow, session, onOpenRecipe, onChefAt }) {
+function Lane({ ri, raw, recipe, factor, library, plan, done, steps, status, now, open, setOpen, change, timers, tnow, session, onOpenRecipe, onChefAt }) {
   const headId = useId()
-  const steps = useMemo(() => flattenSteps(recipe, library), [recipe, library])
   const planned = new Map(plan.items.filter((it) => it.rid === raw.id).map((it) => [String(it.key), it]))
   const todo = steps.filter((s) => !done?.has(s.key))
   const finished = steps.filter((s) => done?.has(s.key))
@@ -158,6 +139,20 @@ function Lane({ ri, raw, recipe, factor, library, plan, done, status, now, open,
     change(toggleProgress(raw.id, 'steps', s.key))
     setOpen(null)
     if (!isDone) setTimeout(() => listRef.current?.querySelector('.Q-cc-task-head')?.focus(), 0)
+  }
+  // Start the recipe at this step: everything before it counts as done (the refreshes made days
+  // ago, a dough already in the fridge).
+  const startHere = (s) => {
+    const before = steps.slice(0, steps.findIndex((x) => x.key === s.key)).filter((x) => !done?.has(x.key)).map((x) => x.key)
+    if (!before.length) return
+    const prev = [...(done || [])]
+    change(setStepsDone(raw.id, before))
+    toast(`${raw.title} starts at step ${s.n}`, { action: { label: 'Undo', onClick: () => change(setSteps(raw.id, prev)) } })
+  }
+  const startOver = () => {
+    const prev = [...(done || [])]
+    change(setSteps(raw.id, []))
+    toast(`${raw.title}: every step to do again`, { action: { label: 'Undo', onClick: () => change(setSteps(raw.id, prev)) } })
   }
   const due = session?.plan?.recipes?.[raw.id]?.ready_by || null
   // The ingredients each step uses (the same reading as chef mode), worked out when a task opens.
@@ -180,40 +175,45 @@ function Lane({ ri, raw, recipe, factor, library, plan, done, status, now, open,
     const own = typeof s.key === 'number'
     const srcIdx = own ? String(s.key) : String(s.key).split(':').pop()
     const tkey = own ? `${raw.id}:step:${s.key}` : `${raw.id}:${s.src.id}:step:${srcIdx}`
-    const t = timers.find((x) => (x.key === tkey || String(x.key || '').startsWith(`${tkey}:`)) && x.state !== 'idle' && x.state !== 'done')
+    const t = timers.find((x) => x.state !== 'idle' && stepKeyOfTimer(raw.id, x.key) === String(s.key))
+    const waiting = !isDone && t && (t.state === 'running' || t.state === 'paused')
     const isOpen = open === id
     const wkey = `w:${s.src.id}:${srcIdx}`
+    const k = steps.findIndex((x) => x.key === s.key)
+    const canStartHere = !isDone && steps.slice(0, k).some((x) => !done?.has(x.key))
     return (
-      <li key={id} className={`Q-cc-task${isDone ? ' done' : ''}${isOpen ? ' open' : ''}${it && it.start <= 60000 && !isDone ? ' now' : ''}`}>
+      <li key={id} className={`Q-cc-task${isDone ? ' done' : ''}${isOpen ? ' open' : ''}${waiting ? ' waiting' : ''}${it && it.start <= 60000 && !isDone ? ' now' : ''}`}>
         <button type="button" className="Q-cc-task-head" onClick={() => setOpen(isOpen ? null : id)} aria-expanded={isOpen} aria-controls={`${id}-body`}>
           <span className="n" aria-hidden="true">{isDone ? <Check size={13} /> : s.n}</span>
           <span className="txt">{s.src.title ? <em>{s.src.title} · </em> : null}{s.text}</span>
           <span className="when">
-            {isDone ? 'done' : t ? <b>{t.ringing ? 'time’s up' : fmtClock(remaining(t, tnow))}</b> : it ? (it.start <= 60000 ? 'now' : when(now + it.start, now)) : ''}
+            {isDone ? 'done' : t ? <b>{t.ringing || t.state === 'done' ? 'time’s up' : fmtClock(remaining(t, tnow))}</b> : it ? (it.start <= 60000 ? 'now' : when(now + it.start, now)) : ''}
           </span>
         </button>
         {isOpen && (
           <div className="Q-cc-task-body" id={`${id}-body`} role="region" aria-label={`Step ${s.n}`}>
-            {it && !isDone && (
+            {waiting && <div className="Q-cc-task-meta">Under way — the plan goes on with the other recipes until the timer ends.</div>}
+            {it && !isDone && !waiting && (
               <div className="Q-cc-task-meta">
-                {it.start <= 60000 ? 'Now' : `At ${when(now + it.start, now)}`} · {fmtSpan(it.workEnd - it.start)} hands-on{it.wait ? ` + ${fmtSpan(it.wait)} waiting` : ''}{it.learned ? ' · your usual time' : ''}
+                {it.start <= 60000 ? 'Now' : `At ${when(now + it.start, now)}`} · {fmtSpan(it.workEnd - it.start)} hands-on{it.wait ? ` + ${fmtSpan(it.wait)} waiting` : ''}
               </div>
             )}
             <p className="full">{s.text}</p>
             {uses?.get(String(s.key))?.length > 0 && (
               <ul className="Q-cc-ings" aria-label="Ingredients for this step">
-                {uses.get(String(s.key)).map((u, k) => (
-                  <li key={k} className={u.made ? 'made' : ''}><b>{u.qty || ''}</b><span>{u.made ? '↳ ' : ''}{u.d.name}{u.note && <small>{u.note}</small>}</span></li>
+                {uses.get(String(s.key)).map((u, j) => (
+                  <li key={j} className={u.made ? 'made' : ''}><b>{u.qty || ''}</b><span>{u.made ? '↳ ' : ''}{u.d.name}{u.note && <small>{u.note}</small>}</span></li>
                 ))}
               </ul>
             )}
             <div className="Q-cc-task-acts">
-              {!isDone && findDurations(s.text).slice(0, 2).map((d) => (
+              {!isDone && !waiting && findDurations(s.text).slice(0, 2).map((d) => (
                 <button key={d.ms} className="btn primary sm" onClick={() => startTimer({ key: `${tkey}:${d.ms}`, label: s.text.slice(0, 60), name: raw.title, duration: d.ms, recipeId: raw.id, recipeTitle: raw.title })}>
                   <TimerIcon size={14} /> {d.label}
                 </button>
               ))}
               <button className="btn ghost sm" onClick={() => toggleDone(s, isDone)}>{isDone ? <><Undo2 size={14} /> Not done</> : <><Check size={14} /> Done</>}</button>
+              {canStartHere && <button className="btn ghost sm" onClick={() => startHere(s)} title="Every step before this one counts as done"><SkipForward size={14} /> Start here</button>}
               {!isDone && <WatchButton wkey={wkey} info={{ key: wkey, recipeId: s.src.id, stepKey: srcIdx, stepText: s.text, sessionId: session?.id || null, factor }} />}
               <button className="btn ghost sm" onClick={() => onChefAt(raw.id, s.key, s.text)}><ChefHat size={14} /> Chef mode</button>
               <button className="btn ghost sm" onClick={() => onOpenRecipe(raw.id)}><ExternalLink size={14} /> Recipe</button>
@@ -247,7 +247,10 @@ function Lane({ ri, raw, recipe, factor, library, plan, done, status, now, open,
       </ol>
       {finished.length > 0 && (
         <>
-          <button type="button" className="Q-cc-done-toggle" onClick={() => setShowDone((v) => !v)} aria-expanded={showDone}>{finished.length} done <ChevronDown size={13} /></button>
+          <div className="Q-cc-done-row">
+            <button type="button" className="Q-cc-done-toggle" onClick={() => setShowDone((v) => !v)} aria-expanded={showDone}>{finished.length} done <ChevronDown size={13} /></button>
+            <button type="button" className="Q-cc-done-toggle" onClick={startOver}>Start over</button>
+          </div>
           {showDone && <ol className="Q-cc-tasks">{finished.map((s) => card(s, true))}</ol>}
         </>
       )}
@@ -286,7 +289,7 @@ function SessionClock({ session, change }) {
 function Timeline({ entries, plan, now }) {
   const scale = plan.total > 0 ? 100 / plan.total : 0
   const hours = Math.ceil(plan.total / 3600000)
-  const every = plan.total > 6 * 3600000 ? 2 : 1
+  const every = Math.max(1, Math.ceil(hours / 12))
   return (
     <div className="Q-plan-gantt">
       <div className="Q-plan-axis">

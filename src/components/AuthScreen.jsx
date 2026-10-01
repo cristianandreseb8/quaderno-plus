@@ -9,6 +9,7 @@ import { rememberMe, setRememberMe } from '../lib/supabase.js'
 const SPAM_HINT = 'It can take a minute. Not there? Look in the spam or promotions folder — it comes from noreply@mail.app.supabase.io.'
 
 export default function AuthScreen({ reason, onCancel, cancelLabel, onGuest }) {
+  const [guesting, setGuesting] = useState(false)
   const [mode, setMode] = useState('signin') // signin | signup | reset | link
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -139,8 +140,8 @@ export default function AuthScreen({ reason, onCancel, cancelLabel, onGuest }) {
         </div>
         {onCancel && <button type="button" className="Q-auth-cancel" onClick={onCancel}>{cancelLabel || 'Back'}</button>}
         {onGuest && mode === 'signin' && (
-          <button type="button" className="Q-auth-guest" onClick={onGuest}>
-            Continue as guest<span>Browse public recipes without an account</span>
+          <button type="button" className="Q-auth-guest" disabled={guesting} onClick={async () => { setGuesting(true); try { await onGuest() } finally { setGuesting(false) } }}>
+            {guesting ? <Loader2 size={15} className="spin" /> : 'Continue as guest'}<span>Use the whole app without an account</span>
           </button>
         )}
       </form>
