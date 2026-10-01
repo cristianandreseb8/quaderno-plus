@@ -7,7 +7,8 @@ import {
 import { splitIngLine } from '../lib/recipeCalc.js'
 import { buildLines, computeStepUses, partIndexOf, stepIndex } from '../lib/stepIngredients.js'
 import { recordStepTime, typicalMs } from '../lib/timing.js'
-import { NextUp, StepClock, StepsRail, highlight, useVoiceCommands, voiceCommandsSupported } from './ChefPro.jsx'
+import { NextUp, StepClock, StepsRail, highlight } from './ChefPro.jsx'
+import { heyChefSupported, setHeyChef, useHeyChef } from '../lib/heychef.js'
 import { toast } from './ui/Toaster.jsx'
 
 // Words the guide says, in the recipe's language (the step text is read in it too).
@@ -148,7 +149,6 @@ export default function ChefMode({
   useEffect(() => { arrived.current = { pos, at: Date.now() } }, [pos])
   const typicalOf = (s) => (stats ? typicalMs(stats, srcId(s), String(stepIndex(s)), s.text) : null)
   const [rail, setRail] = useState(false)
-  const [listen, setListen] = useState(false)
   // Remember the step; a finished recipe starts from the top next time.
   useEffect(() => {
     saveStep(recipeId, pos >= steps.length ? null : steps[pos])
@@ -186,11 +186,26 @@ export default function ChefMode({
     if (!d) { onTimerOptions(step); return }
     startTimer({ key: `${step.info.tkey}:${d.ms}`, label: step.info.label, name: step.info.name, duration: d.ms, ...timerBase })
   }
-  const voice = useVoiceCommands(pro && listen, lang, {
-    next, back, repeat: () => sayStep(pos, true), timer: startStepTimer,
-    stop: () => { stopSpeaking(); timers.filter((t) => t.ringing).forEach((t) => stopRinging(t.id)) },
-    denied: () => { setListen(false); toast.error('The microphone is not allowed for this site.') },
-  })
+  // Voice: "Hey chef" (components/HeyChef.jsx) sends the step commands here; while chef mode is
+  // open they work without "hey chef" too ("next", "back", "repeat", "step 4").
+  const hey = useHeyChef()
+  const voiceRef = useRef(null)
+  voiceRef.current = (d) => {
+    if (d.intent === 'chef-next') next()
+    else if (d.intent === 'chef-back') back()
+    else if (d.intent === 'chef-repeat') sayStep(pos, true)
+    else if (d.intent === 'chef-goto') setPos(Math.max(0, Math.min(steps.length - 1, (d.n || 1) - 1)))
+    else if (d.intent === 'chef-close') onClose()
+    else if (d.intent === 'chef-timer') startStepTimer()
+    else if (d.intent === 'chef-open') { /* already open */ } else return
+    d.handled = true
+  }
+  useEffect(() => {
+    setHeyChef({ chefOpen: true })
+    const on = (e) => voiceRef.current?.(e.detail)
+    window.addEventListener('qdplus:voice', on)
+    return () => { window.removeEventListener('qdplus:voice', on); setHeyChef({ chefOpen: false }) }
+  }, [])
 
   // Swipe left for the next step, right for the previous one.
   // (Also over the step text, which reads itself aloud on a tap — but not after a swipe.)
@@ -263,13 +278,13 @@ export default function ChefMode({
         {pro && (
           <button className={`Q-icon-btn${rail ? ' on' : ''}`} onClick={() => setRail((v) => !v)} title="All the steps (S)" aria-label="All the steps" aria-pressed={rail}><ListOrdered size={19} /></button>
         )}
-        {pro && voiceCommandsSupported() && (
+        {pro && heyChefSupported() && (
           <button
-            className={`Q-icon-btn${listen ? ' on' : ''}${voice.heard ? ' heard' : ''}`} onClick={() => setListen((v) => !v)}
-            title={listen ? 'Listening: say “next”, “back”, “repeat”, “timer” or “stop”' : 'Hands-free: control it with your voice'} aria-pressed={listen}
-            aria-label={listen ? 'Stop listening' : 'Control with your voice'}
+            className={`Q-icon-btn${hey.on ? ' on' : ''}${hey.awake ? ' heard' : ''}`} onClick={() => setHeyChef({ on: !hey.on })}
+            title={hey.on ? 'Listening: say “next”, “back”, “repeat”, “step 4” — or “Hey chef…” for anything' : 'Hands-free: control it with your voice'} aria-pressed={hey.on}
+            aria-label={hey.on ? 'Stop listening' : 'Control with your voice'}
           >
-            {listen ? <Mic size={19} /> : <MicOff size={19} />}
+            {hey.on ? <Mic size={19} /> : <MicOff size={19} />}
           </button>
         )}
         <button className={`Q-icon-btn${voiceOn ? ' on' : ''}`} onClick={toggleVoice} title={voiceOn ? 'Voice on: steps are read aloud' : 'Voice off'} aria-label={voiceOn ? 'Turn the voice off' : 'Read the steps aloud'}>

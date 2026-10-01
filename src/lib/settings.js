@@ -82,6 +82,7 @@ export const DEFAULTS = {
   exportNotes: false,
   proofread: true, // spelling underlines and the AI "Check spelling" button in the editor
   chefMode: 'pro', // 'pro' (steps overview, next step, step clock, voice commands…) or 'simple'
+  heyChef: {}, // { auto: start listening when the app opens, lang: 'auto' | 'en-US' | 'es-ES' …, speak: answer out loud }
   jan: {}, // "Jan" made yours: { colors: { bg, surface, ink, muted, line, accent, bar }, fonts: { heading, body, numbers }, aligned, season, peek, region }
   sidebar: true,
   sideWidth: null, // px, once the list has been resized by dragging its edge

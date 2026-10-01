@@ -5,6 +5,8 @@ import { LANGS } from '../lib/constants.js'
 import { INSTALL_HELP, useInstall } from '../lib/install.js'
 import { changeEmail, saveDisplayName, setNewPassword, signOut } from '../lib/auth.js'
 import { toast } from './ui/Toaster.jsx'
+import { HEY_LANGS } from './HeyChef.jsx'
+import { heyChefSupported, setHeyChef, useHeyChef } from '../lib/heychef.js'
 import { useEffect, useState } from 'react'
 
 function ThemeCard({ theme, active, onPick }) {
@@ -164,6 +166,8 @@ export default function SettingsModal({ onClose, uncategorizedCount, categorizin
           </div>
         </div>
       </section>
+
+      <HeyChefSettings />
 
       <VoiceSettings />
 
@@ -334,5 +338,56 @@ function JanSettings() {
         </div>
       )}
     </div>
+  )
+}
+
+// "Hey chef": voice commands anywhere in the app.
+const HEY_EXAMPLES = [
+  'open chef mode', 'next step', 'go to step 4', 'open the panettone recipe', 'add flan batter to my session',
+  'add 200 grams of flour to my shopping list', '10 minute timer', 'pause the timer', 'continue the timer', 'timer off',
+  'measure my timing', 'stop measuring', 'double the recipe', 'read the ingredients', 'what’s 54 plus 100',
+  'divide 2345 into 5450', '20 percent of 340', 'how long should I bake this for?', 'create a recipe for baguette',
+  'what’s the origin of vanilla', 'open my shopping list',
+]
+function HeyChefSettings() {
+  const { settings, update } = useSettings()
+  const st = useHeyChef()
+  const hey = settings.heyChef || {}
+  const set = (patch) => update({ heyChef: { ...hey, ...patch } })
+  if (!heyChefSupported()) {
+    return (
+      <section className="Q-set-sec">
+        <h3>Hey chef</h3>
+        <p className="Q-set-help">Voice commands need a browser that can listen (Chrome, Edge, Safari). This one cannot.</p>
+      </section>
+    )
+  }
+  return (
+    <section className="Q-set-sec">
+      <h3>Hey chef</h3>
+      <label className="Q-set-row Q-set-check">
+        <div><div className="Q-set-label">Listening now</div><div className="Q-set-help">Say “Hey chef” and what you need. Also the microphone at the top of the app.</div></div>
+        <input type="checkbox" className="Q-switch" checked={!!st.on} onChange={(e) => setHeyChef({ on: e.target.checked })} />
+      </label>
+      <label className="Q-set-row Q-set-check">
+        <div><div className="Q-set-label">Listen from the start</div><div className="Q-set-help">Turns Hey chef on whenever the app opens on this device.</div></div>
+        <input type="checkbox" className="Q-switch" checked={!!hey.auto} onChange={(e) => set({ auto: e.target.checked })} />
+      </label>
+      <label className="Q-set-row Q-set-check">
+        <div><div className="Q-set-label">Answer out loud</div><div className="Q-set-help">Hey chef says its answers; otherwise they only show on screen.</div></div>
+        <input type="checkbox" className="Q-switch" checked={hey.speak !== false} onChange={(e) => set({ speak: e.target.checked })} />
+      </label>
+      <div className="Q-set-row">
+        <div><div className="Q-set-label">Language</div><div className="Q-set-help">The language you speak to it in (“Hey chef” in English, “Oye chef” in Spanish…).</div></div>
+        <select className="Q-select" value={hey.lang || 'auto'} onChange={(e) => set({ lang: e.target.value })}>
+          {HEY_LANGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+      <details className="Q-hey-examples">
+        <summary>What you can say</summary>
+        <ul>{HEY_EXAMPLES.map((x) => <li key={x}>“Hey chef, {x}”</li>)}</ul>
+        <p className="Q-set-help">Anything else is answered by the AI, with the recipe on screen in mind. In chef mode, “next”, “back”, “repeat” and “step 4” work without “Hey chef”.</p>
+      </details>
+    </section>
   )
 }

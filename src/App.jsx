@@ -14,11 +14,12 @@ import GuestBrowser from './components/GuestBrowser.jsx'
 import Modal from './components/ui/Modal.jsx'
 import SideRail from './components/ui/SideRail.jsx'
 import { RecipeTimerBadge, TimerDock, TimersButton } from './components/Timers.jsx'
+import HeyChef, { HeyChefButton } from './components/HeyChef.jsx'
 import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
 import { allStepKeys } from './lib/links.js'
 import { savedFactor } from './lib/scales.js'
-import { addRecipe, buildShoppingList, clearProgress, removeRecipe, resetTicks, setFactor, toggleProgress, useSession } from './lib/session.js'
+import { addExtra, addRecipe, buildShoppingList, clearProgress, removeRecipe, resetTicks, setFactor, toggleProgress, useSession } from './lib/session.js'
 import { INSTALL_HELP, useInstall } from './lib/install.js'
 
 // After a redeploy, chunk filenames change and a client that loaded the old index.html
@@ -668,6 +669,7 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
             </button>
           )}
           <div className="Q-top-right">
+            <HeyChefButton />
             <TimersButton />
             <button className="Q-hbtn Q-top-wide" onClick={() => setShowAppAI(true)}>Assistant</button>
             <Menu className="Q-top-wide" width={200} trigger={(p) => <button className="Q-hbtn icon" onClick={p.toggle} aria-label="More" title="More"><MoreHorizontal size={18} /></button>}>
@@ -951,6 +953,23 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
           </Suspense>
         )}
         <TimerDock />
+        <HeyChef
+          recipes={recipes}
+          current={view === 'recipes' ? (mode === 'view' ? sel : null) : cookRecipe}
+          onOpenRecipe={(id) => openRecipe(id)}
+          onAddToSession={(id) => { if (!sessionIds.has(id)) toggleInSession(id, true) }}
+          onAddShopping={(text) => changeSession(addExtra(text))}
+          onGoShopping={() => { switchView('session'); setSessSel('shopping') }}
+          onGoSession={() => { switchView('session'); setSessSel('plan') }}
+          onCreateRecipe={async (r) => {
+            switchView('recipes')
+            await saveRecipe({
+              title: r.title || 'New recipe', category: r.category || '', time: r.time || '', servings: r.servings || '', notes: r.notes || '',
+              source: 'Hey chef (AI)', notes_pad: '', thumbnail: '', source_photos: [], ingredients: r.ingredients || [], steps: r.steps || [],
+              id_data: '', media_library: '', fixed_lang: null, copied_from: null, createdAt: Date.now(), videos: [],
+            })
+          }}
+        />
         {nameModal && (
           <NameModal
             title={nameModal.kind === 'rename' ? 'Rename collection' : 'New collection'}

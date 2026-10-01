@@ -221,3 +221,20 @@
 .Q-jan-fonts { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
 .Q-jan-font { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .Q-jan-font .Q-select { min-width: 170px; font-size: 14px; }
+
+/* Hey chef: the listening indicator (bottom left) and its header button */
+.Q-hey { position: fixed; left: 16px; bottom: 16px; z-index: 620; display: flex; align-items: center; gap: 10px; max-width: min(460px, calc(100vw - 32px)); padding: 8px 14px 8px 8px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-lg); border: 1px solid var(--rule); font-size: 13.5px; color: var(--ink); transition: box-shadow .2s, border-color .2s; }
+.Q-hey.awake { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-lg); }
+.Q-hey-mic { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border: none; border-radius: 50%; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+.Q-hey.awake .Q-hey-mic { animation: qhey 1.2s ease-in-out infinite; }
+@keyframes qhey { 50% { transform: scale(1.12); } }
+.Q-hey-txt { min-width: 0; display: flex; flex-direction: column; gap: 1px; line-height: 1.35; }
+.Q-hey-txt .hint { color: var(--muted); }
+.Q-hey-txt .heard { color: var(--muted); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Q-hey-txt .reply { color: var(--ink); }
+.Q-hey-txt .measure { font: 600 12px var(--mono); color: var(--accent); }
+.Q-hey-btn.on { color: var(--accent); }
+.Q-hey-examples { margin-top: 8px; font-size: 13px; }
+.Q-hey-examples summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.Q-hey-examples ul { margin: 8px 0; padding-left: 18px; columns: 2; column-gap: 24px; color: var(--muted); }
+@media (max-width: 640px) { .Q-hey-examples ul { columns: 1; } .Q-hey { bottom: calc(12px + env(safe-area-inset-bottom)); } }

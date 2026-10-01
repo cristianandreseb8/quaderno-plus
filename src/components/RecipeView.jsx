@@ -18,6 +18,7 @@ import VideoBlock from './VideoBlock.jsx'
 import NotesPanel from './NotesPanel.jsx'
 import AIAssistant from './AIAssistant.jsx'
 import { StepBar, TimerChip, TimerMenu, TimerPresets, WatchChip } from './Timers.jsx'
+import { speak } from '../lib/timers.js'
 import { fmtSpan, fmtWatch, startWatch, stopWatch, typicalMs, useStepStats, watchElapsed, watchFor } from '../lib/timing.js'
 import { findDurations } from '../lib/durations.js'
 import { componentsOf, flattenSteps, linkFactor, resolveLink } from '../lib/links.js'
@@ -107,6 +108,31 @@ export default function RecipeView({
     if (!past.length) return
     commitScale(past[past.length - 1], past.slice(0, -1))
   }
+  // "Hey chef" (components/HeyChef.jsx): open chef mode, scale, read the ingredients.
+  const voiceRef = useRef(null)
+  voiceRef.current = (d) => {
+    if (d.intent === 'chef-open' || ((d.intent === 'chef-next' || d.intent === 'chef-goto') && !chef)) {
+      if (!chef) { setTab('recipe'); setChef(true); d.handled = true }
+      return
+    }
+    if (d.intent === 'scale') {
+      setAppliedScale(d.factor === 1 ? null : { factor: d.factor, label: '×' + d.factor })
+      d.handled = true
+      speak(d.factor === 1 ? 'Back to the original amounts.' : `Scaled by ${d.factor}.`, timerLang)
+      return
+    }
+    if (d.intent === 'read-ingredients') {
+      const lines = (viewR.ingredients || []).filter((l) => !/^##?\s+/.test(l)).map((l) => { const x = splitIngLine(l); return [x.qty, x.name].filter(Boolean).join(' ') })
+      speak(lines.slice(0, 30).join(', ') || 'No ingredients.', timerLang, { interrupt: true })
+      d.handled = true
+    }
+  }
+  useEffect(() => {
+    const on = (e) => voiceRef.current?.(e.detail)
+    window.addEventListener('qdplus:voice', on)
+    return () => window.removeEventListener('qdplus:voice', on)
+  }, [])
+
   function backToOriginal() {
     setAppliedScale(null)
     toast('Back to the original amounts', { action: { label: 'Undo', onClick: () => undoScale() } })

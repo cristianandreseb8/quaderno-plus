@@ -4,8 +4,8 @@ import { fmtSpan, fmtWatch } from '../lib/timing.js'
 import { waitOf } from '../lib/planner.js'
 
 // The extras of chef mode Pro (Settings → Chef mode): every step at a glance, the next one, how
-// long this one is taking against your usual time, long waits coming up, hands-free voice commands
-// and the numbers that matter picked out in the text.
+// long this one is taking against your usual time, long waits coming up, and the numbers that
+// matter picked out in the text. (Voice commands: components/HeyChef.jsx.)
 
 // ── The figures in a step: temperatures, times, amounts ──
 const HL = /(\d+(?:[.,]\d+)?\s?(?:[-–]\s?\d+(?:[.,]\d+)?\s?)?(?:°|º)\s?[CF]?)|(\d+(?:[.,]\d+)?(?:\s?[-–]\s?\d+(?:[.,]\d+)?)?\s?(?:h|hrs?|hours?|horas?|ore|heures?|stunden?|std|min|mins|minutes?|minutos?|minuti|minuten|sec|secs|seconds?|seg|segundos?)\b)|(\d+(?:[.,]\d+)?\s?(?:g|gr|kg|ml|cl|dl|l|%)(?![\p{L}]))/giu
@@ -88,46 +88,4 @@ export function StepsRail({ steps, pos, done, onJump, onClose, typicalOf }) {
       </ol>
     </aside>
   )
-}
-
-// ── Hands-free: "next", "back", "repeat", "timer", "stop" — in five languages ──
-const CMD = [
-  ['next', /\b(next|go on|siguiente|sigue|avanza|adelante|weiter|n[aä]chste[rn]?|suivant|suivante|avanti|prossimo|successivo)\b/],
-  ['back', /\b(back|previous|atr[aá]s|anterior|vuelve|volver|zur[uü]ck|pr[eé]c[eé]dent|retour|indietro|precedente)\b/],
-  ['repeat', /\b(repeat|again|repite|repetir|otra vez|nochmal|wiederhol\w*|r[eé]p[eè]te|encore|ripeti|ancora)\b/],
-  ['timer', /\b(timer|start|temporizador|cron[oó]metro|empieza|inicia|starte|minuteur|lance|avvia|parti)\b/],
-  ['stop', /\b(stop|para|basta|silencio|halt|stopp|arr[eê]te|ferma|zitto)\b/],
-]
-export const voiceCommandsSupported = () => typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition)
-export function useVoiceCommands(enabled, lang, handlers) {
-  const [listening, setListening] = useState(false)
-  const [heard, setHeard] = useState('')
-  const h = useRef(handlers)
-  h.current = handlers
-  useEffect(() => {
-    const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
-    if (!enabled || !SR) { setListening(false); return undefined }
-    let alive = true
-    let quietUntil = 0
-    const rec = new SR()
-    rec.lang = lang || 'en-US'
-    rec.continuous = true
-    rec.interimResults = false
-    rec.onresult = (e) => {
-      // The app's own voice ("Siguiente paso") must not count as a command.
-      if (window.speechSynthesis?.speaking || Date.now() < quietUntil) return
-      const said = String(e.results[e.results.length - 1][0].transcript || '').toLowerCase().normalize('NFC')
-      const hit = CMD.find(([, rx]) => rx.test(said))
-      if (!hit) return
-      setHeard(hit[0])
-      setTimeout(() => setHeard(''), 1500)
-      quietUntil = Date.now() + 1200
-      h.current[hit[0]]?.()
-    }
-    rec.onend = () => { if (alive) { try { rec.start() } catch (_) { /* already started */ } } }
-    rec.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { alive = false; setListening(false); h.current.denied?.() } }
-    try { rec.start(); setListening(true) } catch (_) { setListening(false) }
-    return () => { alive = false; rec.onend = null; try { rec.stop() } catch (_) { /* ignore */ } setListening(false) }
-  }, [enabled, lang])
-  return { listening, heard }
 }
