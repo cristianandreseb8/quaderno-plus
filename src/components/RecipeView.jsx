@@ -19,6 +19,7 @@ import { TimerChip, TimerMenu, TimerPresets } from './Timers.jsx'
 import { findDurations } from '../lib/durations.js'
 import { componentsOf, flattenSteps, linkFactor, resolveLink } from '../lib/links.js'
 import { useCookPlans } from '../lib/cookPlan.js'
+import { readScale, writeScale } from '../lib/scales.js'
 import { cleanName, guessLang, stepName } from '../lib/timerNames.js'
 import StepSheet from './StepSheet.jsx'
 import ChefMode from './ChefMode.jsx'
@@ -54,7 +55,7 @@ export default function RecipeView({
   const [scaleTotal, setScaleTotal] = useState('')
   const [scaleIngName, setScaleIngName] = useState('')
   const [scaleIngGrams, setScaleIngGrams] = useState('')
-  const [localScale, setLocalScale] = useState(null)
+  const [localScale, setLocalScale] = useState(() => readScale(`view:${recipe.id}`).cur)
   const [translating, setTranslating] = useState(false)
   const [translated, setTranslated] = useState(null)
   const [targetLang, setTargetLang] = useState(settings.translateLang || 'English')
@@ -70,7 +71,7 @@ export default function RecipeView({
   const addNoteRef = useRef(null)
 
   useEffect(() => {
-    setLocalChecked(new Set()); setLocalScale(null); setTranslated(null)
+    setLocalChecked(new Set()); setLocalScale(readScale(`view:${recipe.id}`).cur); setTranslated(null)
     setShowScale(false); setTab('recipe'); setAddingVideo(false); setChef(false); setUnfolded(new Set())
     setCustomBaseGrams('')
   }, [recipe.id])
@@ -80,9 +81,32 @@ export default function RecipeView({
   const checked = useMemo(() => (inCook ? new Set(cookIng || []) : localChecked), [inCook, cookIng, localChecked])
   const cookFactor = cook ? Number(cook.factor) || 1 : 1
   const appliedScale = cook ? (cookFactor !== 1 ? { factor: cookFactor, label: '×' + +cookFactor.toFixed(2) } : null) : localScale
-  function setAppliedScale(s) {
+  // Every scale is remembered (see lib/scales.js) with the ones before it, for Undo.
+  const scaleKey = `${cook ? 'cook' : 'view'}:${recipe.id}`
+  const [scalePast, setScalePast] = useState(() => readScale(scaleKey).past)
+  // The latest scale and history, for an Undo offered after them (a toast's button).
+  const scaleNow = useRef({ cur: appliedScale, past: scalePast })
+  scaleNow.current = { cur: appliedScale, past: scalePast }
+  useEffect(() => { setScalePast(readScale(scaleKey).past) }, [scaleKey])
+  function commitScale(s, past) {
     if (cook) cook.onFactor(s ? s.factor : 1)
     else { setLocalScale(s); setLocalChecked(new Set()) }
+    setScalePast(past)
+    scaleNow.current = { cur: s, past }
+    writeScale(scaleKey, cook ? null : s, past)
+  }
+  function setAppliedScale(s) {
+    const { cur, past } = scaleNow.current
+    commitScale(s, [...past, cur || null])
+  }
+  function undoScale() {
+    const { past } = scaleNow.current
+    if (!past.length) return
+    commitScale(past[past.length - 1], past.slice(0, -1))
+  }
+  function backToOriginal() {
+    setAppliedScale(null)
+    toast('Back to the original amounts', { action: { label: 'Undo', onClick: () => undoScale() } })
   }
   function clearTicked() {
     if (cook) cook.onClear('ing'); else setLocalChecked(new Set())
@@ -518,7 +542,7 @@ export default function RecipeView({
                 </li>
               )
             }
-            return <li key={i} data-n={st.n} className={`Q-step${highlightedSteps.has(i) ? ' highlighted' : ''}`} {...holdToOpen(i)}>{stepBody(st, i)}</li>
+            return <li key={i} data-n={st.n} className={`Q-step${highlightedSteps.has(i) ? ' highlighted' : ''}`} title={touch ? undefined : 'Right-click for a timer or to edit'} {...holdToOpen(i)}>{stepBody(st, i)}</li>
           })}
         </ol>
       ),
@@ -587,7 +611,8 @@ export default function RecipeView({
           <span>{cook ? `This session makes ${appliedScale.label}` : `Scaled ${appliedScale.label}`}</span>
           <span className="sp" />
           <button onClick={saveCurrentAsNew}>Save as new</button>
-          <button onClick={() => setAppliedScale(null)}>Reset</button>
+          {scalePast.length > 0 && <button onClick={undoScale}>Undo</button>}
+          <button onClick={backToOriginal}>Back to original</button>
         </div>
       )}
       {translated && (
@@ -757,9 +782,15 @@ export default function RecipeView({
         const actions = []
         if (cook && !st.header) actions.push({ label: doneSteps.has(stepSheet.i) ? 'Mark as not done' : 'Mark as done', onClick: () => cook.onToggleStep(stepSheet.i) })
         actions.push({ label: 'Copy the text', onClick: () => { navigator.clipboard?.writeText(st.text).then(() => toast('Copied'), () => {}) } })
+        // Edit the step as written (not as scaled or translated on screen).
+        const raw = String((recipe.steps || [])[stepSheet.i] ?? '')
+        const edit = canEdit && !translated ? {
+          text: st.header ? raw.replace(/^##?\s*/, '') : raw,
+          onSave: (t) => onUpdate({ ...recipe, steps: (recipe.steps || []).map((x, k) => (k === stepSheet.i ? (st.header ? `## ${t}` : t) : x)) }),
+        } : null
         return (
           <StepSheet
-            title={st.header ? st.text : `Step ${st.n}`} subtitle={st.header ? null : st.text}
+            title={st.header ? st.text : `Step ${st.n}`} subtitle={st.header ? null : st.text} edit={edit}
             durations={info.durs} tkeyBase={info.tkey} actions={actions}
             timer={{ label: info.label, name: info.name, ...timerBase }}
             onClose={() => setStepSheet(null)}

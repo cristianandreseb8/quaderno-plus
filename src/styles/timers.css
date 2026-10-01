@@ -103,10 +103,11 @@
 .Q-list-timer { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; padding: 0 7px; height: 20px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font: 600 11px var(--mono); font-variant-numeric: tabular-nums; }
 .Q-list-timer.ringing { animation: qring 1s steps(1) infinite; font-family: var(--sans); }
 
-/* Phones: no idle clocks in the method — a time shows only while its timer runs; hold a step for timers. */
+/* No idle clocks in the method: a timer shows while it runs; right-click a step (or hold it, on a
+   phone) for timers and to edit it. Phones also hide the times written in steps until started. */
+.Q-steps .Q-step-tbtn { display: none; }
 @media (hover: none) {
   .Q-steps .Q-tchip:not(.running):not(.paused):not(.ringing) { display: none; }
-  .Q-steps .Q-step-tbtn { display: none; }
 }
 
 /* ── Chef mode: one step at a time, full screen ── */
@@ -236,3 +237,8 @@
   .Q-timers-custom .btn { grid-column: 1 / -1; height: 36px; }
   .Q-sheet { margin: 0; border-radius: 18px 18px 0 0; border-bottom: none; padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 }
+
+/* Editing a step from its options */
+.Q-sheet-edit { width: 100%; margin: 4px 0 10px; padding: 10px 12px; border: 1px solid var(--rule-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font: 15px/1.5 var(--sans); resize: vertical; }
+.Q-sheet-edit:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.Q-sheet-edit-foot { display: flex; justify-content: flex-end; gap: 8px; }

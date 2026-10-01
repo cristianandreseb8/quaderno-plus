@@ -17,6 +17,7 @@ import { RecipeTimerBadge, TimerDock, TimersButton } from './components/Timers.j
 import Toaster, { toast } from './components/ui/Toaster.jsx'
 import Menu, { MenuItem, MenuLabel, MenuSep } from './components/ui/Menu.jsx'
 import { allStepKeys } from './lib/links.js'
+import { savedFactor } from './lib/scales.js'
 import { addRecipe, buildShoppingList, clearProgress, removeRecipe, resetTicks, setFactor, toggleProgress, useSession } from './lib/session.js'
 import { INSTALL_HELP, useInstall } from './lib/install.js'
 
@@ -576,7 +577,8 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
     return { done: keys.filter((k) => done.has(k)).length, total: keys.length }
   }
   function toggleInSession(id, on) {
-    changeSession(on ? addRecipe(id) : removeRecipe(id))
+    // A recipe joins the session at the scale it was last shown at.
+    changeSession(on ? addRecipe(id, savedFactor(id)) : removeRecipe(id))
     if (sessSel === id && !on) setSessSel('shopping')
   }
   function toggleFromRecipe(id) {

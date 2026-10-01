@@ -7,7 +7,7 @@ import { useSettings } from '../lib/settings.js'
 import DraggableIngList from './DraggableIngList.jsx'
 import LinkRecipeModal from './LinkRecipeModal.jsx'
 import { placeLinked } from '../lib/links.js'
-import { linkOf } from '../lib/recipeCalc.js'
+import { fmtQty, getTotalGrams, linkOf, linkToken } from '../lib/recipeCalc.js'
 import Modal from './ui/Modal.jsx'
 import { toast } from './ui/Toaster.jsx'
 import { linesToVideos, videosToLines } from '../lib/video.js'
@@ -121,11 +121,25 @@ export default function RecipeEditor({ initial, onSave, onCancel, startWith = 'b
   }
   // Another recipe used in this one: at the top, in a section of its own, with this recipe's own
   // lines in a section named after it — ordered without arranging anything by hand.
+  // Linked in one place, it shows in the other too: in the method (where its steps go) and in the
+  // ingredients (the whole recipe, unless an amount was chosen there).
   function addLink(line) {
     const own = r.title.trim() || 'Main'
-    if (linkFor === 'ing') setIngredientLines((list) => placeLinked(list, [`## ${linkOf(line)?.title || 'Recipe'}`, line], own))
-    else setR((p) => ({ ...p, steps: placeLinked(p.steps || [], [line], own) }))
+    const link = linkOf(line)
+    const token = link ? linkToken({ id: link.id, title: link.title }) : line
+    const has = (list) => (list || []).some((l) => linkOf(l)?.id === link?.id)
+    const withIng = (list) => {
+      if (has(list)) return list
+      const sub = library.find((x) => x.id === link?.id)
+      const total = sub ? getTotalGrams(sub.ingredients || []) : 0
+      const ingLine = linkFor === 'ing' ? line : `${total > 0 ? `${fmtQty(total)} g` : '1'}  ${token}`
+      return placeLinked(list, [`## ${link?.title || 'Recipe'}`, ingLine], own)
+    }
+    const withStep = (list) => (has(list) ? list : placeLinked(list, [token], own))
+    setIngredientLines(withIng)
+    setR((p) => ({ ...p, steps: withStep(p.steps || []) }))
     setLinkFor(null)
+    toast(linkFor === 'ing' ? 'Added to the ingredients and the method' : 'Added to the method and the ingredients')
   }
   const canLink = library.some((x) => x.id !== initial?.id)
 
