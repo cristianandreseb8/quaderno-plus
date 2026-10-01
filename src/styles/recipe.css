@@ -75,7 +75,9 @@
 .Q-ing-check { position: relative; align-self: center; flex-shrink: 0; width: 1.05em; height: 1.05em; border-radius: 50%; border: 1.5px solid var(--rule-strong); transition: background .12s, border-color .12s; }
 .Q-ing-row.checked .Q-ing-check { background: var(--accent); border-color: var(--accent); }
 .Q-ing-row.checked .Q-ing-check::after { content: ''; position: absolute; left: 33%; top: 18%; width: 25%; height: 45%; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg); }
-.Q-ing-qty { font-family: var(--mono); font-size: .9em; font-weight: 600; min-width: 5.6em; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); }
+/* Amount columns are as wide as the recipe's longest amount (--qty-n, lib/qtyCol.js), up to a cap;
+   past it the unit wraps under the number instead of running into the name. */
+.Q-ing-qty { font-family: var(--mono); font-size: .9em; font-weight: 600; flex-shrink: 0; min-width: min(max(4.6em, calc(var(--qty-n, 9) * .62em)), 42%); max-width: 42%; text-align: right; overflow-wrap: break-word; font-variant-numeric: tabular-nums; color: var(--ink); }
 .Q-ing-name { flex: 1; min-width: 0; }
 .Q-ing-approx { margin-left: 8px; font-size: .82em; color: var(--faint); white-space: nowrap; }
 .Q-ing-row.checked .Q-ing-qty, .Q-ing-row.checked .Q-ing-name { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--rule-strong); }
@@ -330,9 +332,9 @@
 .Q-al-row.next { background: var(--accent-soft); }
 .Q-al-row.done .Q-al-step, .Q-al-row.done .Q-al-ings { opacity: .45; }
 .Q-al-ings { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; align-content: start; font-size: .92em; }
-.Q-al-ings li { display: grid; grid-template-columns: 4.8em minmax(0, 1fr); gap: 8px; align-items: baseline; cursor: default; }
+.Q-al-ings li { display: grid; grid-template-columns: min(max(3.2em, calc(var(--qty-n, 8) * .58em)), 48%) minmax(0, 1fr); gap: 8px; align-items: baseline; cursor: default; }
 .Q-al-ings li[class=""], .Q-al-ings li:not(.made) { cursor: pointer; }
-.Q-al-ings li b { font: 600 .92em var(--mono); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.Q-al-ings li b { font: 600 .92em var(--mono); text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: break-word; min-width: 0; }
 .Q-al-ings li small { display: block; font-size: .78em; color: var(--faint); }
 .Q-al-ings li.made { color: var(--muted); }
 .Q-al-ings li.checked { color: var(--faint); text-decoration: line-through; }

@@ -5,6 +5,7 @@ import {
   addTime, fmtClock, pauseTimer, remaining, resumeTimer, speak, startTimer, stopRinging, stopSpeaking, useTimers, voiceLang,
 } from '../lib/timers.js'
 import { splitIngLine } from '../lib/recipeCalc.js'
+import { qtyCol } from '../lib/qtyCol.js'
 import { buildLines, computeStepUses, partIndexOf, stepIndex } from '../lib/stepIngredients.js'
 import { recordStepTime, typicalMs } from '../lib/timing.js'
 import { NextUp, StepClock, StepsRail, highlight } from './ChefPro.jsx'
@@ -89,6 +90,10 @@ export default function ChefMode({
   const partIndex = (s) => partIndexOf(s, sectionsOf(s))
   // How much of each ingredient each step uses (lib/stepIngredients.js).
   const usesPerStep = useMemo(() => computeStepUses({ steps, sources, recipeId, plans, linesBySrc }), [steps, linesBySrc, plans])
+  const qtyStyle = useMemo(() => qtyCol([
+    ...Object.values(sources).flatMap((so) => so.sections.flatMap((sec) => sec.items.map((l) => splitIngLine(l).qty))),
+    ...usesPerStep.flat().map((u) => u.qty),
+  ]), [sources, usesPerStep])
 
   // What to say on arriving at a step: its number, the part when a new one starts, the text, and
   // how much of each ingredient it uses ("Necesitas: 1 cebolla blanca mediana").
@@ -274,7 +279,7 @@ export default function ChefMode({
   const progress = steps.length ? Math.min(100, (pos / steps.length) * 100) : 100
   const host = document.querySelector('.Q') || document.body
   return createPortal(
-    <div className="Q-chef" role="dialog" aria-label={`Chef mode: ${title}`} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
+    <div className="Q-chef" style={qtyStyle} role="dialog" aria-label={`Chef mode: ${title}`} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
       <div className="Q-chef-top">
         {onBack && <button type="button" className="Q-chef-back" onClick={onBack} aria-label="Back to the plan" title="Back to the plan"><ArrowLeft size={18} /><span>Plan</span></button>}
         <div className="Q-chef-title">
@@ -342,7 +347,7 @@ export default function ChefMode({
                 {list.map((u) => (
                   <li key={u.raw} className={`${ticked.has(u.raw) ? 'ticked' : ''}${u.prep ? ' prep' : ''}`} onClick={() => { if (!u.prep) toggleTick(u.raw) }}>
                     {u.prep ? <span className="Q-chef-prep-mark" aria-hidden="true">↳</span> : <span className="Q-ing-check" aria-hidden="true" />}
-                    {u.qty && <b className={u.vague ? 'vague' : ''}>{u.qty}</b>}
+                    <b className={u.vague ? 'vague' : ''}>{u.qty || ''}</b>
                     <span>
                       {u.d.ref ? '↳ ' : ''}{u.d.name}{u.showPart && u.part && <em> · {u.part}</em>}
                       {u.note && <small className="Q-chef-portion">{u.note}</small>}

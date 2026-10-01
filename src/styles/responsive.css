@@ -23,7 +23,7 @@
   .Q-tabbar-view { width: 100%; }
   .Q-tabbar-actions { width: 100%; }
   .Q-tabbar-actions > .Q-menu-wrap:last-child { margin-left: auto; }
-  .Q-ing-qty { min-width: 4.6em; }
+  .Q-ing-qty { min-width: min(max(3.8em, calc(var(--qty-n, 8) * .62em)), 42%); }
   .Q-ed-top { grid-template-columns: 1fr; }
   .Q-ed-photo img, .Q-ed-photo-ph { width: 100%; height: 150px; }
   .Q-grid2 { grid-template-columns: 1fr; gap: 0; }

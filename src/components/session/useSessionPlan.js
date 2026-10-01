@@ -23,6 +23,10 @@ export function stepKeyOfTimer(rid, key) {
   return m ? (m[1] ? `${m[1]}:${m[2]}` : m[2]) : null
 }
 
+const HOURS = 'qdplus_hours'
+export const lastHours = () => { try { return JSON.parse(localStorage.getItem(HOURS) || 'null') } catch (_) { return null } }
+export const rememberHours = (h) => { try { localStorage.setItem(HOURS, JSON.stringify(h)) } catch (_) { /* storage unavailable */ } }
+
 const APPLIED = 'qdplus_timer_done' // timers whose end already ticked their step off
 const readApplied = () => { try { return new Set(JSON.parse(localStorage.getItem(APPLIED) || '[]')) } catch (_) { return new Set() } }
 const keepApplied = (set) => { try { localStorage.setItem(APPLIED, JSON.stringify([...set].slice(-200))) } catch (_) { /* storage unavailable */ } }
@@ -53,7 +57,10 @@ export function useSessionPlan({ session, recipesById, library, change }) {
     const iso = session?.plan?.recipes?.[e.raw.id]?.ready_by || session?.plan?.ready_by
     return [e.raw.id, iso ? Date.parse(iso) - now : null]
   })), [dueSig, now, sig])
-  const plan = useMemo(() => planSession(scaled, library, { done, due, started }), [scaled, library, done, due, started])
+  // Your shift and sleep times: the session's, or the last ones you set on this device.
+  const hours = session?.plan?.hours ?? lastHours()
+  const hoursSig = JSON.stringify(hours || null)
+  const plan = useMemo(() => planSession(scaled, library, { done, due, started, hours, nowAt: now }), [scaled, library, done, due, started, hoursSig, now])
 
   // When a step's timer runs out, the step is done (once — "Not done" afterwards is respected).
   // Only a timer as long as what the step says: a 30-minute fold timer does not end a 3-hour rise.
@@ -76,5 +83,5 @@ export function useSessionPlan({ session, recipesById, library, change }) {
     if (grew) keepApplied(applied)
   }, [timers, steps, done, change])
 
-  return { entries, scaled, steps, done, started, plan, now, timers, tnow }
+  return { entries, scaled, steps, done, started, plan, now, timers, tnow, hours }
 }

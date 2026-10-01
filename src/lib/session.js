@@ -249,6 +249,8 @@ export const clockResume = () => (s) => {
 export const clockReset = () => (s) => ({ ...s, clock: {} })
 
 // When the session — or one recipe of it — should be ready (control center). iso: ISO time or null.
+// Your shift and sleep times for this session's plan: { shifts: [{ from, to }], sleep: { from, to } }.
+export const setPlanHours = (hours) => (s) => ({ ...s, plan: { ...(s.plan || {}), hours } })
 export const setReadyBy = (recipeId, iso) => (s) => {
   const plan = { ...(s.plan || {}) }
   if (!recipeId) plan.ready_by = iso || null

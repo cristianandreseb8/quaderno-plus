@@ -127,13 +127,16 @@
 
 .Q-cc-lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; align-items: start; }
 .Q-cc-lane { border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); overflow: hidden; }
-.Q-cc-lane-head { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 14px 14px 12px; border-top: 4px solid hsl(var(--lane)); }
+.Q-cc-lane-head { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px 12px; padding: 14px 14px 12px; border-top: 4px solid hsl(var(--lane)); }
 .Q-cc-lane-head h2 { margin: 0; font: 650 15.5px/1.3 var(--sans); color: var(--ink); }
 .Q-cc-lane-head h2 .x { margin-left: 6px; font: 600 12px var(--mono); color: var(--muted); }
-.Q-cc-lane-status { grid-column: 1; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12.5px; color: var(--muted); }
+.Q-cc-lane-status { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12.5px; color: var(--muted); }
 .Q-cc-lane-status b { color: var(--ink); }
-.Q-cc-lane-due { grid-column: 2; grid-row: 1 / span 2; align-self: start; }
-.Q-cc-lane-due input { width: 170px; }
+/* The lane's own deadline: one quiet line under its status, whatever the lane's width. */
+.Q-cc-lane-due { flex-direction: row; align-items: center; gap: 8px; letter-spacing: 0; }
+.Q-cc-lane-due span { flex-shrink: 0; }
+.Q-cc-lane-due input { flex: 1; min-width: 0; max-width: 210px; height: 30px; }
+.Q-cc-lane-head h2 { overflow-wrap: anywhere; }
 .Q-cc-bar { grid-column: 1 / -1; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .Q-cc-bar i { display: block; height: 100%; background: hsl(var(--lane)); transition: width .3s; }
 
@@ -159,8 +162,8 @@
 .Q-cc-task-meta { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
 .Q-cc-task-body .full { display: none; }
 .Q-cc-ings { list-style: none; margin: 4px 0 0; padding: 8px 10px; display: grid; gap: 4px; border-radius: 8px; background: var(--surface); font-size: 13px; }
-.Q-cc-ings li { display: grid; grid-template-columns: 4.6em minmax(0, 1fr); gap: 8px; align-items: baseline; }
-.Q-cc-ings b { font: 600 12.5px var(--mono); text-align: right; white-space: nowrap; }
+.Q-cc-ings li { display: grid; grid-template-columns: min(max(3.6em, calc(var(--qty-n, 8) * .6em)), 48%) minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.Q-cc-ings b { font: 600 12.5px var(--mono); text-align: right; overflow-wrap: break-word; min-width: 0; }
 .Q-cc-ings small { display: block; font-size: 11.5px; color: var(--faint); }
 .Q-cc-ings li.made { color: var(--muted); }
 .Q-cc-watching { color: var(--accent); border-color: var(--accent); font-family: var(--mono); }
@@ -229,7 +232,64 @@
 @media (max-width: 640px) {
   .Q-cc-lanes { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: 88%; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
   .Q-cc-lane { scroll-snap-align: start; }
-  .Q-cc-lane-head { grid-template-columns: 1fr; }
-  .Q-cc-lane-due { grid-column: 1; grid-row: auto; }
   .Q-cc-task-body { padding-left: 12px; }
 }
+
+/* ── Your hours ─────────────────────────────────────────────────────────────── */
+.Q-cc-hours { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 12px; padding: 9px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; color: var(--muted); }
+.Q-cc-hours > svg { flex-shrink: 0; }
+.Q-cc-hours > span { flex: 1; min-width: 12em; }
+.Q-cc-hours .Q-link { display: inline-flex; align-items: center; gap: 4px; }
+.Q-cc-hours.editing { display: block; background: var(--surface); border: 1px solid var(--rule); color: var(--ink); }
+.Q-cc-hours-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 16px; align-items: start; }
+.Q-cc-hours-grid .lbl { display: inline-flex; align-items: center; gap: 6px; padding-top: 6px; font-weight: 600; font-size: 12.5px; color: var(--muted); }
+.Q-cc-hours-grid .rows { display: grid; gap: 6px; justify-items: start; }
+.Q-cc-range { display: flex; align-items: center; gap: 8px; }
+.Q-cc-range input { height: 32px; padding: 0 8px; border: 1px solid var(--rule-strong); border-radius: 8px; background: var(--bg); color: var(--ink); font: 13px var(--mono); }
+.Q-cc-range span { font-size: 12.5px; color: var(--muted); }
+.Q-cc-hours-acts { display: flex; gap: 8px; margin-top: 12px; }
+
+/* ── Timeline ───────────────────────────────────────────────────────────────── */
+.Q-cc-tl-show { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 12px; padding: 6px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--muted); font: 600 12.5px var(--sans); cursor: pointer; }
+.Q-cc-tl-show:hover { color: var(--ink); border-color: var(--rule-strong); }
+.Q-tl { margin: 0 0 14px; border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.Q-tl-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px; padding: 8px 8px 6px 14px; border-bottom: 1px solid var(--rule); }
+.Q-tl-bar b { font: 700 11px var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-right: 8px; }
+.Q-tl-bar .range { font: 600 12px var(--mono); color: var(--ink); }
+.Q-tl-bar .sp { flex: 1; }
+.Q-tl-bar .Q-icon-btn.on { color: var(--accent); }
+.Q-tl-legend { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; font-size: 11px; color: var(--muted); }
+.Q-tl-legend i { display: inline-block; width: 12px; height: 8px; margin-left: 6px; border-radius: 2px; }
+.Q-tl-legend i.work { background: var(--accent); }
+.Q-tl-legend i.wait { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.Q-tl-legend i.rest { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+.Q-tl-scroll { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.Q-tl-inner { position: relative; padding-bottom: 6px; }
+.Q-tl-axis { position: relative; height: 24px; margin-left: var(--name-w); border-bottom: 1px solid var(--rule); }
+.Q-tl-axis span { position: absolute; top: 5px; transform: translateX(-50%); font: 600 10.5px var(--mono); color: var(--faint); white-space: nowrap; }
+.Q-tl-axis span.day { color: var(--ink); font-family: var(--sans); font-weight: 700; }
+.Q-tl-axis span.now { left: 0; transform: none; padding-left: 4px; color: var(--accent); font-family: var(--sans); font-weight: 700; }
+.Q-tl-rows { position: relative; padding-top: 4px; }
+.Q-tl-bands { position: absolute; top: 0; bottom: 0; left: var(--name-w); pointer-events: none; }
+.Q-tl-bands i { position: absolute; top: 0; bottom: 0; }
+.Q-tl-bands i.sleep { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.Q-tl-bands i.off { background: color-mix(in srgb, var(--ink) 4.5%, transparent); }
+.Q-tl-bands i.midnight { width: 0; border-left: 1px dashed var(--rule-strong); }
+.Q-tl-row { position: relative; display: flex; height: 34px; align-items: center; }
+.Q-tl-name {
+  position: sticky; left: 0; z-index: 2; flex-shrink: 0; width: var(--name-w); height: 100%; display: flex; align-items: center; gap: 6px;
+  padding: 0 8px 0 12px; background: var(--surface); font: 600 12px var(--sans); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 1px 0 0 var(--rule);
+}
+.Q-tl-name::before { content: ''; flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: hsl(var(--lane)); }
+.Q-tl-track { position: relative; height: 100%; }
+.Q-tl-step {
+  position: absolute; top: 6px; height: 22px; padding: 0; border: none; border-radius: 5px; overflow: hidden; cursor: pointer;
+  background: hsl(var(--lane) / .22); color: var(--ink); text-align: left; box-shadow: inset 0 0 0 1px hsl(var(--lane) / .45);
+}
+.Q-tl-step .work { position: absolute; left: 0; top: 0; bottom: 0; background: hsl(var(--lane)); }
+.Q-tl-step .lbl { position: relative; z-index: 1; display: block; padding: 0 5px; font: 600 10.5px/22px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); text-shadow: 0 0 3px var(--surface), 0 0 3px var(--surface); }
+.Q-tl-step:hover { box-shadow: inset 0 0 0 2px hsl(var(--lane)); }
+.Q-tl-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 3; }
+.Q-tl-sat { position: absolute; top: 12px; height: 10px; border-radius: 3px; background: repeating-linear-gradient(-45deg, var(--red) 0 2px, transparent 2px 6px); opacity: .55; }
+@media (max-width: 560px) { .Q-tl-legend { display: none; } }

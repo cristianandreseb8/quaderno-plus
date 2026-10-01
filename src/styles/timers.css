@@ -161,9 +161,9 @@
 .Q-chef-clock.ringing { animation: qring 1s steps(1) infinite; }
 /* The ingredients this step uses, with their quantities (tap to tick them). */
 .Q-chef-uses { list-style: none; margin: 22px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.Q-chef-uses li, .Q-chef-ings li { display: grid; grid-template-columns: 22px auto minmax(0, 1fr); align-items: baseline; column-gap: 10px; cursor: pointer; }
+.Q-chef-uses li, .Q-chef-ings li { display: grid; grid-template-columns: 22px min(max(2.4em, calc(var(--qty-n, 6) * .6em)), 36%) minmax(0, 1fr); align-items: baseline; column-gap: 10px; cursor: pointer; }
 .Q-chef-uses li { font-size: clamp(17px, 2.4vw, 22px); padding: 8px 12px; border-radius: 12px; background: var(--surface-2); }
-.Q-chef-uses b, .Q-chef-ings b { font-family: var(--mono); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.Q-chef-uses b, .Q-chef-ings b { font-family: var(--mono); font-weight: 600; overflow-wrap: break-word; min-width: 0; font-variant-numeric: tabular-nums; }
 .Q-chef-uses em { font-style: normal; color: var(--muted); font-size: .8em; }
 .Q-chef-uses .Q-ing-check, .Q-chef-ings .Q-ing-check { position: relative; align-self: center; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--rule-strong); }
 .Q-chef-uses li.ticked .Q-ing-check, .Q-chef-ings li.ticked .Q-ing-check { background: var(--accent); border-color: var(--accent); }

@@ -27,6 +27,7 @@ import { readScale, writeScale } from '../lib/scales.js'
 import { cleanName, guessLang, stepName } from '../lib/timerNames.js'
 import StepSheet from './StepSheet.jsx'
 import ChefMode from './ChefMode.jsx'
+import { qtyCol } from '../lib/qtyCol.js'
 
 const TABS = [
   ['recipe', 'Recipe'],
@@ -596,6 +597,11 @@ export default function RecipeView({
     () => (aligned ? computeStepUses({ steps: chefSteps, sources: chefSources, recipeId: recipe.id, plans: cookPlans.plans }) : []),
     [aligned, chefSteps, chefSources, cookPlans.plans],
   )
+  // Every amount column of the recipe as wide as its longest amount (lib/qtyCol.js).
+  const qtyStyle = useMemo(() => qtyCol([
+    ...sections.flatMap((sec) => sec.items.map((l) => splitIngLine(l).qty)),
+    ...alignedUses.flat().map((u) => u.qty),
+  ]), [sections, alignedUses])
   const alignedContent = aligned && (() => {
     const used = new Set(alignedUses.flat().filter((u) => typeof u.raw === 'number').map((u) => u.raw))
     const loose = sections.flatMap((sec) => sec.items.map((line, ii) => ({ line, raw: sec.rawIndices[ii] }))).filter((x) => !used.has(x.raw))
@@ -718,7 +724,7 @@ export default function RecipeView({
   const origin = [recipe.fixed_lang && `${recipe.fixed_lang} version`, copiedFrom && `copy of ${copiedFrom.title}`].filter(Boolean).join(', ')
 
   return (
-    <div className="Q-view">
+    <div className="Q-view" style={qtyStyle}>
       <div className="Q-view-header">
         <div className="Q-view-title">
           <h1>{viewR.title || 'Untitled'}</h1>

@@ -19,7 +19,14 @@ export default function FloatingPlan({ session, recipesById, library, change, on
     try { const v = localStorage.getItem(OPEN); if (v != null) return v === '1' } catch (_) { /* ignore */ }
     return !window.matchMedia?.('(max-width: 700px)').matches
   })
-  const setOpen = (v) => { setOpenState(v); try { localStorage.setItem(OPEN, v ? '1' : '0') } catch (_) { /* ignore */ } }
+  // Over chef mode on a phone it starts folded, so the step stays in view.
+  const [chefOpen, setChefOpen] = useState(false)
+  const phone = window.matchMedia?.('(max-width: 700px)').matches
+  const overChef = hey.chefOpen && phone
+  const setOpen = (v) => {
+    if (overChef) { setChefOpen(v); return }
+    setOpenState(v); try { localStorage.setItem(OPEN, v ? '1' : '0') } catch (_) { /* ignore */ }
+  }
 
   const rows = entries.map((e, ri) => {
     const rid = e.raw.id
@@ -35,10 +42,11 @@ export default function FloatingPlan({ session, recipesById, library, change, on
   const at = (ms) => (ms <= 60000 ? 'now' : ms < 60 * 60000 ? `in ${Math.round(ms / 60000)} min` : when(now + ms, now))
   const timeLeft = (t) => (t.ringing || t.state === 'done' ? 'time’s up' : fmtClock(t.state === 'paused' ? t.left || 0 : remaining(t, tnow)))
   const lead = rows[0]
+  const shown = overChef ? chefOpen : open
 
   return (
-    <aside className={`Q-float${open ? ' open' : ''}${hey.chefOpen ? ' over-chef' : ''}`} aria-label="Cooking now">
-      {open ? (
+    <aside className={`Q-float${shown ? ' open' : ''}${hey.chefOpen ? ' over-chef' : ''}`} aria-label="Cooking now">
+      {shown ? (
         <>
           <div className="Q-float-head">
             <b>Cooking now</b>
