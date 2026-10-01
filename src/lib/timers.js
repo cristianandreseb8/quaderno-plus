@@ -164,10 +164,20 @@ function pickVoice(lang) {
 }
 // Everything is said at the chosen speed (Settings → Voice), with symbols in words
 // ("12 h" → "12 hours", "30°" → "30 degrees Celsius").
+// What the app said lately, so voice commands can tell its own voice from the cook's (and the cook
+// can talk over it).
+// Only what is being said now, or ended a moment ago (recognition lags a little behind).
+let recent = []
+export const recentSpeech = () => recent.filter((x) => x.end == null ? Date.now() - x.at < 120000 : Date.now() - x.end < 2500).map((x) => x.text)
 function speakText(text, lang, rate = voiceCfg.rate || DEFAULT_RATE) {
   if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return
   try {
-    const u = new SpeechSynthesisUtterance(forSpeech(text, lang))
+    const said = forSpeech(text, lang)
+    const entry = { text: said, at: Date.now(), end: null }
+    recent = [...recent.filter((x) => x.end == null || Date.now() - x.end < 10000), entry].slice(-6)
+    const u = new SpeechSynthesisUtterance(said)
+    u.onend = () => { entry.end = Date.now() }
+    u.onerror = () => { entry.end = Date.now() }
     u.lang = lang
     const v = pickVoice(lang)
     if (v) u.voice = v

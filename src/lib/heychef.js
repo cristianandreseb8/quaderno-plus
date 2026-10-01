@@ -166,3 +166,18 @@ export function findRecipe(query, recipes) {
   }
   return score >= 0.5 ? best : null
 }
+
+// Is what was heard just the app's own voice (spoken lately)? Its words all come from what the app
+// said — a whole phrase of it, or most of a longer one.
+export function isEcho(heard, spoken) {
+  const h = wordsToNumbers(heard).split(' ').filter(Boolean)
+  if (!h.length) return true
+  for (const s of spoken || []) {
+    const said = wordsToNumbers(s)
+    if (said.includes(h.join(' '))) return true
+    const words = new Set(said.split(' '))
+    const inIt = h.filter((w) => words.has(w)).length
+    if (h.length >= 3 && inIt / h.length >= 0.8) return true
+  }
+  return false
+}

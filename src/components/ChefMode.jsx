@@ -13,11 +13,11 @@ import { toast } from './ui/Toaster.jsx'
 
 // Words the guide says, in the recipe's language (the step text is read in it too).
 const PHRASES = {
-  es: { step: 'Paso', next: 'Siguiente paso', done: 'Receta terminada', need: 'Necesitas', some: "un poco de", rest: 'el resto de', about: 'unos', made: 'Usa lo que preparaste' },
-  it: { step: 'Passo', next: 'Passo successivo', done: 'Ricetta finita', need: 'Ti servono', some: "un po' di", rest: 'il resto di', about: 'circa', made: 'Usa quello che hai preparato' },
-  en: { step: 'Step', next: 'Next step', done: 'Recipe finished', need: 'You need', some: "a little", rest: 'the rest of the', about: 'about', made: 'Use what you made' },
-  fr: { step: 'Étape', next: 'Étape suivante', done: 'Recette terminée', need: 'Il vous faut', some: "un peu de", rest: 'le reste de', about: 'environ', made: 'Utilisez ce que vous avez préparé' },
-  de: { step: 'Schritt', next: 'Nächster Schritt', done: 'Rezept fertig', need: 'Du brauchst', some: "etwas", rest: 'den Rest', about: 'etwa', made: 'Nimm, was du vorbereitet hast' },
+  es: { step: 'Paso', next: 'Siguiente paso', done: 'Receta terminada', need: 'Necesitas', some: "un poco de", rest: 'el resto de', about: 'unos', made: 'Usa lo que preparaste', none: 'Este paso no lleva ingredientes' },
+  it: { step: 'Passo', next: 'Passo successivo', done: 'Ricetta finita', need: 'Ti servono', some: "un po' di", rest: 'il resto di', about: 'circa', made: 'Usa quello che hai preparato', none: 'Questo passo non ha ingredienti' },
+  en: { step: 'Step', next: 'Next step', done: 'Recipe finished', need: 'You need', some: "a little", rest: 'the rest of the', about: 'about', made: 'Use what you made', none: 'This step uses no ingredients' },
+  fr: { step: 'Étape', next: 'Étape suivante', done: 'Recette terminée', need: 'Il vous faut', some: "un peu de", rest: 'le reste de', about: 'environ', made: 'Utilisez ce que vous avez préparé', none: 'Cette étape n’a pas d’ingrédients' },
+  de: { step: 'Schritt', next: 'Nächster Schritt', done: 'Rezept fertig', need: 'Du brauchst', some: "etwas", rest: 'den Rest', about: 'etwa', made: 'Nimm, was du vorbereitet hast', none: 'Dieser Schritt braucht keine Zutaten' },
 }
 const VOICE_KEY = 'qdplus_chef_voice'
 // The step each recipe was left on, so chef mode reopens there: { [recipeId]: { i, t, at } }
@@ -92,7 +92,8 @@ export default function ChefMode({
 
   // What to say on arriving at a step: its number, the part when a new one starts, the text, and
   // how much of each ingredient it uses ("Necesitas: 1 cebolla blanca mediana").
-  function sayStep(p, force = false) {
+  // needOnly: just what the step uses ("what do I need?").
+  function sayStep(p, force = false, needOnly = false) {
     if (!(voiceOn || force)) return
     const s = steps[p]
     if (!s) { speak(P.done, lang, { interrupt: true }); return }
@@ -111,6 +112,7 @@ export default function ChefMode({
     // brisée) is a result to use, not something to fetch.
     const fresh = uses.filter((u) => !u.made), made = uses.filter((u) => u.made)
     const need = `${fresh.length ? ` ${P.need}: ${fresh.map(say).join(', ')}.` : ''}${made.length ? ` ${P.made}: ${made.map(say).join(', ')}.` : ''}`
+    if (needOnly) { speak(need.trim() || `${P.none}.`, lang, { interrupt: true }); return }
     const text = /[.!?…:]$/.test(s.text.trim()) ? s.text.trim() : `${s.text.trim()}.` // a pause before "Necesitas"
     speak(`${P.step} ${s.n}. ${newPart ? `${where(s)}. ` : ''}${text}${need}`, lang, { interrupt: true })
   }
@@ -187,13 +189,15 @@ export default function ChefMode({
     startTimer({ key: `${step.info.tkey}:${d.ms}`, label: step.info.label, name: step.info.name, duration: d.ms, ...timerBase })
   }
   // Voice: "Hey chef" (components/HeyChef.jsx) sends the step commands here; while chef mode is
-  // open they work without "hey chef" too ("next", "back", "repeat", "step 4").
+  // open they work without "hey chef" too ("next", "back", "repeat", "step 4", "what do I need"), and
+  // cut in on what the app is saying.
   const hey = useHeyChef()
   const voiceRef = useRef(null)
   voiceRef.current = (d) => {
     if (d.intent === 'chef-next') next()
     else if (d.intent === 'chef-back') back()
     else if (d.intent === 'chef-repeat') sayStep(pos, true)
+    else if (d.intent === 'read-ingredients') sayStep(pos, true, true)
     else if (d.intent === 'chef-goto') setPos(Math.max(0, Math.min(steps.length - 1, (d.n || 1) - 1)))
     else if (d.intent === 'chef-close') onClose()
     else if (d.intent === 'chef-timer') startStepTimer()

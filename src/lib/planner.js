@@ -1,7 +1,9 @@
 // A plan for cooking several recipes at once. Each step is some hands-on work (the cook is busy)
 // and possibly a wait after it (resting, fermenting, chilling, baking — the cook is free). One cook
-// works on one step at a time; waits run in parallel. The plan puts the recipe with the most
-// left to do first whenever the cook is free, so long waits start early and other work fills them.
+// works on one step at a time; waits run in parallel. Whenever the cook is free, the plan goes on with
+// the recipe that can least afford to wait: the one whose deadline minus what it still needs comes
+// first (a recipe without a deadline counts as due when everything could be done one after another),
+// so long waits start early and other work fills them.
 import { flattenSteps } from './links.js'
 import { findDurations } from './durations.js'
 import { typicalMs } from './timing.js'
@@ -27,15 +29,25 @@ export function stepCost(step, stats) {
   return { active: learned ?? (written || DEFAULT_ACTIVE), wait: 0, learned: learned != null }
 }
 
-// recipes: [{ recipe, factor }]; library: every recipe (for linked ones); stats: lib/timing stats.
-// Returns { items: [{ ri, title, text, n, start, workEnd, end, wait, learned }], total, sequential, tips }.
-export function planSession(recipes, library, stats) {
-  const chains = recipes.map(({ recipe }, ri) => flattenSteps(recipe, library).map((s) => {
+// recipes: [{ recipe, factor }]; library: every recipe (for linked ones); stats: lib/timing stats;
+// done: { [recipe id]: Set of step keys already done } — those are left out, and the plan starts now.
+// due: { [recipe id]: ms from now } — when a recipe should be ready, if it has a time.
+// Returns { items: [{ ri, rid, key, tkey, srcId, srcIdx, title, text, n, sub, part, start, workEnd, end, wait, learned }],
+//           total, sequential, ends: { [recipe id]: ms }, tips }.
+export function planSession(recipes, library, stats, { done = {}, due = {} } = {}) {
+  const chains = recipes.map(({ recipe }, ri) => flattenSteps(recipe, library).filter((s) => !done[recipe.id]?.has(s.key)).map((s) => {
     const srcKey = typeof s.key === 'number' ? String(s.key) : String(s.key).split(':').pop()
     const step = { ...s, srcKey }
-    return { ri, title: recipe.title, text: s.text, n: s.n, sub: s.src.title, ...stepCost(step, stats) }
+    const own = typeof s.key === 'number'
+    return {
+      ri, rid: recipe.id, key: s.key, srcId: s.src.id, srcIdx: srcKey, title: recipe.title, text: s.text, n: s.n, sub: s.src.title, part: s.part,
+      tkey: own ? `${recipe.id}:step:${s.key}` : `${recipe.id}:${s.src.id}:step:${srcKey}`,
+      ...stepCost(step, stats),
+    }
   }))
   const left = chains.map((c) => c.reduce((t, s) => t + s.active + s.wait, 0))
+  const horizon = left.reduce((a, b) => a + b, 0)
+  const dueOf = chains.map((c, i) => (Number.isFinite(due[recipes[i].recipe.id]) ? due[recipes[i].recipe.id] : horizon))
   const next = chains.map(() => 0)
   const ready = chains.map(() => 0)
   let free = 0
@@ -43,9 +55,9 @@ export function planSession(recipes, library, stats) {
   while (chains.some((c, i) => next[i] < c.length)) {
     const open = chains.map((c, i) => i).filter((i) => next[i] < chains[i].length)
     const when = Math.max(free, Math.min(...open.map((i) => ready[i])))
-    // Of the recipes that can go on now, the one with the most left to do.
+    // Of the recipes that can go on now, the one that must start soonest (then the one with most left).
     const can = open.filter((i) => ready[i] <= when)
-    const i = can.sort((a, b) => left[b] - left[a])[0]
+    const i = can.sort((a, b) => (dueOf[a] - left[a]) - (dueOf[b] - left[b]) || left[b] - left[a])[0]
     const s = chains[i][next[i]]
     const start = Math.max(free, ready[i])
     const workEnd = start + s.active
@@ -58,7 +70,10 @@ export function planSession(recipes, library, stats) {
   }
   const total = items.reduce((m, it) => Math.max(m, it.end), 0)
   const sequential = chains.flat().reduce((t, s) => t + s.active + s.wait, 0)
-  return { items, total, sequential, tips: tipsFor(items) }
+  const ends = Object.fromEntries(recipes.map(({ recipe }) => [recipe.id, items.filter((it) => it.rid === recipe.id).reduce((m, it) => Math.max(m, it.end), 0)]))
+  // The least time each recipe needs on its own (its work and waits in a row): for "start by".
+  const alone = Object.fromEntries(recipes.map(({ recipe }, ri) => [recipe.id, chains[ri].reduce((t, s) => t + s.active + s.wait, 0)]))
+  return { items, total, sequential, ends, alone, tips: tipsFor(items) }
 }
 
 // What to start when, in words: the first step, and what fits inside each long wait.

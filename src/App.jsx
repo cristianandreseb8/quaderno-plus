@@ -49,8 +49,7 @@ const SettingsModal = lazyRetry(() => import('./components/SettingsModal.jsx'))
 const PdfImport = lazyRetry(() => import('./components/PdfImport.jsx'))
 const ShoppingList = lazyRetry(() => import('./components/session/ShoppingList.jsx'))
 const RecipePicker = lazyRetry(() => import('./components/session/RecipePicker.jsx'))
-const PlanView = lazyRetry(() => import('./components/session/PlanView.jsx'))
-const TimesReport = lazyRetry(() => import('./components/TimesReport.jsx'))
+const ControlCenter = lazyRetry(() => import('./components/session/ControlCenter.jsx'))
 const ShareModal = lazyRetry(() => import('./components/ShareModal.jsx'))
 const isPhone = () => window.matchMedia('(max-width: 760px)').matches
 
@@ -120,7 +119,6 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
   // session reopens on the recipe being cooked — also after leaving it or closing the app.
   const [sessSel, setSessSel] = useState(() => lastSessSel() || (isPhone() ? null : 'shopping'))
   const [showPicker, setShowPicker] = useState(false)
-  const [showReport, setShowReport] = useState(false)
   const searchRef = useRef(null)
   const toggleSidebarRef = useRef(() => {})
   const { session, loaded: sessionLoaded, change: changeSession, finish: finishSession } = useSession(toast.error)
@@ -645,7 +643,6 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
       {phone && <MenuItem onClick={() => setShowAppAI(true)}>Assistant</MenuItem>}
       <MenuItem onClick={() => setShowLibrary(true)}>Ingredients</MenuItem>
       <MenuItem onClick={() => setShowCompare(true)}>Compare recipes</MenuItem>
-      <MenuItem onClick={() => setShowReport(true)}>Time report</MenuItem>
       <MenuSep />
       {!install.installed && <MenuItem onClick={installApp}>Install app</MenuItem>}
       <MenuItem onClick={() => setShowSettings(true)}>Settings</MenuItem>
@@ -814,8 +811,8 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                   onClick={() => setSessSel('plan')} onKeyDown={(e) => { if (e.key === 'Enter') setSessSel('plan') }}
                 >
                   <div className="Q-list-txt">
-                    <h4>Plan</h4>
-                    <span>{sessionEntries.length > 1 ? 'Cook them in parallel' : 'Timeline and session clock'}</span>
+                    <h4>Control center</h4>
+                    <span>{sessionEntries.length > 1 ? 'Every task, in parallel' : 'Tasks, timing and deadlines'}</span>
                   </div>
                 </div>
                 <div className="Q-side-label">Cooking</div>
@@ -877,7 +874,20 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
                     )
                 )}
                 {view === 'session' && sessSel === 'plan' && (
-                  <PlanView session={session} recipesById={recipesById} library={recipes} change={changeSession} onOpenReport={() => setShowReport(true)} />
+                  <ControlCenter
+                    session={session} recipesById={recipesById} library={recipes} change={changeSession}
+                    onOpenRecipe={(id) => setSessSel(id)}
+                    onChefAt={(id, key, text) => {
+                      // Chef mode opens on that task (it reopens on the step saved for the recipe).
+                      try {
+                        const all = JSON.parse(localStorage.getItem('qdplus_chef_pos') || '{}')
+                        all[id] = { i: key, t: String(text || '').slice(0, 40), at: Date.now() }
+                        localStorage.setItem('qdplus_chef_pos', JSON.stringify(all))
+                      } catch (_) { /* storage unavailable */ }
+                      try { sessionStorage.setItem('qdplus_open_chef', id) } catch (_) { /* ignore */ }
+                      setSessSel(id)
+                    }}
+                  />
                 )}
                 {view === 'session' && cookRecipe && cookRecipe._lite && <div className="Q-view-loading"><div /><div /><div /></div>}
                 {view === 'session' && cookRecipe && !cookRecipe._lite && (
@@ -980,11 +990,6 @@ function Workspace({ user, profile, setProfile, invite, openId }) {
         {showPicker && (
           <Suspense fallback={null}>
             <RecipePicker recipes={recipes} selectedIds={sessionIds} onToggle={toggleInSession} onClose={() => setShowPicker(false)} />
-          </Suspense>
-        )}
-        {showReport && (
-          <Suspense fallback={null}>
-            <TimesReport recipesById={recipesById} onClose={() => setShowReport(false)} />
           </Suspense>
         )}
         {importMounted && (

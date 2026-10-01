@@ -76,7 +76,11 @@ export default function RecipeView({
 
   useEffect(() => {
     setLocalChecked(new Set()); setLocalScale(readScale(`view:${recipe.id}`).cur); setTranslated(null)
-    setShowScale(false); setTab('recipe'); setAddingVideo(false); setChef(false); setUnfolded(new Set())
+    setShowScale(false); setTab('recipe'); setAddingVideo(false); setUnfolded(new Set())
+    // Opened from the control center's "Chef mode" on a task: straight into chef mode.
+    let wantChef = false
+    try { wantChef = sessionStorage.getItem('qdplus_open_chef') === recipe.id; if (wantChef) sessionStorage.removeItem('qdplus_open_chef') } catch (_) { /* ignore */ }
+    setChef(wantChef)
     setCustomBaseGrams('')
   }, [recipe.id])
 
@@ -121,7 +125,7 @@ export default function RecipeView({
       speak(d.factor === 1 ? 'Back to the original amounts.' : `Scaled by ${d.factor}.`, timerLang)
       return
     }
-    if (d.intent === 'read-ingredients') {
+    if (d.intent === 'read-ingredients' && !chef) { // in chef mode, the step's own (ChefMode)
       const lines = (viewR.ingredients || []).filter((l) => !/^##?\s+/.test(l)).map((l) => { const x = splitIngLine(l); return [x.qty, x.name].filter(Boolean).join(' ') })
       speak(lines.slice(0, 30).join(', ') || 'No ingredients.', timerLang, { interrupt: true })
       d.handled = true

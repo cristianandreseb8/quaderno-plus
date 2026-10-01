@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { Loader2, Mic, MicOff } from 'lucide-react'
-import { afterWake, findRecipe, fmtNumber, heyChefState, heyChefSupported, parseCommand, setHeyChef, useHeyChef } from '../lib/heychef.js'
+import { afterWake, findRecipe, fmtNumber, heyChefState, heyChefSupported, isEcho, parseCommand, setHeyChef, useHeyChef } from '../lib/heychef.js'
 import { createRecipeAI, voiceAnswer } from '../lib/ai.js'
-import { pauseTimer, removeTimer, resumeTimer, speak, startTimer, stopRinging, useTimers } from '../lib/timers.js'
+import { pauseTimer, recentSpeech, removeTimer, resumeTimer, speak, startTimer, stopRinging, stopSpeaking, useTimers } from '../lib/timers.js'
 import { fmtSpan, fmtWatch, startWatch, stopWatch, useWatches, watchElapsed, watchFor } from '../lib/timing.js'
 import { useSettings } from '../lib/settings.js'
 import { toast } from './ui/Toaster.jsx'
@@ -15,6 +15,8 @@ export const heyLang = (setting) => {
   return /^(en|es|de|fr|it)/i.test(l) ? l : 'en-US'
 }
 const MEASURE = 'voice:measure'
+// In chef mode these work without "hey chef" — and cut in on whatever the app is saying.
+const chefFree = (intent) => intent.startsWith('chef-') || intent.startsWith('timer-') || intent === 'read-ingredients'
 
 // Chef mode and the recipe page take the commands that are theirs through this event.
 export function sendVoice(detail) {
@@ -25,7 +27,9 @@ export function sendVoice(detail) {
 
 // "Hey chef": listens while on (the microphone button, or Settings → Hey chef), wakes on "hey chef"
 // (also "oye chef", "hallo chef"…), and carries out the command — or, after "hey chef" alone, the
-// next thing said. Inside chef mode, "next", "back", "repeat" and "step 4" work without it.
+// next thing said. Inside chef mode, "next", "back", "repeat", "step 4" and "what do I need" work
+// without it. Speaking a command while the app talks stops the app at once; its own words, picked
+// up by the microphone, are not taken for commands (isEcho).
 export default function HeyChef({ recipes, current, onOpenRecipe, onAddToSession, onAddShopping, onGoShopping, onGoSession, onCreateRecipe }) {
   const { settings } = useSettings()
   const st = useHeyChef()
@@ -48,19 +52,31 @@ export default function HeyChef({ recipes, current, onOpenRecipe, onAddToSession
     rec.interimResults = true
     let alive = true
     let awakeUntil = 0
+    // The cook can talk over the app: while it speaks, what it hears is checked against what it is
+    // saying — its own words are ignored, a command stops the voice and is carried out, and other
+    // talk in the kitchen lets it go on.
+    const own = (text) => isEcho(text, recentSpeech())
     rec.onresult = (e) => {
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i]
         const text = r[0].transcript || ''
-        if (!r.isFinal) { if (afterWake(text) != null) setHeyChef({ awake: true, heard: text.trim() }); continue }
-        if (window.speechSynthesis?.speaking) continue // the app's own voice
+        const speaking = !!window.speechSynthesis?.speaking
+        if (!r.isFinal) {
+          const wake = afterWake(text) != null
+          if (wake) setHeyChef({ awake: true, heard: text.trim() })
+          // Interrupt as soon as the cook clearly starts a command.
+          if (speaking && !own(text) && (wake || (heyChefState().chefOpen && chefFree(parseCommand(text).intent)))) stopSpeaking()
+          continue
+        }
+        if (own(text)) continue // the app's own voice
         let cmd = afterWake(text)
         if (cmd == null && Date.now() < awakeUntil) cmd = text
         if (cmd == null && heyChefState().chefOpen) {
           const c = parseCommand(text)
-          if (c.intent.startsWith('chef-') || c.intent.startsWith('timer-')) { run(c, text); continue }
+          if (chefFree(c.intent)) { if (speaking) stopSpeaking(); run(c, text); continue }
         }
-        if (cmd == null) continue
+        if (cmd == null) continue // talk in the kitchen that is not for the app: let it go on speaking
+        if (speaking) stopSpeaking()
         if (!String(cmd).trim()) { awakeUntil = Date.now() + 8000; setHeyChef({ awake: true, heard: 'Hey chef…', reply: '' }); continue }
         awakeUntil = 0
         run(parseCommand(cmd), text)

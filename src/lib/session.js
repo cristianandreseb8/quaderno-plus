@@ -86,7 +86,7 @@ export function formatQty(qty, unit) {
 }
 
 // ── Persistence ─────────────────────────────────────────────────────────────
-const EMPTY = { recipes: [], shopping: { have: {}, qty: {}, extra: [] }, progress: {}, clock: {} }
+const EMPTY = { recipes: [], shopping: { have: {}, qty: {}, extra: [] }, progress: {}, clock: {}, plan: {} }
 
 function normalize(row) {
   return {
@@ -95,6 +95,7 @@ function normalize(row) {
     shopping: { have: {}, qty: {}, extra: [], ...(row?.shopping || {}) },
     progress: row?.progress || {},
     clock: row?.clock || {},
+    plan: row?.plan || {},
   }
 }
 
@@ -122,7 +123,7 @@ export function useSession(onError) {
     if (!s?.id) return
     pending.current = null
     saving.current = supabase.from('cook_sessions')
-      .update({ recipes: s.recipes, shopping: s.shopping, progress: s.progress, clock: s.clock || {}, name: s.name || '', updated_at: new Date().toISOString() })
+      .update({ recipes: s.recipes, shopping: s.shopping, progress: s.progress, clock: s.clock || {}, plan: s.plan || {}, name: s.name || '', updated_at: new Date().toISOString() })
       .eq('id', s.id)
       .then(({ error }) => { if (error) errRef.current?.('Could not save the session: ' + error.message) })
     await saving.current
@@ -237,3 +238,11 @@ export const clockResume = () => (s) => {
   return { ...s, clock: { ...c, paused_ms: (c.paused_ms || 0) + (Date.now() - Date.parse(c.paused_at)), paused_at: null } }
 }
 export const clockReset = () => (s) => ({ ...s, clock: {} })
+
+// When the session — or one recipe of it — should be ready (control center). iso: ISO time or null.
+export const setReadyBy = (recipeId, iso) => (s) => {
+  const plan = { ...(s.plan || {}) }
+  if (!recipeId) plan.ready_by = iso || null
+  else plan.recipes = { ...(plan.recipes || {}), [recipeId]: { ...((plan.recipes || {})[recipeId] || {}), ready_by: iso || null } }
+  return { ...s, plan }
+}
