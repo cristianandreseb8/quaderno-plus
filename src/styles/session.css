@@ -221,6 +221,15 @@
 .Q-float-pill .at { font: 600 12px var(--mono); color: hsl(var(--lane)); white-space: nowrap; }
 .Q-float-pill .more { padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font: 600 11px var(--mono); }
 .Q-float-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.Q-float-pillrow { display: flex; align-items: center; gap: 6px; }
+.Q-float-pillrow .Q-float-pill { flex: 1; min-width: 0; }
+.Q-float-x {
+  flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0;
+  border: 1px solid var(--rule); border-radius: 50%; background: var(--surface); color: var(--muted); box-shadow: var(--shadow-lg); cursor: pointer;
+}
+.Q-float-x:hover { color: var(--ink); border-color: var(--rule-strong); }
+.Q-float-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.Q-cc-float-on { display: inline-block; margin-top: 6px; font-size: 13px; }
 @media (max-width: 700px) {
   body:has(.Q-float) .Q-pane { padding-bottom: 76px; } /* the end of the page clears the floating line */
   .Q-float { left: 12px; right: 12px; width: auto; max-width: none; bottom: 12px; }

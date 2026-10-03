@@ -1,6 +1,6 @@
 // The session's plan, shared by the Plan screen and the floating "Cooking now" card: the recipes
 // (scaled), what is done, what is under way on a timer, the deadlines, and the plan from now.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { planSession, writtenMs } from '../../lib/planner.js'
 import { flattenSteps } from '../../lib/links.js'
 import { scaleRecipe } from '../../lib/recipeCalc.js'
@@ -26,6 +26,17 @@ export function stepKeyOfTimer(rid, key) {
 const HOURS = 'qdplus_hours'
 export const lastHours = () => { try { return JSON.parse(localStorage.getItem(HOURS) || 'null') } catch (_) { return null } }
 export const rememberHours = (h) => { try { localStorage.setItem(HOURS, JSON.stringify(h)) } catch (_) { /* storage unavailable */ } }
+
+// The floating "Cooking now" card can be closed; the Plan shows it again.
+const FLOAT_HIDDEN = 'qdplus_float_hidden'
+let floatHidden = (() => { try { return localStorage.getItem(FLOAT_HIDDEN) === '1' } catch (_) { return false } })()
+const floatSubs = new Set()
+export function setFloatHidden(v) {
+  floatHidden = !!v
+  try { localStorage.setItem(FLOAT_HIDDEN, v ? '1' : '0') } catch (_) { /* storage unavailable */ }
+  floatSubs.forEach((f) => f())
+}
+export const useFloatHidden = () => useSyncExternalStore((f) => { floatSubs.add(f); return () => floatSubs.delete(f) }, () => floatHidden)
 
 const APPLIED = 'qdplus_timer_done' // timers whose end already ticked their step off
 const readApplied = () => { try { return new Set(JSON.parse(localStorage.getItem(APPLIED) || '[]')) } catch (_) { return new Set() } }

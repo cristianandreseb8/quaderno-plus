@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, LayoutList, Timer as TimerIcon } from 'lucide-react'
+import { ChevronUp, LayoutList, Minus, Timer as TimerIcon, X } from 'lucide-react'
 import { fmtClock, remaining } from '../../lib/timers.js'
 import { useHeyChef } from '../../lib/heychef.js'
-import { LANES, stepKeyOfTimer, useSessionPlan, when } from './useSessionPlan.js'
+import { LANES, setFloatHidden, stepKeyOfTimer, useFloatHidden, useSessionPlan, when } from './useSessionPlan.js'
+import { toast } from '../ui/Toaster.jsx'
 
 const OPEN = 'qdplus_float_open'
 const short = (t, n = 70) => { const s = String(t || '').replace(/\s+/g, ' ').trim(); return s.length > n ? `${s.slice(0, n - 2).trimEnd()}…` : s }
@@ -14,6 +15,7 @@ const short = (t, n = 70) => { const s = String(t || '').replace(/\s+/g, ' ').tr
 export default function FloatingPlan({ session, recipesById, library, change, onOpenPlan, onChefAt }) {
   const { entries, plan, now, timers, tnow } = useSessionPlan({ session, recipesById, library, change })
   const hey = useHeyChef()
+  const hidden = useFloatHidden()
   // Open on a computer, folded to one line on a phone — until you choose.
   const [open, setOpenState] = useState(() => {
     try { const v = localStorage.getItem(OPEN); if (v != null) return v === '1' } catch (_) { /* ignore */ }
@@ -37,7 +39,12 @@ export default function FloatingPlan({ session, recipesById, library, change, on
     return { rid, ri, title: e.raw.title, step: mine[0] || null, then: mine[1] || null, timer }
   }).filter((r) => r.step || r.timer)
     .sort((a, b) => (a.step ? a.step.start : Infinity) - (b.step ? b.step.start : Infinity))
-  if (!rows.length) return null
+  if (!rows.length || hidden) return null
+  // Closed: gone until "Show Cooking now" on the Plan (or Undo, right away).
+  const close = () => {
+    setFloatHidden(true)
+    toast('“Cooking now” closed — the Plan can show it again', { action: { label: 'Undo', onClick: () => setFloatHidden(false) } })
+  }
 
   const at = (ms) => (ms <= 60000 ? 'now' : ms < 60 * 60000 ? `in ${Math.round(ms / 60000)} min` : when(now + ms, now))
   const timeLeft = (t) => (t.ringing || t.state === 'done' ? 'time’s up' : fmtClock(t.state === 'paused' ? t.left || 0 : remaining(t, tnow)))
@@ -52,7 +59,8 @@ export default function FloatingPlan({ session, recipesById, library, change, on
             <b>Cooking now</b>
             <span className="sp" />
             <button type="button" className="Q-icon-btn" onClick={onOpenPlan} title="Open the plan" aria-label="Open the plan"><LayoutList size={16} /></button>
-            <button type="button" className="Q-icon-btn" onClick={() => setOpen(false)} title="Fold" aria-label="Fold the list" aria-expanded="true"><ChevronDown size={16} /></button>
+            <button type="button" className="Q-icon-btn" onClick={() => setOpen(false)} title="Minimize" aria-label="Minimize" aria-expanded="true"><Minus size={16} /></button>
+            <button type="button" className="Q-icon-btn" onClick={close} title="Close" aria-label="Close Cooking now"><X size={16} /></button>
           </div>
           <ol className="Q-float-list">
             {rows.map((r, k) => (
@@ -70,13 +78,16 @@ export default function FloatingPlan({ session, recipesById, library, change, on
           </ol>
         </>
       ) : (
-        <button type="button" className="Q-float-pill" onClick={() => setOpen(true)} aria-expanded="false" style={{ '--lane': LANES[lead.ri % LANES.length] }}>
-          <span className="dot" aria-hidden="true">1</span>
-          <span className="txt"><b>{lead.title}</b>{lead.step ? ` · ${short(lead.step.text, 48)}` : ''}</span>
-          <span className="at">{lead.step ? at(lead.step.start) : timeLeft(lead.timer)}</span>
-          {rows.length > 1 && <span className="more">+{rows.length - 1}</span>}
-          <ChevronUp size={15} />
-        </button>
+        <div className="Q-float-pillrow">
+          <button type="button" className="Q-float-pill" onClick={() => setOpen(true)} aria-expanded="false" title="Show the list" style={{ '--lane': LANES[lead.ri % LANES.length] }}>
+            <span className="dot" aria-hidden="true">1</span>
+            <span className="txt"><b>{lead.title}</b>{lead.step ? ` · ${short(lead.step.text, 48)}` : ''}</span>
+            <span className="at">{lead.step ? at(lead.step.start) : timeLeft(lead.timer)}</span>
+            {rows.length > 1 && <span className="more">+{rows.length - 1}</span>}
+            <ChevronUp size={15} />
+          </button>
+          <button type="button" className="Q-float-x" onClick={close} title="Close" aria-label="Close Cooking now"><X size={15} /></button>
+        </div>
       )}
     </aside>
   )

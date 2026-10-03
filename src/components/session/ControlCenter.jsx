@@ -9,7 +9,7 @@ import { clockPause, clockReset, clockResume, clockStart, setPlanHours, setReady
 import { fmtClock, remaining, startTimer } from '../../lib/timers.js'
 import { toast } from '../ui/Toaster.jsx'
 import { qtyCol } from '../../lib/qtyCol.js'
-import { LANES, rememberHours, stepKeyOfTimer, useSessionPlan, when } from './useSessionPlan.js'
+import { LANES, rememberHours, setFloatHidden, stepKeyOfTimer, useFloatHidden, useSessionPlan, when } from './useSessionPlan.js'
 import Timeline from './Timeline.jsx'
 import HoursBar from './HoursBar.jsx'
 
@@ -24,6 +24,7 @@ const fromLocalInput = (v) => (v ? new Date(v).toISOString() : null)
 export default function ControlCenter({ session, recipesById, library, change, onOpenRecipe, onChefAt }) {
   const { entries, scaled, steps, done, started, plan, now, timers, tnow, hours } = useSessionPlan({ session, recipesById, library, change })
   const [open, setOpen] = useState(null) // `${recipe id}|${step key}` of the task shown open
+  const floatHidden = useFloatHidden()
   // The timeline shows from the start; hiding it is remembered.
   const [showTimeline, setShowTimelineState] = useState(() => { try { return localStorage.getItem('qdplus_tl_hidden') !== '1' } catch (_) { return true } })
   const setShowTimeline = (v) => { setShowTimelineState(v); try { localStorage.setItem('qdplus_tl_hidden', v ? '0' : '1') } catch (_) { /* ignore */ } }
@@ -81,6 +82,7 @@ export default function ControlCenter({ session, recipesById, library, change, o
             {doneSteps} of {totalSteps} tasks done · {plan.total > 0 ? <>all done about <b>{when(allDone, now)}</b></> : 'all done'}
             {readyAll && plan.total > 0 && <span className={allDone > Date.parse(readyAll) ? 'late' : 'ok'}> · {allDone > Date.parse(readyAll) ? `${fmtSpan(allDone - Date.parse(readyAll))} late` : 'on time'}</span>}
           </p>
+          {floatHidden && <button type="button" className="Q-link Q-cc-float-on" onClick={() => setFloatHidden(false)}>Show “Cooking now” while you cook</button>}
         </div>
         <label className="Q-cc-due">
           <span>Everything ready by</span>
